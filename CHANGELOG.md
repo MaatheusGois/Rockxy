@@ -12,6 +12,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+## [0.19.1] - 2026-05-17
+
+### Fixed
+
+- Restored access to the License settings pane for activating, restoring, and managing Rockxy Pro.
+
 ## [0.19.0] - 2026-05-17
 
 ### Added

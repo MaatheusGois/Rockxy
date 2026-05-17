@@ -41,21 +41,11 @@
 <!-- BEGIN GENERATED: latest-release -->
 ## Latest Tagged Release
 
-**v0.19.0** — 2026-05-17
-
-### Added
-
-- Certificate setup now includes a clearer Mac guide, export flow, and custom certificate management path for smoother trusted capture setup.
-- Node.js Developer Setup now includes selected-client validation and a fuller localhost sample guide for `axios`, Node core, and `got`.
+**v0.19.1** — 2026-05-17
 
 ### Fixed
 
-- Helper and certificate recovery now surfaces clearer diagnostics when local signing, trust, or helper state blocks capture.
-- Inspector body and response previews are more stable when switching tabs or viewing larger payloads.
-
-### Changed
-
-- Clarified Flutter/Dart Developer Setup Hub validation as a manual hybrid flow that checks capture through Rockxy without claiming device, emulator, simulator, or runtime attribution.
+- Restored access to the License settings pane for activating, restoring, and managing Rockxy Pro.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 <!-- END GENERATED: latest-release -->
