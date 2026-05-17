@@ -615,6 +615,7 @@ final class HelperConnection {
             throw HelperConnectionError.signingIdentityMismatch(app: app, helper: helper)
         case .healthy,
              .helperBinaryNotFound,
+             .certificateChainUnavailable,
              .diagnosticError:
             break
         }

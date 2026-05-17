@@ -20,24 +20,29 @@ nonisolated enum KeychainHelper {
     // MARK: - Private Key Operations
 
     static func savePrivateKey(_ keyData: Data, label: String) throws {
-        // Delete-then-add avoids errSecDuplicateItem without a separate existence check
-        try deletePrivateKey(label: label)
-
         let query: [String: Any] = [
             kSecClass as String: kSecClassKey,
             kSecAttrApplicationLabel as String: label,
             kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+            kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
             kSecValueData as String: keyData,
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked
         ]
 
         let status = SecItemAdd(query as CFDictionary, nil)
-        guard status == errSecSuccess else {
-            logger.error("Failed to save private key: \(status)")
-            throw KeychainError.saveFailed(status)
+        if status == errSecSuccess {
+            logger.debug("Saved private key with label: \(label)")
+            return
         }
 
-        logger.debug("Saved private key with label: \(label)")
+        if status == errSecDuplicateItem {
+            try updateExistingPrivateKey(keyData, label: label)
+            logger.debug("Updated existing private key with label: \(label)")
+            return
+        }
+
+        logger.error("Failed to save private key: \(status)")
+        throw KeychainError.saveFailed(status)
     }
 
     static func loadPrivateKey(label: String) throws -> Data? {
@@ -70,7 +75,9 @@ nonisolated enum KeychainHelper {
     static func deletePrivateKey(label: String) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassKey,
-            kSecAttrApplicationLabel as String: label
+            kSecAttrApplicationLabel as String: label,
+            kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+            kSecAttrKeyClass as String: kSecAttrKeyClassPrivate
         ]
 
         let status = SecItemDelete(query as CFDictionary)
@@ -497,6 +504,26 @@ nonisolated enum KeychainHelper {
     // MARK: Private
 
     private static let logger = Logger(subsystem: RockxyIdentity.current.logSubsystem, category: "KeychainHelper")
+
+    private static func updateExistingPrivateKey(_ keyData: Data, label: String) throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassKey,
+            kSecAttrApplicationLabel as String: label,
+            kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+            kSecAttrKeyClass as String: kSecAttrKeyClassPrivate
+        ]
+
+        let attributes: [String: Any] = [
+            kSecValueData as String: keyData,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked
+        ]
+
+        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        guard status == errSecSuccess else {
+            logger.error("Failed to update duplicate private key: \(status)")
+            throw KeychainError.saveFailed(status)
+        }
+    }
 
     /// Checks whether a SecCertificate has trustRoot settings in the specified domain.
     private static func hasTrustRootInDomain(

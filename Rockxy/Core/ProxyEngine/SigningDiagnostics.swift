@@ -22,6 +22,9 @@ enum SigningDiagnostics {
         case signingIdentityMismatch(appSigner: String, helperSigner: String)
         /// App is valid, but no helper binary exists at the expected path.
         case helperBinaryNotFound
+        /// App and helper exist, but at least one binary is signed without an extractable
+        /// certificate chain. This is common for Xcode/local ad-hoc helper repair paths.
+        case certificateChainUnavailable
         /// An unexpected error occurred during diagnosis.
         case diagnosticError(detail: String)
     }
@@ -187,9 +190,7 @@ enum SigningDiagnostics {
         guard let appChain = env.appCertificateChain(),
               let helperChain = env.helperCertificateChain() else
         {
-            return .diagnosticError(
-                detail: "Failed to extract certificate chains for comparison"
-            )
+            return .certificateChainUnavailable
         }
 
         let appSigner = env.appSignerSummary() ?? "unknown"
@@ -230,6 +231,8 @@ enum SigningDiagnostics {
             )
         case .helperBinaryNotFound:
             logger.debug("Signing diagnostics: helper binary not found")
+        case .certificateChainUnavailable:
+            logger.debug("Signing diagnostics: certificate chain unavailable for comparison")
         case let .diagnosticError(detail):
             logger.error("Signing diagnostics: error — \(detail)")
         }

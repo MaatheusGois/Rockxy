@@ -122,28 +122,24 @@ struct SigningDiagnosticsClassifyTests {
         #expect(result == .helperBinaryNotFound)
     }
 
-    @Test("diagnostic error when app chain extraction fails")
-    func diagnosticErrorAppChain() {
+    @Test("certificate chain unavailable when app chain extraction fails")
+    func certificateChainUnavailableForAppChain() {
         var env = MockSigningEnvironment()
         env.appChain = nil
 
         let result = SigningDiagnostics.classify(env)
 
-        #expect(result == .diagnosticError(
-            detail: "Failed to extract certificate chains for comparison"
-        ))
+        #expect(result == .certificateChainUnavailable)
     }
 
-    @Test("diagnostic error when helper chain extraction fails")
-    func diagnosticErrorHelperChain() {
+    @Test("certificate chain unavailable when helper chain extraction fails")
+    func certificateChainUnavailableForHelperChain() {
         var env = MockSigningEnvironment()
         env.helperChain = nil
 
         let result = SigningDiagnostics.classify(env)
 
-        #expect(result == .diagnosticError(
-            detail: "Failed to extract certificate chains for comparison"
-        ))
+        #expect(result == .certificateChainUnavailable)
     }
 
     @Test("app signature check runs before helper existence check")
@@ -229,16 +225,19 @@ struct SigningDiagnosticsLiveTests {
         #expect((chain?.count ?? 0) > 0)
     }
 
-    @Test("LiveEnvironment can extract helper certificate chain from the bundled helper executable")
-    func liveHelperCertificateChainExtractable() {
+    @Test("LiveEnvironment handles helper certificate chain availability")
+    func liveHelperCertificateChainAvailability() {
         let env = SigningDiagnostics.LiveEnvironment()
         guard env.validateAppSignature() == nil else {
             return
         }
 
         let chain = env.helperCertificateChain()
-        #expect(chain != nil)
-        #expect((chain?.count ?? 0) > 0)
+        if let chain {
+            #expect(chain.count > 0)
+        } else {
+            #expect(SigningDiagnostics.classify(env) == .certificateChainUnavailable)
+        }
     }
 
     @Test("Live classify returns healthy or helperBinaryNotFound depending on helper install state")
@@ -259,7 +258,8 @@ struct SigningDiagnosticsLiveTests {
         switch result {
         case .healthy,
              .helperBinaryNotFound,
-             .signingIdentityMismatch:
+             .signingIdentityMismatch,
+             .certificateChainUnavailable:
             break
         case .appSignatureInvalid,
              .diagnosticError:
