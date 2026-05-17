@@ -15,12 +15,12 @@
 </p>
 
 <p align="center">
-  <strong>HTTP debugging proxy mã nguồn mở cho macOS.</strong>
+  <strong>HTTP debugging proxy mã nguồn mở, có thể kiểm tra cho macOS.</strong>
 </p>
 
 <p align="center">
-  Chặn bắt, kiểm tra và chỉnh sửa lưu lượng HTTP/HTTPS/WebSocket/GraphQL — xây dựng hoàn toàn bằng Swift.<br>
-  Giải pháp thay thế miễn phí, có thể kiểm tra mã nguồn cho <a href="#rockxy-vs-các-giải-pháp-khác">Proxyman và Charles Proxy</a>.
+  Chặn bắt, kiểm tra và chỉnh sửa lưu lượng HTTP/HTTPS/WebSocket/GraphQL bằng app Swift native mà bạn có thể kiểm tra, build và tin tưởng.<br>
+  Giải pháp local-first, AGPL-3.0 thay thế cho <a href="#rockxy-vs-các-giải-pháp-khác">Proxyman và Charles Proxy</a>.
 </p>
 
 <p align="center">
@@ -82,7 +82,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
 **Developer Setup Hub** — Thiết lập theo runtime, browser, device, framework và environment với snippet có thể copy, validation probe, và troubleshooting note.
 
-**AI-Ready (MCP Server)** — Máy chủ Model Context Protocol tích hợp sẵn cho phép Claude CLI, Claude Desktop và các MCP client khác truy vấn traffic trực tiếp, rule và trạng thái proxy ngay từ chat. Chỉ chạy cục bộ, xác thực bằng token, dữ liệu nhạy cảm được che giấu mặc định.
+**Local MCP Bridge** — Máy chủ Model Context Protocol tích hợp sẵn cho phép các MCP client cục bộ truy vấn traffic trực tiếp, rule và trạng thái proxy. Chỉ chạy cục bộ, xác thực bằng token, dữ liệu nhạy cảm được che giấu mặc định.
 
 > 100% native macOS. Không Electron. Không web view. SwiftUI + AppKit + SwiftNIO.
 
@@ -102,22 +102,16 @@ Build và chạy trong Xcode. Cửa sổ Welcome sẽ hướng dẫn bạn cài 
 
 |  | **Rockxy** | **Proxyman** | **Charles Proxy** |
 |---|---|---|---|
-| **Giấy phép** | AGPL-3.0 (mã nguồn mở) | Độc quyền (freemium) | Độc quyền ($50) |
-| **Mã nguồn** | Hoàn toàn có thể kiểm tra | Đóng | Đóng |
-| **Công nghệ** | Swift + SwiftNIO | Swift + AppKit | Java |
-| **Chặn bắt HTTPS** | Có | Có | Có |
-| **WebSocket** | Có | Có | Có |
-| **Phát hiện GraphQL** | Có | Có | Không |
-| **Map Local / Remote** | Có | Có | Có |
-| **Breakpoints** | Có | Có | Có |
-| **JavaScript scripting** | Có | Có | Không |
-| **Tương quan OSLog** | Có | Không | Không |
-| **Nhận diện process** | Có | Có | Không |
-| **So sánh request** | Có | Có | Không |
-| **Import/export HAR** | Có | Có | Không |
-| **Hiệu suất 100k+ dòng** | Có | Có | Chậm |
-| **Cài proxy không cần mật khẩu** | Có (helper daemon) | Có | Không |
-| **Đóng góp cộng đồng** | Mở PR | Không | Không |
+| **Mô hình dự án** | Dự án mã nguồn mở AGPL-3.0 | Ứng dụng thương mại độc quyền | Ứng dụng thương mại độc quyền |
+| **Mã nguồn** | Công khai, có thể kiểm tra, có thể fork | Mã nguồn đóng | Mã nguồn đóng |
+| **Build từ mã nguồn** | Miễn phí với Xcode từ repo này | Không có mã nguồn công khai để build | Không có mã nguồn công khai để build |
+| **Nền tảng macOS native** | Swift + SwiftNIO + SwiftUI/AppKit | Ứng dụng macOS thương mại native | Ứng dụng thương mại đa nền tảng |
+| **Capture local-first** | Proxy, chứng chỉ, helper và dữ liệu capture ở trên máy Mac của bạn | Ứng dụng proxy desktop | Ứng dụng proxy desktop |
+| **Workflow thiết lập developer** | Developer Setup Hub tích hợp cho runtime, client, device, framework và environment | Hướng dẫn thiết lập theo sản phẩm | Hướng dẫn thiết lập theo sản phẩm |
+| **MCP/local automation bridge** | Tích hợp sẵn, xác thực bằng token, mặc định che giấu dữ liệu nhạy cảm | Chưa được nêu trong tài liệu công khai đã kiểm tra | Chưa được nêu trong tài liệu công khai đã kiểm tra |
+| **Đường đóng góp mở** | Issues, discussions, roadmap và PR công khai | Sản phẩm do vendor kiểm soát | Sản phẩm do vendor kiểm soát |
+
+Trên lộ trình: workflow replay/diff/rules/scripting sâu hơn, cải thiện kiểm tra WebSocket và GraphQL, đồng thời khám phá hỗ trợ gRPC/Protobuf cùng HTTP/2 và HTTP/3.
 
 ## Bảo Mật
 
@@ -203,5 +197,5 @@ Rockxy được xây dựng và duy trì bởi các developer độc lập. Tài
 ---
 
 <p align="center">
-  <sub>Xây dựng bằng Swift, SwiftNIO, SwiftUI, và AppKit.</sub>
+  <sub>Made by <a href="https://github.com/LocNguyenHuu">Stephen</a>. Xây dựng bằng Swift, SwiftNIO, SwiftUI, và AppKit.</sub>
 </p>

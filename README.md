@@ -15,12 +15,12 @@
 </p>
 
 <p align="center">
-  <strong>The open-source HTTP debugging proxy for macOS.</strong>
+  <strong>The open-source, auditable HTTP debugging proxy for macOS.</strong>
 </p>
 
 <p align="center">
-  Intercept, inspect, and modify HTTP/HTTPS/WebSocket/GraphQL traffic — built natively in Swift.<br>
-  A free, auditable alternative to <a href="#rockxy-vs-alternatives">Proxyman and Charles Proxy</a>.
+  Intercept, inspect, and modify HTTP/HTTPS/WebSocket/GraphQL traffic with a native Swift app you can inspect, build, and trust.<br>
+  A local-first, AGPL-3.0 alternative to <a href="#rockxy-vs-alternatives">Proxyman and Charles Proxy</a>.
 </p>
 
 <p align="center">
@@ -83,7 +83,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
 **Developer Setup Hub** — Guided setup per runtime, browser, device, framework, and environment with copyable snippets, validation probes, and troubleshooting notes.
 
-**AI-Ready (MCP Server)** — Bundled Model Context Protocol server lets Claude CLI, Claude Desktop, and other MCP clients query live traffic, rules, and proxy status directly from chat. Local-only, token-authenticated, sensitive data redacted by default.
+**Local MCP Bridge** — Bundled Model Context Protocol server lets local MCP clients query live traffic, rules, and proxy status. Local-only, token-authenticated, sensitive data redacted by default.
 
 > 100% native macOS. No Electron. No web views. SwiftUI + AppKit + SwiftNIO.
 
@@ -99,28 +99,22 @@ Build and run in Xcode. The Welcome window guides you through root CA setup, hel
 
 **Requirements:** macOS 14.0+, Xcode 16+, Swift 5.9
 
-If you want to connect Rockxy to Claude after installation, see the [MCP Integration guide](docs/features/mcp.mdx).
+If you want to connect Rockxy to a local MCP client after installation, see the [MCP Integration guide](docs/features/mcp.mdx).
 
 ## Rockxy vs. Alternatives
 
 |  | **Rockxy** | **Proxyman** | **Charles Proxy** |
 |---|---|---|---|
-| **License** | AGPL-3.0 (open-source) | Proprietary (freemium) | Proprietary ($50) |
-| **Source code** | Fully auditable | Closed | Closed |
-| **Technology** | Swift + SwiftNIO | Swift + AppKit | Java |
-| **HTTPS interception** | Yes | Yes | Yes |
-| **WebSocket** | Yes | Yes | Yes |
-| **GraphQL detection** | Yes | Yes | No |
-| **Map Local / Remote** | Yes | Yes | Yes |
-| **Breakpoints** | Yes | Yes | Yes |
-| **JavaScript scripting** | Yes | Yes | No |
-| **OSLog correlation** | Yes | No | No |
-| **Process identification** | Yes | Yes | No |
-| **Request diff** | Yes | Yes | No |
-| **HAR import/export** | Yes | Yes | No |
-| **100k+ row performance** | Yes | Yes | Slow |
-| **No-password proxy setup** | Yes (helper daemon) | Yes | No |
-| **Community contributions** | Open PRs | No | No |
+| **Project model** | AGPL-3.0 open-source project | Proprietary commercial app | Proprietary commercial app |
+| **Source code** | Public, auditable, forkable | Closed source | Closed source |
+| **Build from source** | Free with Xcode from this repo | Not available from public source | Not available from public source |
+| **Native macOS foundation** | Swift + SwiftNIO + SwiftUI/AppKit | Native macOS commercial app | Cross-platform commercial app |
+| **Local-first capture** | Local proxy, certificates, helper, and capture data stay on your Mac | Desktop proxy app | Desktop proxy app |
+| **Developer setup workflow** | Built-in Developer Setup Hub for runtimes, clients, devices, frameworks, and environments | Product-specific setup guidance | Product-specific setup guidance |
+| **MCP/local automation bridge** | Built in, token-authenticated, redaction by default | Not claimed in public docs reviewed | Not claimed in public docs reviewed |
+| **Open contribution path** | Public issues, discussions, roadmap, and PRs | Vendor-controlled product | Vendor-controlled product |
+
+On the roadmap: deeper replay/diff/rules/scripting workflows, improved WebSocket and GraphQL inspection, and exploration of gRPC/Protobuf plus HTTP/2 and HTTP/3 support.
 
 ## Security
 
@@ -147,7 +141,7 @@ Full documentation available at the [Rockxy Docs](docs/index.mdx):
 
 - [Quickstart Guide](docs/quickstart.mdx) — get up and running in minutes
 - [Developer Setup Hub](docs/features/developer-setup-hub.mdx) — runtime snippets, device guides, validation probes, and support matrix
-- [MCP Integration](docs/features/mcp.mdx) — connect Rockxy to Claude CLI or Claude Desktop
+- [MCP Integration](docs/features/mcp.mdx) — connect Rockxy to local MCP clients
 - [Architecture](docs/development/architecture.mdx) — proxy engine, actor model, data flow
 - [Security Model](docs/development/security.mdx) — trust boundaries, XPC validation, certificate management
 - [Design Decisions](docs/development/design-decisions.mdx) — why SwiftNIO, NSTableView, actors
@@ -207,5 +201,5 @@ Rockxy is built and maintained by independent developers. Sponsorships fund cont
 ---
 
 <p align="center">
-  <sub>Built with Swift, SwiftNIO, SwiftUI, and AppKit.</sub>
+  <sub>Made by <a href="https://github.com/LocNguyenHuu">Stephen</a>. Built with Swift, SwiftNIO, SwiftUI, and AppKit.</sub>
 </p>

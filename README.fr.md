@@ -15,12 +15,12 @@
 </p>
 
 <p align="center">
-  <strong>Proxy de d&eacute;bogage HTTP open-source pour macOS.</strong>
+  <strong>Proxy de d&eacute;bogage HTTP open-source et auditable pour macOS.</strong>
 </p>
 
 <p align="center">
-  Interceptez, inspectez et modifiez le trafic HTTP/HTTPS/WebSocket/GraphQL &mdash; con&ccedil;u nativement en Swift.<br>
-  Une alternative gratuite et auditable &agrave; <a href="#rockxy-vs-alternatives">Proxyman et Charles Proxy</a>.
+  Interceptez, inspectez et modifiez le trafic HTTP/HTTPS/WebSocket/GraphQL avec une app Swift native que vous pouvez inspecter, compiler et v&eacute;rifier.<br>
+  Une alternative local-first, AGPL-3.0 &agrave; <a href="#rockxy-vs-alternatives">Proxyman et Charles Proxy</a>.
 </p>
 
 <p align="center">
@@ -82,7 +82,7 @@ Consultez [CHANGELOG.md](CHANGELOG.md) pour l’historique complet des versions.
 
 **Developer Setup Hub** &mdash; Configuration guid&eacute;e par runtime, navigateur, appareil, framework et environnement avec snippets copiables, sondes de validation et notes de d&eacute;pannage.
 
-**AI-Ready (MCP Server)** &mdash; Serveur Model Context Protocol int&eacute;gr&eacute; qui permet &agrave; Claude CLI, Claude Desktop et aux autres clients MCP d'interroger le trafic en direct, les r&egrave;gles et l'&eacute;tat du proxy directement depuis le chat. Local uniquement, authentifi&eacute; par token, donn&eacute;es sensibles masqu&eacute;es par d&eacute;faut.
+**Local MCP Bridge** &mdash; Serveur Model Context Protocol int&eacute;gr&eacute; qui permet aux clients MCP locaux d'interroger le trafic en direct, les r&egrave;gles et l'&eacute;tat du proxy. Local uniquement, authentifi&eacute; par token, donn&eacute;es sensibles masqu&eacute;es par d&eacute;faut.
 
 > 100 % natif macOS. Pas d'Electron. Pas de vues web. SwiftUI + AppKit + SwiftNIO.
 
@@ -102,22 +102,16 @@ Compilez et ex&eacute;cutez dans Xcode. La fen&ecirc;tre de bienvenue vous guide
 
 |  | **Rockxy** | **Proxyman** | **Charles Proxy** |
 |---|---|---|---|
-| **Licence** | AGPL-3.0 (open-source) | Propri&eacute;taire (freemium) | Propri&eacute;taire (50 $) |
-| **Code source** | Enti&egrave;rement auditable | Ferm&eacute; | Ferm&eacute; |
-| **Technologie** | Swift + SwiftNIO | Swift + AppKit | Java |
-| **Interception HTTPS** | Oui | Oui | Oui |
-| **WebSocket** | Oui | Oui | Oui |
-| **D&eacute;tection GraphQL** | Oui | Oui | Non |
-| **Map Local / Remote** | Oui | Oui | Oui |
-| **Breakpoints** | Oui | Oui | Oui |
-| **Scripting JavaScript** | Oui | Oui | Non |
-| **Corr&eacute;lation OSLog** | Oui | Non | Non |
-| **Identification de processus** | Oui | Oui | Non |
-| **Diff de requ&ecirc;tes** | Oui | Oui | Non |
-| **Import/export HAR** | Oui | Oui | Non |
-| **Performance 100k+ lignes** | Oui | Oui | Lent |
-| **Config proxy sans mot de passe** | Oui (d&eacute;mon helper) | Oui | Non |
-| **Contributions communautaires** | PRs ouvertes | Non | Non |
+| **Mod&egrave;le de projet** | Projet open-source AGPL-3.0 | App commerciale propri&eacute;taire | App commerciale propri&eacute;taire |
+| **Code source** | Public, auditable, forkable | Source ferm&eacute;e | Source ferm&eacute;e |
+| **Compilation depuis la source** | Gratuite avec Xcode depuis ce repo | Non disponible depuis une source publique | Non disponible depuis une source publique |
+| **Base native macOS** | Swift + SwiftNIO + SwiftUI/AppKit | App commerciale native macOS | App commerciale multiplateforme |
+| **Capture local-first** | Proxy local, certificats, helper et donn&eacute;es de capture restent sur votre Mac | App proxy desktop | App proxy desktop |
+| **Workflow de setup d&eacute;veloppeur** | Developer Setup Hub int&eacute;gr&eacute; pour runtimes, clients, appareils, frameworks et environnements | Guides de setup propres au produit | Guides de setup propres au produit |
+| **MCP/local automation bridge** | Int&eacute;gr&eacute;, authentifi&eacute; par token, masquage par d&eacute;faut | Non revendiqu&eacute; dans les docs publiques consult&eacute;es | Non revendiqu&eacute; dans les docs publiques consult&eacute;es |
+| **Chemin de contribution ouvert** | Issues, discussions, roadmap et PRs publics | Produit contr&ocirc;l&eacute; par le fournisseur | Produit contr&ocirc;l&eacute; par le fournisseur |
+
+Sur la feuille de route : workflows replay/diff/rules/scripting plus profonds, inspection WebSocket et GraphQL am&eacute;lior&eacute;e, et exploration du support gRPC/Protobuf ainsi que HTTP/2 et HTTP/3.
 
 ## S&eacute;curit&eacute;
 
@@ -203,5 +197,5 @@ Rockxy est construit et maintenu par des d&eacute;veloppeurs ind&eacute;pendants
 ---
 
 <p align="center">
-  <sub>Construit avec Swift, SwiftNIO, SwiftUI et AppKit.</sub>
+  <sub>Made by <a href="https://github.com/LocNguyenHuu">Stephen</a>. Construit avec Swift, SwiftNIO, SwiftUI et AppKit.</sub>
 </p>
