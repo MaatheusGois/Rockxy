@@ -12,6 +12,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+## [0.19.2] - 2026-05-18
+
+### Fixed
+
+- Fixed License activation in the macOS app.
+
 ## [0.19.1] - 2026-05-17
 
 ### Fixed

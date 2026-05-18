@@ -41,11 +41,11 @@
 <!-- BEGIN GENERATED: latest-release -->
 ## Latest Tagged Release
 
-**v0.19.1** — 2026-05-17
+**v0.19.2** — 2026-05-18
 
 ### Fixed
 
-- Restored access to the License settings pane for activating, restoring, and managing Rockxy Pro.
+- Fixed License activation in the macOS app.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 <!-- END GENERATED: latest-release -->

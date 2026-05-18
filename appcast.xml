@@ -6,21 +6,21 @@
     <description>Rockxy release channel</description>
     <language>en</language>
     <item>
-      <title>Version 0.19.1 (build 29)</title>
-      <pubDate>Sun, 17 May 2026 00:00:00 +0000</pubDate>
+      <title>Version 0.19.2 (build 30)</title>
+      <pubDate>Mon, 18 May 2026 00:00:00 +0000</pubDate>
       <enclosure
-        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.19.1/Rockxy-0.19.1-29.dmg"
-        sparkle:version="29"
-        sparkle:shortVersionString="0.19.1"
-        sparkle:edSignature="ckjchtg5Wj0DJXkDuHZxN0TdKazrAQQW6mulwY5Vo6Sum79//p38dp3esMp7uDih841nZmRIlZ38UcGGLpM2DA=="
-        length="21789452"
+        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.19.2/Rockxy-0.19.2-30.dmg"
+        sparkle:version="30"
+        sparkle:shortVersionString="0.19.2"
+        sparkle:edSignature="LX2ivCKOEhEB7HZtyCLSfGFYKKE8Bq3T9LoedMtCoETbF4WHBmoSbwfGCQA8uJIfmFSxYQRRR5vmndLv9BVKDg=="
+        length="21790138"
         type="application/octet-stream" />
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://github.com/RockxyApp/Rockxy/releases/tag/v0.19.1</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://github.com/RockxyApp/Rockxy/releases/tag/v0.19.2</sparkle:releaseNotesLink>
       <description><![CDATA[
 <h3>Fixed</h3>
 <ul>
-  <li>Restored access to the License settings pane for activating, restoring, and managing Rockxy Pro.</li>
+  <li>Fixed License activation in the macOS app.</li>
 </ul>
       ]]></description>
     </item>
