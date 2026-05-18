@@ -63,6 +63,7 @@ struct InspectorBodyTextEditor: NSViewRepresentable {
                 }
                 textView.textStorage?.setAttributedString(attributed)
                 textView.setSelectedRange(clamped(range: selectedRange, length: attributed.length))
+                (scrollView.verticalRulerView as? ScriptCodeEditorRulerView)?.invalidateLineNumbers()
             }
         }
 
@@ -190,6 +191,7 @@ struct InspectorBodyTextEditor: NSViewRepresentable {
         if let coordinator {
             coordinator.scheduleHighlight(text: text, fontSize: fontSize, in: scrollView)
         }
+        (scrollView.verticalRulerView as? ScriptCodeEditorRulerView)?.invalidateLineNumbers()
     }
 
     private struct HighlightSpan: Sendable {

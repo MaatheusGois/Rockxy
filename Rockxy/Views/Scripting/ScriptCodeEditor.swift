@@ -64,6 +64,7 @@ struct ScriptCodeEditor: NSViewRepresentable {
         }
         if textView.string != text {
             textView.string = text
+            (nsView.verticalRulerView as? ScriptCodeEditorRulerView)?.invalidateLineNumbers()
         }
     }
 
@@ -75,7 +76,7 @@ struct ScriptCodeEditor: NSViewRepresentable {
 // MARK: - ScriptCodeEditorRulerView
 
 /// Draws monospaced line numbers alongside the code editor. Re-renders on
-/// text changes via `NSText.didChangeNotification`.
+/// text changes, scroll bounds changes, and text view layout changes.
 final class ScriptCodeEditorRulerView: NSRulerView {
     // MARK: Lifecycle
 
@@ -84,11 +85,27 @@ final class ScriptCodeEditorRulerView: NSRulerView {
         super.init(scrollView: textView.enclosingScrollView, orientation: .verticalRuler)
         self.ruleThickness = 40
         self.clientView = textView
+        scrollView?.contentView.postsBoundsChangedNotifications = true
+        textView.postsFrameChangedNotifications = true
 
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(textDidChange),
+            selector: #selector(invalidateLineNumbers),
             name: NSText.didChangeNotification,
+            object: textView
+        )
+        if let contentView = scrollView?.contentView {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(invalidateLineNumbers),
+                name: NSView.boundsDidChangeNotification,
+                object: contentView
+            )
+        }
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(invalidateLineNumbers),
+            name: NSView.frameDidChangeNotification,
             object: textView
         )
     }
@@ -98,30 +115,38 @@ final class ScriptCodeEditorRulerView: NSRulerView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
     // MARK: Internal
 
     override func drawHashMarksAndLabels(in rect: NSRect) {
+        let dirtyRect = bounds.intersection(rect)
+        NSColor.textBackgroundColor.setFill()
+        dirtyRect.fill()
+        NSGraphicsContext.current?.saveGraphicsState()
+        dirtyRect.clip()
+        defer {
+            NSGraphicsContext.current?.restoreGraphicsState()
+        }
+
         guard let textView,
               let layoutManager = textView.layoutManager,
-              let textContainer = textView.textContainer else
+              let textContainer = textView.textContainer,
+              let contentView = scrollView?.contentView else
         {
             return
         }
 
-        let visibleRect = scrollView?.contentView.bounds ?? rect
-        let visibleGlyphRange = layoutManager.glyphRange(forBoundingRect: visibleRect, in: textContainer)
-        let visibleCharRange = layoutManager.characterRange(forGlyphRange: visibleGlyphRange, actualGlyphRange: nil)
+        layoutManager.ensureLayout(for: textContainer)
 
         let content = textView.string as NSString
-        var lineNumber = 1
-        var index = 0
-
-        while index < visibleCharRange.location {
-            if content.character(at: index) == 0x0A {
-                lineNumber += 1
-            }
-            index += 1
-        }
+        let visibleRect = ScriptCodeEditorRulerLayout.visibleTextContainerRect(
+            contentBounds: contentView.bounds,
+            textContainerOrigin: textView.textContainerOrigin
+        )
+        let visibleGlyphRange = layoutManager.glyphRange(forBoundingRect: visibleRect, in: textContainer)
 
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
@@ -129,39 +154,95 @@ final class ScriptCodeEditorRulerView: NSRulerView {
         ]
 
         var glyphIndex = visibleGlyphRange.location
+        var lastLineRange = NSRange(location: NSNotFound, length: 0)
         while glyphIndex < NSMaxRange(visibleGlyphRange) {
             let charIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
             let lineRange = content.lineRange(for: NSRange(location: charIndex, length: 0))
-            var lineRect = layoutManager.boundingRect(
-                forGlyphRange: layoutManager.glyphRange(
-                    forCharacterRange: NSRange(location: lineRange.location, length: 0),
-                    actualCharacterRange: nil
-                ),
-                in: textContainer
+            let lineGlyphRange = layoutManager.glyphRange(forCharacterRange: lineRange, actualCharacterRange: nil)
+            if lineRange.location == lastLineRange.location, lineRange.length == lastLineRange.length {
+                glyphIndex = max(NSMaxRange(lineGlyphRange), glyphIndex + 1)
+                continue
+            }
+            lastLineRange = lineRange
+
+            var effectiveGlyphRange = NSRange(location: 0, length: 0)
+            let lineRect = layoutManager.lineFragmentRect(
+                forGlyphAt: glyphIndex,
+                effectiveRange: &effectiveGlyphRange,
+                withoutAdditionalLayout: true
             )
-            lineRect.origin.y += textView.textContainerInset.height - (scrollView?.contentView.bounds.origin.y ?? 0)
+            let lineNumber = ScriptCodeEditorRulerLayout.lineNumber(
+                in: content,
+                forCharacterAt: lineRange.location
+            )
 
             let str = "\(lineNumber)" as NSString
             let size = str.size(withAttributes: attrs)
+            let y = ScriptCodeEditorRulerLayout.rulerY(
+                lineFragmentY: lineRect.origin.y,
+                textContainerOriginY: textView.textContainerOrigin.y,
+                contentOffsetY: contentView.bounds.origin.y
+            )
             str.draw(
-                at: NSPoint(x: ruleThickness - size.width - 4, y: lineRect.origin.y),
+                at: NSPoint(
+                    x: ScriptCodeEditorRulerLayout.labelX(ruleThickness: ruleThickness, labelWidth: size.width),
+                    y: y
+                ),
                 withAttributes: attrs
             )
 
-            lineNumber += 1
-            glyphIndex = NSMaxRange(layoutManager.glyphRange(
-                forCharacterRange: lineRange,
-                actualCharacterRange: nil
-            ))
+            let nextGlyphIndex = max(NSMaxRange(lineGlyphRange), NSMaxRange(effectiveGlyphRange), glyphIndex + 1)
+            glyphIndex = nextGlyphIndex
         }
+    }
+
+    @objc
+    func invalidateLineNumbers() {
+        needsDisplay = true
+        setNeedsDisplay(bounds)
     }
 
     // MARK: Private
 
     private weak var textView: NSTextView?
+}
 
-    @objc
-    private func textDidChange(_: Notification) {
-        needsDisplay = true
+// MARK: - ScriptCodeEditorRulerLayout
+
+enum ScriptCodeEditorRulerLayout {
+    static let labelTrailingPadding: CGFloat = 4
+
+    static func visibleTextContainerRect(contentBounds: NSRect, textContainerOrigin: NSPoint) -> NSRect {
+        NSRect(
+            x: contentBounds.origin.x - textContainerOrigin.x,
+            y: contentBounds.origin.y - textContainerOrigin.y,
+            width: contentBounds.width,
+            height: contentBounds.height
+        )
+    }
+
+    static func lineNumber(in content: NSString, forCharacterAt characterIndex: Int) -> Int {
+        let end = min(max(characterIndex, 0), content.length)
+        guard end > 0 else {
+            return 1
+        }
+
+        var lineNumber = 1
+        var index = 0
+        while index < end {
+            if content.character(at: index) == 0x0A {
+                lineNumber += 1
+            }
+            index += 1
+        }
+        return lineNumber
+    }
+
+    static func rulerY(lineFragmentY: CGFloat, textContainerOriginY: CGFloat, contentOffsetY: CGFloat) -> CGFloat {
+        lineFragmentY + textContainerOriginY - contentOffsetY
+    }
+
+    static func labelX(ruleThickness: CGFloat, labelWidth: CGFloat) -> CGFloat {
+        max(0, ruleThickness - labelWidth - labelTrailingPadding)
     }
 }
