@@ -24,7 +24,7 @@ enum HeaderModifyPhase: String, Codable, CaseIterable {
 /// The action to perform when a `ProxyRule` matches a request.
 enum RuleAction {
     case breakpoint(phase: BreakpointRulePhase = .both)
-    case mapLocal(filePath: String, statusCode: Int = 200, isDirectory: Bool = false)
+    case mapLocal(filePath: String, statusCode: Int = 200, isDirectory: Bool = false, delayMs: Int = 0)
     case mapRemote(configuration: MapRemoteConfiguration)
     case block(statusCode: Int)
     case throttle(delayMs: Int)
@@ -49,7 +49,7 @@ extension RuleAction {
         switch self {
         case let .breakpoint(phase):
             "Breakpoint (\(phase.rawValue.capitalized))"
-        case let .mapLocal(filePath, _, isDirectory):
+        case let .mapLocal(filePath, _, isDirectory, _):
             isDirectory ? "Map Local Directory" : "Map Local (\((filePath as NSString).lastPathComponent))"
         case .mapRemote:
             "Map Remote"
@@ -104,7 +104,8 @@ extension RuleAction: Codable {
             let filePath = try container.decode(String.self, forKey: .filePath)
             let statusCode = try container.decodeIfPresent(Int.self, forKey: .statusCode) ?? 200
             let isDirectory = try container.decodeIfPresent(Bool.self, forKey: .isDirectory) ?? false
-            self = .mapLocal(filePath: filePath, statusCode: statusCode, isDirectory: isDirectory)
+            let delayMs = try container.decodeIfPresent(Int.self, forKey: .delayMs) ?? 0
+            self = .mapLocal(filePath: filePath, statusCode: statusCode, isDirectory: isDirectory, delayMs: delayMs)
         case .mapRemote:
             if let config = try container.decodeIfPresent(MapRemoteConfiguration.self, forKey: .configuration) {
                 self = .mapRemote(configuration: config)
@@ -141,12 +142,15 @@ extension RuleAction: Codable {
         case let .breakpoint(phase):
             try container.encode(ActionType.breakpoint, forKey: .type)
             try container.encode(phase, forKey: .phase)
-        case let .mapLocal(filePath, statusCode, isDirectory):
+        case let .mapLocal(filePath, statusCode, isDirectory, delayMs):
             try container.encode(ActionType.mapLocal, forKey: .type)
             try container.encode(filePath, forKey: .filePath)
             try container.encode(statusCode, forKey: .statusCode)
             if isDirectory {
                 try container.encode(isDirectory, forKey: .isDirectory)
+            }
+            if delayMs > 0 {
+                try container.encode(delayMs, forKey: .delayMs)
             }
         case let .mapRemote(configuration):
             try container.encode(ActionType.mapRemote, forKey: .type)

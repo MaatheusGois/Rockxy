@@ -39,10 +39,11 @@ struct RuleActionTests {
         let url = try #require(URL(string: "https://api.test/data"))
         let result = await engine.evaluate(method: "GET", url: url, headers: [])
 
-        if case let .mapLocal(filePath, statusCode, isDirectory) = result {
+        if case let .mapLocal(filePath, statusCode, isDirectory, delayMs) = result {
             #expect(filePath == "/tmp/mock.json")
             #expect(statusCode == 200)
             #expect(isDirectory == false)
+            #expect(delayMs == 0)
         } else {
             Issue.record("Expected .mapLocal action")
         }
@@ -248,10 +249,11 @@ struct RuleActionTests {
             switch (action, decoded) {
             case let (.block(a), .block(b)):
                 #expect(a == b)
-            case let (.mapLocal(aPath, aStatus, aIsDir), .mapLocal(bPath, bStatus, bIsDir)):
+            case let (.mapLocal(aPath, aStatus, aIsDir, aDelay), .mapLocal(bPath, bStatus, bIsDir, bDelay)):
                 #expect(aPath == bPath)
                 #expect(aStatus == bStatus)
                 #expect(aIsDir == bIsDir)
+                #expect(aDelay == bDelay)
             case let (.mapRemote(a), .mapRemote(b)):
                 #expect(a == b)
             case let (.throttle(a), .throttle(b)):
@@ -278,10 +280,11 @@ struct RuleActionTests {
         {"type":"mapLocal","filePath":"/tmp/old.json"}
         """.data(using: .utf8)!
         let decoded = try JSONDecoder().decode(RuleAction.self, from: json)
-        if case let .mapLocal(path, code, isDir) = decoded {
+        if case let .mapLocal(path, code, isDir, delayMs) = decoded {
             #expect(path == "/tmp/old.json")
             #expect(code == 200)
             #expect(isDir == false)
+            #expect(delayMs == 0)
         } else {
             Issue.record("Expected .mapLocal")
         }
@@ -292,7 +295,7 @@ struct RuleActionTests {
         let action = RuleAction.mapLocal(filePath: "/tmp/test.json", statusCode: 404)
         let data = try JSONEncoder().encode(action)
         let decoded = try JSONDecoder().decode(RuleAction.self, from: data)
-        if case let .mapLocal(path, code, _) = decoded {
+        if case let .mapLocal(path, code, _, _) = decoded {
             #expect(path == "/tmp/test.json")
             #expect(code == 404)
         } else {
@@ -303,7 +306,7 @@ struct RuleActionTests {
     @Test("MapLocal default statusCode is 200")
     func mapLocalDefaultStatusCode() {
         let action = RuleAction.mapLocal(filePath: "/tmp/test.json")
-        if case let .mapLocal(_, code, _) = action {
+        if case let .mapLocal(_, code, _, _) = action {
             #expect(code == 200)
         } else {
             Issue.record("Expected .mapLocal")
@@ -313,7 +316,7 @@ struct RuleActionTests {
     @Test("MapLocal directory flag defaults to false")
     func mapLocalDefaultIsDirectory() {
         let action = RuleAction.mapLocal(filePath: "/tmp/dir")
-        if case let .mapLocal(_, _, isDir) = action {
+        if case let .mapLocal(_, _, isDir, _) = action {
             #expect(isDir == false)
         } else {
             Issue.record("Expected .mapLocal")
@@ -325,7 +328,7 @@ struct RuleActionTests {
         let action = RuleAction.mapLocal(filePath: "/tmp/webroot", statusCode: 200, isDirectory: true)
         let data = try JSONEncoder().encode(action)
         let decoded = try JSONDecoder().decode(RuleAction.self, from: data)
-        if case let .mapLocal(path, code, isDir) = decoded {
+        if case let .mapLocal(path, code, isDir, _) = decoded {
             #expect(path == "/tmp/webroot")
             #expect(code == 200)
             #expect(isDir == true)
@@ -340,8 +343,24 @@ struct RuleActionTests {
         {"type":"mapLocal","filePath":"/tmp/old.json","statusCode":200}
         """.data(using: .utf8)!
         let decoded = try JSONDecoder().decode(RuleAction.self, from: json)
-        if case let .mapLocal(_, _, isDir) = decoded {
+        if case let .mapLocal(_, _, isDir, delayMs) = decoded {
             #expect(isDir == false)
+            #expect(delayMs == 0)
+        } else {
+            Issue.record("Expected .mapLocal")
+        }
+    }
+
+    @Test("MapLocal delay round-trips through Codable")
+    func mapLocalDelayRoundtrip() throws {
+        let action = RuleAction.mapLocal(filePath: "/tmp/delayed.json", statusCode: 202, delayMs: 5_000)
+        let data = try JSONEncoder().encode(action)
+        let decoded = try JSONDecoder().decode(RuleAction.self, from: data)
+        if case let .mapLocal(path, code, isDir, delayMs) = decoded {
+            #expect(path == "/tmp/delayed.json")
+            #expect(code == 202)
+            #expect(isDir == false)
+            #expect(delayMs == 5_000)
         } else {
             Issue.record("Expected .mapLocal")
         }

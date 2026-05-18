@@ -412,24 +412,38 @@ final class HTTPSProxyRelayHandler: ChannelInboundHandler, @unchecked Sendable {
                 callback: callback
             )
 
-        case let .mapLocal(filePath, statusCode, isDirectory) where isDirectory:
-            handleMapLocalDirectory(
-                context: context,
-                directoryPath: filePath,
-                statusCode: statusCode,
-                requestData: requestData,
-                callback: callback,
-                urlPattern: urlPattern ?? ""
-            )
-
-        case let .mapLocal(filePath, statusCode, _):
-            handleMapLocal(
-                context: context,
-                filePath: filePath,
-                statusCode: statusCode,
-                requestData: requestData,
-                callback: callback
-            )
+        case let .mapLocal(filePath, statusCode, isDirectory, delayMs):
+            let performMapLocal = { [weak self] in
+                guard let self else {
+                    return
+                }
+                if isDirectory {
+                    self.handleMapLocalDirectory(
+                        context: context,
+                        directoryPath: filePath,
+                        statusCode: statusCode,
+                        requestData: requestData,
+                        callback: callback,
+                        urlPattern: urlPattern ?? ""
+                    )
+                } else {
+                    self.handleMapLocal(
+                        context: context,
+                        filePath: filePath,
+                        statusCode: statusCode,
+                        requestData: requestData,
+                        callback: callback
+                    )
+                }
+            }
+            let effectiveDelayMs = delayMs < 0 ? Int.random(in: 1_000 ... 15_000) : delayMs
+            if effectiveDelayMs > 0 {
+                context.eventLoop.scheduleTask(in: .milliseconds(Int64(effectiveDelayMs))) {
+                    performMapLocal()
+                }
+            } else {
+                performMapLocal()
+            }
 
         case let .mapRemote(configuration):
             handleMapRemote(

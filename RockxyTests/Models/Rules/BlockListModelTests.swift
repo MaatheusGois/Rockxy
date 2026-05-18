@@ -310,6 +310,120 @@ struct BlockListViewModelTests {
         #expect(vm.selectedRuleID == nil)
     }
 
+    @Test("removeRule deletes clicked row without requiring current selection")
+    @MainActor
+    func removeRuleByID() {
+        let vm = BlockListViewModel()
+        vm.addBlockRule(
+            ruleName: "Rule A",
+            urlPattern: "*.a.com/*",
+            httpMethod: .any,
+            matchType: .wildcard,
+            blockAction: .returnForbidden,
+            includeSubpaths: true
+        )
+        vm.addBlockRule(
+            ruleName: "Rule B",
+            urlPattern: "*.b.com/*",
+            httpMethod: .any,
+            matchType: .wildcard,
+            blockAction: .returnForbidden,
+            includeSubpaths: true
+        )
+
+        let secondID = vm.blockRules[1].id
+        vm.selectedRuleID = vm.blockRules[0].id
+        vm.removeRule(id: secondID)
+
+        #expect(vm.blockRules.count == 1)
+        #expect(vm.blockRules.first?.name == "Rule A")
+        #expect(vm.selectedRuleID == vm.blockRules.first?.id)
+    }
+
+    @Test("duplicateSelected creates a copy and selects it")
+    @MainActor
+    func duplicateSelected() {
+        let vm = BlockListViewModel()
+        vm.addBlockRule(
+            ruleName: "Original",
+            urlPattern: "*.copy.com/*",
+            httpMethod: .post,
+            matchType: .wildcard,
+            blockAction: .dropConnection,
+            includeSubpaths: true
+        )
+
+        vm.selectedRuleID = vm.blockRules.first?.id
+        vm.duplicateSelected()
+
+        #expect(vm.blockRules.count == 2)
+        #expect(vm.blockRules[1].name == "Copy of Original")
+        #expect(vm.selectedRuleID == vm.blockRules[1].id)
+        #expect(vm.blockRules[1].matchCondition.method == "POST")
+        if case let .block(statusCode) = vm.blockRules[1].action {
+            #expect(statusCode == 0)
+        } else {
+            Issue.record("Expected block action")
+        }
+    }
+
+    @Test("updateBlockRule preserves id and enabled state")
+    @MainActor
+    func updateBlockRule() throws {
+        let vm = BlockListViewModel()
+        vm.addBlockRule(
+            ruleName: "Original",
+            urlPattern: "*.old.com/*",
+            httpMethod: .any,
+            matchType: .wildcard,
+            blockAction: .returnForbidden,
+            includeSubpaths: true
+        )
+        let id = try #require(vm.blockRules.first?.id)
+        vm.toggleRule(id: id)
+
+        vm.updateBlockRule(
+            id: id,
+            ruleName: "Updated",
+            urlPattern: "^https://new.example/.*$",
+            httpMethod: .get,
+            matchType: .regex,
+            blockAction: .dropConnection,
+            includeSubpaths: false
+        )
+
+        let updated = try #require(vm.blockRules.first)
+        #expect(updated.id == id)
+        #expect(updated.name == "Updated")
+        #expect(updated.isEnabled == false)
+        #expect(updated.matchCondition.method == "GET")
+        #expect(updated.matchCondition.urlPattern == "^https://new.example/.*$")
+    }
+
+    @Test("importBlockRules preserves non-block rules and selects first imported block")
+    @MainActor
+    func importBlockRulesPreservesNonBlockRules() {
+        let vm = BlockListViewModel()
+        vm.addBlockRule(
+            ruleName: "Existing Block",
+            urlPattern: "*.old.com/*",
+            httpMethod: .any,
+            matchType: .wildcard,
+            blockAction: .returnForbidden,
+            includeSubpaths: true
+        )
+        let throttle = TestFixtures.makeRule(name: "Throttle", action: .throttle(delayMs: 100))
+        vm.handleRulesDidChange(Notification(name: .rulesDidChange, object: vm.allRules + [throttle]))
+        let imported = TestFixtures.makeRule(name: "Imported Block", action: .block(statusCode: 403))
+
+        vm.importBlockRules([imported])
+
+        #expect(vm.allRules.contains { $0.id == throttle.id })
+        #expect(vm.blockRules.count == 1)
+        #expect(vm.blockRules.first?.id == imported.id)
+        #expect(vm.selectedRuleID == imported.id)
+    }
+
     @Test("toggleRule toggles enabled state")
     @MainActor
     func toggleRule() throws {

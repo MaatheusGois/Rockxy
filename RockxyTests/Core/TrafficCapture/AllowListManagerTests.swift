@@ -344,6 +344,30 @@ struct AllowListManagerTests {
     }
 
     @Test
+    func importLegacySchemaMigratesEntries() throws {
+        let (manager, url) = makeManager()
+        defer { cleanup(url) }
+
+        let legacy = LegacyStorage(
+            isActive: true,
+            entries: [
+                LegacyEntry(id: UUID(), domain: "api.example.com", isEnabled: true),
+                LegacyEntry(id: UUID(), domain: "*.example.org", isEnabled: false),
+            ]
+        )
+        let data = try JSONEncoder().encode(legacy)
+
+        try manager.importRulesJSON(data)
+
+        #expect(manager.isActive)
+        #expect(manager.rules.count == 2)
+        #expect(manager.rules[0].name == "api.example.com")
+        #expect(manager.rules[0].matchType == .regex)
+        #expect(manager.rules[1].name == "*.example.org")
+        #expect(!manager.rules[1].isEnabled)
+    }
+
+    @Test
     func importMalformedJSONThrows() {
         let (manager, url) = makeManager()
         defer { cleanup(url) }

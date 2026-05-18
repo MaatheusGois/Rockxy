@@ -538,6 +538,52 @@ struct AllowListWindowViewModelTests {
         #expect(viewModel.manager.rules[0].name == "imported")
     }
 
+    @Test
+    func exportRulesJSONReturnsManagerPayload() throws {
+        let (viewModel, url) = makeSetup()
+        defer { cleanup(url) }
+
+        viewModel.addRule(
+            ruleName: "api",
+            urlPattern: "*api.example.com/*",
+            httpMethod: .post,
+            matchType: .wildcard,
+            includeSubpaths: true
+        )
+        viewModel.setActive(true)
+
+        let data = try viewModel.exportRulesJSON()
+        let decoded = try JSONDecoder().decode(ImportPayload.self, from: data)
+
+        #expect(decoded.isActive)
+        #expect(decoded.rules.count == 1)
+        #expect(decoded.rules[0].name == "api")
+        #expect(decoded.rules[0].method == "POST")
+    }
+
+    @Test
+    func importRulesReplacesListAndSelectsFirstImportedRule() {
+        let (viewModel, url) = makeSetup()
+        defer { cleanup(url) }
+
+        viewModel.addRule(
+            ruleName: "old",
+            urlPattern: "*old.example.com/*",
+            httpMethod: .any,
+            matchType: .wildcard,
+            includeSubpaths: true
+        )
+
+        let imported = [
+            AllowListRule(name: "first", rawPattern: "*first.example.com/*"),
+            AllowListRule(name: "second", rawPattern: "*second.example.com/*"),
+        ]
+        viewModel.importRules(imported)
+
+        #expect(viewModel.manager.rules.map(\.name) == ["first", "second"])
+        #expect(viewModel.selectedRuleID == imported[0].id)
+    }
+
     // MARK: Private
 
     // MARK: - Helpers
@@ -560,7 +606,7 @@ struct AllowListWindowViewModelTests {
 
 /// Mirror of the private `AllowListStorage` shape so we can build fixture import data
 /// without needing to expose the internal type.
-private struct ImportPayload: Encodable {
+private struct ImportPayload: Codable {
     let schemaVersion: Int
     let isActive: Bool
     let rules: [AllowListRule]

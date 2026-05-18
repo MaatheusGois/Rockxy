@@ -88,6 +88,14 @@ struct RockxyApp: App {
         .windowResizability(.contentSize)
         .defaultPosition(.center)
 
+        Window(String(localized: "Map Local Editor"), id: "mapLocalEditor") {
+            MapLocalEditorWindowView()
+        }
+        .commandsRemoved()
+        .defaultSize(width: 960, height: 640)
+        .defaultPosition(.center)
+        .windowResizability(.contentSize)
+
         Window(String(localized: "Map Remote"), id: "mapRemote") {
             MapRemoteWindowView()
         }

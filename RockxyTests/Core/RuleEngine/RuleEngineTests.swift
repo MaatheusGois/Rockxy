@@ -130,6 +130,41 @@ struct RuleEngineTests {
         #expect(afterToggle == nil)
     }
 
+    @Test("Block List tool gate skips block rules only")
+    func blockListToolGateSkipsOnlyBlockRules() async throws {
+        let engine = RuleEngine()
+        let blockRule = ProxyRule(
+            name: "Blocked",
+            isEnabled: true,
+            matchCondition: RuleMatchCondition(urlPattern: ".*example\\.com.*"),
+            action: .block(statusCode: 403)
+        )
+        let throttleRule = ProxyRule(
+            name: "Throttle",
+            isEnabled: true,
+            matchCondition: RuleMatchCondition(urlPattern: ".*example\\.com.*"),
+            action: .throttle(delayMs: 250)
+        )
+        await engine.addRule(blockRule)
+        await engine.addRule(throttleRule)
+
+        let url = try #require(URL(string: "https://example.com/test"))
+        let enabledResult = await engine.evaluate(method: "GET", url: url, headers: [])
+        if case .block = enabledResult {
+            #expect(true)
+        } else {
+            Issue.record("Expected block rule while Block List tool is enabled")
+        }
+
+        await engine.setBlockListToolEnabled(false)
+        let disabledResult = await engine.evaluate(method: "GET", url: url, headers: [])
+        if case let .throttle(delayMs) = disabledResult {
+            #expect(delayMs == 250)
+        } else {
+            Issue.record("Expected non-block rule to remain active")
+        }
+    }
+
     @Test("Add rule and evaluate successfully")
     func addRuleAndEvaluate() async throws {
         let engine = RuleEngine()
