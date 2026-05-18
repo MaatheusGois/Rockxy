@@ -4,6 +4,38 @@ import SwiftUI
 
 // Presents the Proxyman-style Map Local management and editor windows.
 
+// MARK: - MapLocalPatternFormatter
+
+enum MapLocalPatternFormatter {
+    static func wildcardToRegex(_ pattern: String) -> String {
+        var result = ""
+        for char in pattern {
+            switch char {
+            case "*":
+                result += ".*"
+            case "?":
+                result += "."
+            default:
+                result += NSRegularExpression.escapedPattern(for: String(char))
+            }
+        }
+        return result
+    }
+
+    static func readablePattern(_ pattern: String) -> String {
+        pattern
+            .trimmingCharacters(in: CharacterSet(charactersIn: "^$"))
+            .replacingOccurrences(of: #"\/"#, with: "/")
+            .replacingOccurrences(of: #"\."#, with: ".")
+            .replacingOccurrences(of: ".*", with: "*")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "^$"))
+    }
+
+    static func prefersWildcardPresentation(_ pattern: String) -> Bool {
+        pattern.contains(".*") || pattern.contains("\\.") || pattern.contains("\\/")
+    }
+}
+
 // MARK: - MapLocalHTTPMethod
 
 enum MapLocalHTTPMethod: String, CaseIterable, Identifiable {
@@ -331,8 +363,8 @@ final class MapLocalViewModel {
         guard let pattern = rule.matchCondition.urlPattern, !pattern.isEmpty else {
             return "<Missing URL>"
         }
-        if pattern.contains(".*") || pattern.contains("\\.") {
-            return "Wildcard: \(readablePattern(pattern))"
+        if MapLocalPatternFormatter.prefersWildcardPresentation(pattern) {
+            return "Wildcard: \(MapLocalPatternFormatter.readablePattern(pattern))"
         }
         return pattern
     }
@@ -363,14 +395,6 @@ final class MapLocalViewModel {
     private static let logger = Logger(subsystem: RockxyIdentity.current.logSubsystem, category: "MapLocalViewModel")
     private static var defaultToolEnabled: Bool {
         UserDefaults.standard.object(forKey: toolEnabledKey) as? Bool ?? true
-    }
-
-    private func readablePattern(_ pattern: String) -> String {
-        pattern
-            .replacingOccurrences(of: #"^https?://"#, with: "https://", options: .regularExpression)
-            .replacingOccurrences(of: #"\\."#, with: ".")
-            .replacingOccurrences(of: #"\.\*"#, with: "*", options: .regularExpression)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "^$"))
     }
 
     private func abbreviatedPath(_ path: String) -> String {
@@ -831,7 +855,7 @@ final class MapLocalEditorViewModel {
             return trimmed
         }
         let pattern = includeSubpaths && !trimmed.hasSuffix("*") ? "\(trimmed)*" : trimmed
-        return Self.wildcardToRegex(pattern)
+        return MapLocalPatternFormatter.wildcardToRegex(pattern)
     }
 
     // MARK: Private
@@ -881,9 +905,15 @@ final class MapLocalEditorViewModel {
 
     private func load(existingRule rule: ProxyRule) {
         name = rule.name.isEmpty ? "Untitled" : rule.name
-        urlText = rule.matchCondition.urlPattern ?? ""
+        let storedPattern = rule.matchCondition.urlPattern ?? ""
+        if MapLocalPatternFormatter.prefersWildcardPresentation(storedPattern) {
+            urlText = MapLocalPatternFormatter.readablePattern(storedPattern)
+            matchType = .wildcard
+        } else {
+            urlText = storedPattern
+            matchType = .regex
+        }
         method = MapLocalHTTPMethod(ruleMethod: rule.matchCondition.method)
-        matchType = .regex
         includeSubpaths = false
         if case let .mapLocal(path, statusCode, isDirectory, delayMs) = rule.action {
             targetMode = isDirectory ? .localDirectory : .localFile
@@ -921,21 +951,6 @@ final class MapLocalEditorViewModel {
             .appendingPathComponent("default_message_\(UUID().uuidString.prefix(8)).json")
             .path
     }
-
-    private static func wildcardToRegex(_ pattern: String) -> String {
-        var result = ""
-        for char in pattern {
-            switch char {
-            case "*":
-                result += ".*"
-            case "?":
-                result += "."
-            default:
-                result += NSRegularExpression.escapedPattern(for: String(char))
-            }
-        }
-        return result
-    }
 }
 
 private extension Result where Success == NSRegularExpression, Failure == RegexValidator.ValidationError {
@@ -955,14 +970,14 @@ struct MapLocalEditorWindowView: View {
     @State var viewModel = MapLocalEditorViewModel()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 12) {
             matchingRuleSection
             mapToSection
         }
         .padding(.horizontal, 18)
-        .padding(.top, 20)
-        .padding(.bottom, 18)
-        .frame(width: 960, height: 640)
+        .padding(.top, 28)
+        .padding(.bottom, 14)
+        .frame(width: 1_024, height: 720)
         .navigationTitle(viewModel.windowTitle)
         .onAppear { viewModel.load(context: editorStore.context) }
         .onChange(of: editorStore.draftVersion) { _, _ in
@@ -984,11 +999,11 @@ struct MapLocalEditorWindowView: View {
     }
 
     private var matchingRuleSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 7) {
             Text(String(localized: "Matching Rule"))
                 .font(.system(size: 15))
 
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text(String(localized: "Name:"))
                         .frame(width: 70, alignment: .trailing)
@@ -1041,42 +1056,53 @@ struct MapLocalEditorWindowView: View {
                     }
                 }
             }
-            .padding(18)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
             .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
         }
     }
 
     private var mapToSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 7) {
             Text(String(localized: "Map To"))
                 .font(.system(size: 15))
 
-            VStack(spacing: 0) {
+            ZStack(alignment: .top) {
+                VStack(spacing: 0) {
+                    if viewModel.targetMode == .localFile {
+                        localFileSection
+                    } else {
+                        localDirectorySection
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 30)
+                .padding(.bottom, 14)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+                .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color(nsColor: .separatorColor).opacity(0.35)))
+                .padding(.top, 10)
+
                 Picker("", selection: $viewModel.targetMode) {
                     Text(MapLocalTargetMode.localFile.displayName).tag(MapLocalTargetMode.localFile)
                     Text(MapLocalTargetMode.localDirectory.displayName).tag(MapLocalTargetMode.localDirectory)
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 230)
-                .offset(y: -22)
-
-                if viewModel.targetMode == .localFile {
-                    localFileSection
-                } else {
-                    localDirectorySection
-                }
+                .frame(width: 240)
+                .background(
+                    Color(nsColor: .controlBackgroundColor)
+                        .padding(.horizontal, -8)
+                        .padding(.vertical, -3)
+                )
+                .zIndex(1)
             }
-            .padding(.horizontal, 22)
-            .padding(.bottom, 18)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 7))
-            .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color(nsColor: .separatorColor).opacity(0.35)))
         }
     }
 
     private var localFileSection: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 7) {
             Toggle(String(localized: "Enable Local File"), isOn: $viewModel.localFileEnabled)
                 .toggleStyle(.checkbox)
             Text("File: \(viewModel.filePath)")
@@ -1087,18 +1113,21 @@ struct MapLocalEditorWindowView: View {
                 Circle()
                     .fill(.green)
                     .frame(width: 10, height: 10)
-                Text(String(localized: "Map Response with HTTP Message format (Saved)"))
+                Text(String(localized: "Map Response Body with a local file (Saved)"))
                     .foregroundStyle(.secondary)
             }
 
-            ScriptCodeEditor(text: $viewModel.httpMessageText)
-                .frame(minHeight: 210)
-                .overlay(Rectangle().stroke(Color(nsColor: .separatorColor).opacity(0.3)))
+            MapLocalHTTPMessageEditor(text: $viewModel.httpMessageText)
+                .frame(minHeight: 238)
+                .clipped()
+                .overlay(Rectangle().stroke(Color(nsColor: .separatorColor).opacity(0.35)))
 
             HStack(spacing: 10) {
                 Button(String(localized: "Select Local File")) { viewModel.choosePath() }
                 Text(String(localized: "Accept HTTP Message Format or Local File"))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.9)
                 Button {
                     viewModel.errorMessage = String(localized: """
                     Paste an HTTP response message or plain body. Rockxy saves the body to the local file and uses the status line for the response code.
@@ -1114,7 +1143,6 @@ struct MapLocalEditorWindowView: View {
                     .disabled(!viewModel.isSaveEnabled)
             }
         }
-        .offset(y: -12)
     }
 
     private var localDirectorySection: some View {
@@ -1165,7 +1193,6 @@ struct MapLocalEditorWindowView: View {
             }
             Spacer(minLength: 80)
         }
-        .offset(y: -6)
     }
 
     private var methodMenu: some View {
@@ -1178,7 +1205,8 @@ struct MapLocalEditorWindowView: View {
         } label: {
             menuLabel(viewModel.method.rawValue)
         }
-        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .buttonStyle(.bordered)
         .fixedSize()
     }
 
@@ -1196,7 +1224,8 @@ struct MapLocalEditorWindowView: View {
         } label: {
             menuLabel(viewModel.matchType.displayName)
         }
-        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .buttonStyle(.bordered)
         .fixedSize()
     }
 
@@ -1210,7 +1239,8 @@ struct MapLocalEditorWindowView: View {
         } label: {
             menuLabel(viewModel.delayPreset.displayName, minWidth: 132)
         }
-        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .buttonStyle(.bordered)
         .fixedSize()
     }
 
@@ -1224,11 +1254,15 @@ struct MapLocalEditorWindowView: View {
                 Button(editor.displayName) { viewModel.openSelectedPath(with: editor) }
             }
         } label: {
-            Label(String(localized: "Settings"), systemImage: "gearshape.fill")
-                .labelStyle(.iconOnly)
-                .frame(width: 54)
+            HStack(spacing: 8) {
+                Image(systemName: "gearshape.fill")
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .frame(minWidth: 50)
         }
-        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .buttonStyle(.bordered)
         .fixedSize()
     }
 
@@ -1239,10 +1273,6 @@ struct MapLocalEditorWindowView: View {
                 .font(.system(size: 10, weight: .semibold))
         }
         .frame(minWidth: minWidth)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(Color(nsColor: .controlColor))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
     private func saveAndClose() {

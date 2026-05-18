@@ -27,6 +27,22 @@ struct MapLocalModelTests {
         #expect(vm.filteredRules.map(\.id) == [assetRule.id])
     }
 
+    @Test("visible Map Local row labels match the management table")
+    func visibleRowLabelsMatchManagementTable() {
+        let vm = MapLocalViewModel()
+        let pattern = MapLocalPatternFormatter.wildcardToRegex("https://media-hls.growcdnssedge.com/*")
+        let rule = ProxyRule(
+            name: "Untitled",
+            matchCondition: RuleMatchCondition(urlPattern: pattern),
+            action: .mapLocal(filePath: "/Users/stephen/Library/Application Support/Rockxy/map-local/default_message.json")
+        )
+
+        #expect(vm.methodLabel(for: rule) == "ANY")
+        #expect(vm.matchingRuleLabel(for: rule) == "Wildcard: https://media-hls.growcdnssedge.com/*")
+        #expect(vm.mapFromLabel(for: rule).hasPrefix("File: "))
+        #expect(vm.mapFromLabel(for: rule).contains("default_message.json"))
+    }
+
     @Test("remove selected Map Local rows preserves unrelated rules")
     func removeSelectedPreservesOtherRules() async {
         await RuleTestLock.shared.acquire()
@@ -112,6 +128,40 @@ struct MapLocalModelTests {
 
         let saved = try String(contentsOf: fileURL, encoding: .utf8)
         #expect(saved == #"{"ok":true}"#)
+    }
+
+    @Test("editor opens an existing local file rule with filled data")
+    func editorLoadsExistingLocalFileRuleWithFilledData() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RockxyTests-MapLocalOpen-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let fileURL = tempDir.appendingPathComponent("default_message.json")
+        try #"{"status":"ok"}"#.write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let existing = ProxyRule(
+            name: "Untitled",
+            matchCondition: RuleMatchCondition(
+                urlPattern: MapLocalPatternFormatter.wildcardToRegex("https://api.example.com/v1/*"),
+                method: "PATCH"
+            ),
+            action: .mapLocal(filePath: fileURL.path, statusCode: 201, delayMs: 3_000)
+        )
+
+        let vm = MapLocalEditorViewModel()
+        vm.load(context: MapLocalEditorContext(existingRule: existing))
+
+        #expect(vm.existingID == existing.id)
+        #expect(vm.name == "Untitled")
+        #expect(vm.method == .patch)
+        #expect(vm.matchType == .wildcard)
+        #expect(vm.urlText == "https://api.example.com/v1/*")
+        #expect(vm.targetMode == .localFile)
+        #expect(vm.localFileEnabled)
+        #expect(vm.filePath == fileURL.path)
+        #expect(vm.delayPreset == .threeSeconds)
+        #expect(vm.httpMessageText.contains("HTTP/1.1 201 CREATED"))
+        #expect(vm.httpMessageText.contains(#"{"status":"ok"}"#))
+        #expect(vm.isSaveEnabled)
     }
 
     @Test("editor validates Local Directory target")
