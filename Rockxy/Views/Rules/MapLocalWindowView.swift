@@ -4,38 +4,6 @@ import SwiftUI
 
 // Presents the Proxyman-style Map Local management and editor windows.
 
-// MARK: - MapLocalPatternFormatter
-
-enum MapLocalPatternFormatter {
-    static func wildcardToRegex(_ pattern: String) -> String {
-        var result = ""
-        for char in pattern {
-            switch char {
-            case "*":
-                result += ".*"
-            case "?":
-                result += "."
-            default:
-                result += NSRegularExpression.escapedPattern(for: String(char))
-            }
-        }
-        return result
-    }
-
-    static func readablePattern(_ pattern: String) -> String {
-        pattern
-            .trimmingCharacters(in: CharacterSet(charactersIn: "^$"))
-            .replacingOccurrences(of: #"\/"#, with: "/")
-            .replacingOccurrences(of: #"\."#, with: ".")
-            .replacingOccurrences(of: ".*", with: "*")
-            .trimmingCharacters(in: CharacterSet(charactersIn: "^$"))
-    }
-
-    static func prefersWildcardPresentation(_ pattern: String) -> Bool {
-        pattern.contains(".*") || pattern.contains("\\.") || pattern.contains("\\/")
-    }
-}
-
 // MARK: - MapLocalHTTPMethod
 
 enum MapLocalHTTPMethod: String, CaseIterable, Identifiable {
@@ -1197,9 +1165,14 @@ struct MapLocalEditorWindowView: View {
 
     private var methodMenu: some View {
         Menu {
-            Picker("", selection: $viewModel.method) {
-                ForEach(MapLocalHTTPMethod.allCases) { method in
-                    Text(method.rawValue).tag(method)
+            ForEach(Array(MapLocalEditorMenuContent.methodSections.enumerated()), id: \.offset) { index, section in
+                ForEach(section) { method in
+                    Button { viewModel.method = method } label: {
+                        menuCheckmarkLabel(method.rawValue, isSelected: viewModel.method == method)
+                    }
+                }
+                if index < MapLocalEditorMenuContent.methodSections.count - 1 {
+                    Divider()
                 }
             }
         } label: {
@@ -1212,14 +1185,20 @@ struct MapLocalEditorWindowView: View {
 
     private var matchTypeMenu: some View {
         Menu {
-            Picker("", selection: $viewModel.matchType) {
-                Text(MapLocalMatchType.wildcard.displayName).tag(MapLocalMatchType.wildcard)
-                Text(MapLocalMatchType.regex.displayName).tag(MapLocalMatchType.regex)
-                Divider()
-                Menu(String(localized: "Advanced")) {
-                    Button(String(localized: "Use Regex")) { viewModel.matchType = .regex }
-                    Button(String(localized: "Use Wildcard")) { viewModel.matchType = .wildcard }
+            ForEach(Array(MapLocalEditorMenuContent.matchTypeSections.enumerated()), id: \.offset) { index, section in
+                ForEach(section) { matchType in
+                    Button { viewModel.matchType = matchType } label: {
+                        menuCheckmarkLabel(matchType.displayName, isSelected: viewModel.matchType == matchType)
+                    }
                 }
+                if index < MapLocalEditorMenuContent.matchTypeSections.count - 1 {
+                    Divider()
+                }
+            }
+            Divider()
+            Menu(String(localized: "Advanced")) {
+                Button(String(localized: "Use Regex")) { viewModel.matchType = .regex }
+                Button(String(localized: "Use Wildcard")) { viewModel.matchType = .wildcard }
             }
         } label: {
             menuLabel(viewModel.matchType.displayName)
@@ -1231,9 +1210,14 @@ struct MapLocalEditorWindowView: View {
 
     private var delayMenu: some View {
         Menu {
-            Picker("", selection: $viewModel.delayPreset) {
-                ForEach(MapLocalDelayPreset.allCases) { preset in
-                    Text(preset.displayName).tag(preset)
+            ForEach(Array(MapLocalEditorMenuContent.delaySections.enumerated()), id: \.offset) { index, section in
+                ForEach(section) { preset in
+                    Button { viewModel.delayPreset = preset } label: {
+                        menuCheckmarkLabel(preset.displayName, isSelected: viewModel.delayPreset == preset)
+                    }
+                }
+                if index < MapLocalEditorMenuContent.delaySections.count - 1 {
+                    Divider()
                 }
             }
         } label: {
@@ -1264,6 +1248,15 @@ struct MapLocalEditorWindowView: View {
         .menuIndicator(.hidden)
         .buttonStyle(.bordered)
         .fixedSize()
+    }
+
+    private func menuCheckmarkLabel(_ title: String, isSelected: Bool) -> some View {
+        HStack(spacing: 7) {
+            if isSelected {
+                Image(systemName: "checkmark")
+            }
+            Text(title)
+        }
     }
 
     private func menuLabel(_ title: String, minWidth: CGFloat = 90) -> some View {

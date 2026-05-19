@@ -424,6 +424,155 @@ struct BlockListViewModelTests {
         #expect(vm.selectedRuleID == imported.id)
     }
 
+    @Test("importBlockRules with no imported blocks clears selection and preserves non-block rules")
+    @MainActor
+    func importBlockRulesEmptyClearsSelectionAndPreservesNonBlockRules() throws {
+        let vm = BlockListViewModel()
+        let existingBlock = TestFixtures.makeRule(name: "Existing Block", action: .block(statusCode: 403))
+        let throttle = TestFixtures.makeRule(name: "Throttle", action: .throttle(delayMs: 100))
+        vm.handleRulesDidChange(Notification(name: .rulesDidChange, object: [existingBlock, throttle]))
+        vm.selectedRuleID = existingBlock.id
+
+        vm.importBlockRules([])
+
+        #expect(vm.blockRules.isEmpty)
+        #expect(vm.allRules.count == 1)
+        #expect(vm.allRules.first?.id == throttle.id)
+        #expect(vm.selectedRuleID == nil)
+    }
+
+    @Test("exportBlockRules serializes only block rules from current mixed rule list")
+    @MainActor
+    func exportBlockRulesSerializesOnlyBlockRules() throws {
+        let vm = BlockListViewModel()
+        let block = TestFixtures.makeRule(name: "Exported Block", action: .block(statusCode: 403))
+        let throttle = TestFixtures.makeRule(name: "Throttle", action: .throttle(delayMs: 100))
+        vm.handleRulesDidChange(Notification(name: .rulesDidChange, object: [block, throttle]))
+
+        let data = try vm.exportBlockRules()
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let blockRules = try #require(object["blockRules"] as? [[String: Any]])
+
+        #expect(blockRules.count == 1)
+        #expect(blockRules.first?["name"] as? String == "Exported Block")
+    }
+
+    // MARK: - Editor Session Flow
+
+    @Test("presentNewRuleEditor opens blank create session")
+    @MainActor
+    func presentNewRuleEditorAssignsCreateSession() throws {
+        let vm = BlockListViewModel()
+
+        vm.presentNewRuleEditor()
+
+        let session = try #require(vm.editorSession)
+        guard case .create(nil) = session.mode else {
+            Issue.record("expected .create(nil) mode")
+            return
+        }
+    }
+
+    @Test("presentEditorForContext opens create session with quick-create context")
+    @MainActor
+    func presentEditorForContextAssignsCreateSessionWithContext() throws {
+        let vm = BlockListViewModel()
+        let context = BlockRuleEditorContextBuilder.fromDomain("api.example.com")
+
+        vm.presentEditorForContext(context)
+
+        let session = try #require(vm.editorSession)
+        guard case let .create(receivedContext?) = session.mode else {
+            Issue.record("expected .create(context) mode")
+            return
+        }
+        #expect(receivedContext.origin == .domainQuickCreate)
+        #expect(receivedContext.sourceHost == "api.example.com")
+        #expect(receivedContext.defaultPattern == "*api.example.com/")
+    }
+
+    @Test("second quick-create replaces open block editor session with fresh identity")
+    @MainActor
+    func secondQuickCreateReplacesOpenEditorSessionWithFreshIdentity() throws {
+        let vm = BlockListViewModel()
+        vm.presentEditorForContext(BlockRuleEditorContextBuilder.fromDomain("first.example.com"))
+        let firstID = try #require(vm.editorSession?.id)
+
+        vm.presentEditorForContext(BlockRuleEditorContextBuilder.fromDomain("second.example.com"))
+
+        let secondSession = try #require(vm.editorSession)
+        #expect(secondSession.id != firstID)
+        guard case let .create(context?) = secondSession.mode else {
+            Issue.record("expected second session to carry context")
+            return
+        }
+        #expect(context.sourceHost == "second.example.com")
+    }
+
+    @Test("presentEditorForEditing opens edit session for selected row")
+    @MainActor
+    func presentEditorForEditingAssignsEditSession() throws {
+        let vm = BlockListViewModel()
+        let rule = TestFixtures.makeRule(name: "Editable", action: .block(statusCode: 403))
+
+        vm.presentEditorForEditing(rule)
+
+        let session = try #require(vm.editorSession)
+        guard case let .edit(editingRule) = session.mode else {
+            Issue.record("expected .edit mode")
+            return
+        }
+        #expect(editingRule.id == rule.id)
+        #expect(editingRule.name == "Editable")
+    }
+
+    @Test("dismissEditor clears block editor session")
+    @MainActor
+    func dismissEditorClearsSession() {
+        let vm = BlockListViewModel()
+        vm.presentNewRuleEditor()
+
+        vm.dismissEditor()
+
+        #expect(vm.editorSession == nil)
+    }
+
+    // MARK: - Selection Reconciliation
+
+    @Test("handleRulesDidChange clears selection when selected block rule disappears")
+    @MainActor
+    func handleRulesDidChangeClearsMissingBlockSelection() {
+        let vm = BlockListViewModel()
+        let block = TestFixtures.makeRule(name: "Selected Block", action: .block(statusCode: 403))
+        vm.handleRulesDidChange(Notification(name: .rulesDidChange, object: [block]))
+        vm.selectedRuleID = block.id
+
+        let replacement = TestFixtures.makeRule(name: "Replacement", action: .block(statusCode: 403))
+        vm.handleRulesDidChange(Notification(name: .rulesDidChange, object: [replacement]))
+
+        #expect(vm.selectedRuleID == nil)
+    }
+
+    @Test("handleRulesDidChange clears selection when selected rule is no longer a block rule")
+    @MainActor
+    func handleRulesDidChangeClearsSelectionForNonBlockRule() {
+        let vm = BlockListViewModel()
+        let block = TestFixtures.makeRule(name: "Selected Block", action: .block(statusCode: 403))
+        vm.handleRulesDidChange(Notification(name: .rulesDidChange, object: [block]))
+        vm.selectedRuleID = block.id
+
+        let sameIDNonBlock = ProxyRule(
+            id: block.id,
+            name: "Same ID Throttle",
+            matchCondition: block.matchCondition,
+            action: .throttle(delayMs: 100)
+        )
+        vm.handleRulesDidChange(Notification(name: .rulesDidChange, object: [sameIDNonBlock]))
+
+        #expect(vm.blockRules.isEmpty)
+        #expect(vm.selectedRuleID == nil)
+    }
+
     @Test("toggleRule toggles enabled state")
     @MainActor
     func toggleRule() throws {

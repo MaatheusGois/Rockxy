@@ -43,6 +43,24 @@ struct MapLocalModelTests {
         #expect(vm.mapFromLabel(for: rule).contains("default_message.json"))
     }
 
+    @Test("editor menus match the reference order and grouping")
+    func editorMenusMatchReferenceOrderAndGrouping() {
+        #expect(MapLocalEditorMenuContent.methodSections == [
+            [.any],
+            [.get, .post, .put, .delete, .patch],
+            [.head, .options, .trace],
+        ])
+        #expect(MapLocalEditorMenuContent.matchTypeSections == [
+            [.wildcard, .regex],
+        ])
+        #expect(MapLocalEditorMenuContent.delaySections == [
+            [.none],
+            [.oneSecond, .twoSeconds, .threeSeconds, .fiveSeconds, .tenSeconds, .thirtySeconds, .sixtySeconds],
+            [.random],
+            [.custom],
+        ])
+    }
+
     @Test("remove selected Map Local rows preserves unrelated rules")
     func removeSelectedPreservesOtherRules() async {
         await RuleTestLock.shared.acquire()
@@ -128,6 +146,39 @@ struct MapLocalModelTests {
 
         let saved = try String(contentsOf: fileURL, encoding: .utf8)
         #expect(saved == #"{"ok":true}"#)
+    }
+
+    @Test("editor menu selections persist method match type and delay")
+    func editorMenuSelectionsPersistMethodMatchTypeAndDelay() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RockxyTests-MapLocalMenu-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let fileURL = tempDir.appendingPathComponent("response.json")
+
+        let vm = MapLocalEditorViewModel()
+        vm.load(context: .blank)
+        vm.name = "Menu Flow"
+        vm.urlText = "https://api.example.com/v2/*"
+        vm.matchType = .wildcard
+        vm.method = .delete
+        vm.filePath = fileURL.path
+        vm.delayPreset = .thirtySeconds
+        vm.httpMessageText = """
+        HTTP/1.1 204 No Content
+
+        """
+
+        let rule = try #require(vm.makeRule())
+        #expect(rule.matchCondition.method == "DELETE")
+        #expect(rule.matchCondition.urlPattern == #"https:\/\/api\.example\.com\/v2\/.*"#)
+        if case let .mapLocal(path, statusCode, isDirectory, delayMs) = rule.action {
+            #expect(path == fileURL.path)
+            #expect(statusCode == 204)
+            #expect(isDirectory == false)
+            #expect(delayMs == 30_000)
+        } else {
+            Issue.record("Expected .mapLocal")
+        }
     }
 
     @Test("editor opens an existing local file rule with filled data")
