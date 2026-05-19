@@ -303,24 +303,38 @@ final class HTTPProxyHandler: ChannelInboundHandler, RemovableChannelHandler, @u
         case let .block(statusCode):
             sendErrorResponse(context: context, status: statusCode, requestData: requestData, callback: callback)
 
-        case let .mapLocal(filePath, statusCode, isDirectory) where isDirectory:
-            handleMapLocalDirectory(
-                context: context,
-                directoryPath: filePath,
-                statusCode: statusCode,
-                requestData: requestData,
-                callback: callback,
-                urlPattern: urlPattern ?? ""
-            )
-
-        case let .mapLocal(filePath, statusCode, _):
-            handleMapLocal(
-                context: context,
-                filePath: filePath,
-                statusCode: statusCode,
-                requestData: requestData,
-                callback: callback
-            )
+        case let .mapLocal(filePath, statusCode, isDirectory, delayMs):
+            let performMapLocal = { [weak self] in
+                guard let self else {
+                    return
+                }
+                if isDirectory {
+                    self.handleMapLocalDirectory(
+                        context: context,
+                        directoryPath: filePath,
+                        statusCode: statusCode,
+                        requestData: requestData,
+                        callback: callback,
+                        urlPattern: urlPattern ?? ""
+                    )
+                } else {
+                    self.handleMapLocal(
+                        context: context,
+                        filePath: filePath,
+                        statusCode: statusCode,
+                        requestData: requestData,
+                        callback: callback
+                    )
+                }
+            }
+            let effectiveDelayMs = delayMs < 0 ? Int.random(in: 1_000 ... 15_000) : delayMs
+            if effectiveDelayMs > 0 {
+                pendingThrottleTask = context.eventLoop.scheduleTask(in: .milliseconds(Int64(effectiveDelayMs))) {
+                    performMapLocal()
+                }
+            } else {
+                performMapLocal()
+            }
 
         case let .modifyHeader(operations):
             let requestOps = HeaderOperation.requestPhase(from: operations)
@@ -355,13 +369,19 @@ final class HTTPProxyHandler: ChannelInboundHandler, RemovableChannelHandler, @u
                 self.forwardRequest(context: context, head: head, requestData: requestData, callback: callback)
             }
 
-        case let .networkCondition(_, delayMs):
-            let delay = TimeAmount.milliseconds(Int64(delayMs))
-            pendingThrottleTask = context.eventLoop.scheduleTask(in: delay) { [weak self] in
+        case let .networkCondition(preset, delayMs):
+            let profile = NetworkConditionProfile(preset: preset, latencyMs: delayMs)
+            pendingThrottleTask = context.eventLoop.scheduleTask(in: profile.latencyDelay) { [weak self] in
                 guard let self else {
                     return
                 }
-                self.forwardRequest(context: context, head: head, requestData: requestData, callback: callback)
+                self.forwardRequest(
+                    context: context,
+                    head: head,
+                    requestData: requestData,
+                    networkConditionProfile: profile,
+                    callback: callback
+                )
             }
 
         case let .breakpoint(phase):
@@ -397,7 +417,7 @@ final class HTTPProxyHandler: ChannelInboundHandler, RemovableChannelHandler, @u
         let uri = query.map { "\(effectivePath)?\($0)" } ?? effectivePath
 
         var modifiedHead = head
-        modifiedHead.uri = uri
+        modifiedHead.uri = configuration.preserveOriginalURL ? head.uri : uri
 
         let hostHeaderValue: String = if configuration.preserveHostHeader {
             originalURL.host ?? upstreamHost
@@ -614,13 +634,15 @@ extension HTTPProxyHandler {
         context: ChannelHandlerContext,
         head: HTTPRequestHead,
         requestData: HTTPRequestData,
-        responseHeaderOperations: [HeaderOperation]? = nil
+        responseHeaderOperations: [HeaderOperation]? = nil,
+        networkConditionProfile: NetworkConditionProfile? = nil
     ) {
         forwardRequest(
             context: context,
             head: head,
             requestData: requestData,
             responseHeaderOperations: responseHeaderOperations,
+            networkConditionProfile: networkConditionProfile,
             callback: onTransactionComplete
         )
     }
@@ -630,6 +652,7 @@ extension HTTPProxyHandler {
         head: HTTPRequestHead,
         requestData: HTTPRequestData,
         responseHeaderOperations: [HeaderOperation]? = nil,
+        networkConditionProfile: NetworkConditionProfile? = nil,
         callback: @escaping @Sendable (HTTPTransaction) -> Void
     ) {
         var head = head
@@ -704,6 +727,7 @@ extension HTTPProxyHandler {
                         connectTime: connectTime,
                         tcpTime: tcpTime,
                         responseHeaderOperations: responseHeaderOperations,
+                        networkConditionProfile: networkConditionProfile,
                         onUpstreamClosed: { limiter.release(host: host, port: port) },
                         callback: callback
                     )
@@ -725,6 +749,7 @@ extension HTTPProxyHandler {
         connectTime: DispatchTime,
         tcpTime: DispatchTime,
         responseHeaderOperations: [HeaderOperation]? = nil,
+        networkConditionProfile: NetworkConditionProfile? = nil,
         onUpstreamClosed: @escaping @Sendable () -> Void,
         callback: @escaping @Sendable (HTTPTransaction) -> Void
     ) {
@@ -738,6 +763,7 @@ extension HTTPProxyHandler {
             sourcePort: clientSourcePort,
             breakpointPhase: pendingBreakpointPhase,
             headerResponseOperations: responseHeaderOperations,
+            networkConditionProfile: networkConditionProfile,
             scriptPluginManager: scriptPluginManager,
             onBreakpointHit: onBreakpointHit,
             onTransactionComplete: callback,
@@ -758,21 +784,18 @@ extension HTTPProxyHandler {
                 )
                 clientChannel.write(NIOAny(HTTPClientRequestPart.head(forwardHead)), promise: nil)
                 if let bodyData = requestData.body, !bodyData.isEmpty {
-                    var bodyBuffer = clientChannel.allocator.buffer(capacity: bodyData.count)
-                    bodyBuffer.writeBytes(bodyData)
-                    clientChannel.write(
-                        NIOAny(HTTPClientRequestPart.body(.byteBuffer(bodyBuffer))),
-                        promise: nil
+                    NetworkConditionIOThrottle.writeClientRequestBodyAndEnd(
+                        bodyData: bodyData,
+                        to: clientChannel,
+                        uploadBytesPerSecond: networkConditionProfile?.uploadBytesPerSecond
+                    )
+                } else {
+                    NetworkConditionIOThrottle.writeClientRequestBodyAndEnd(
+                        bodyData: nil,
+                        to: clientChannel,
+                        uploadBytesPerSecond: networkConditionProfile?.uploadBytesPerSecond
                     )
                 }
-                let endPromise = clientChannel.eventLoop.makePromise(of: Void.self)
-                endPromise.futureResult.whenFailure { _ in
-                    clientChannel.close(promise: nil)
-                }
-                clientChannel.writeAndFlush(
-                    NIOAny(HTTPClientRequestPart.end(nil)),
-                    promise: endPromise
-                )
             case let .failure(error):
                 proxyHandlerLogger.error(
                     "Failed to add response handler to upstream: \(error.localizedDescription)"

@@ -88,6 +88,14 @@ struct RockxyApp: App {
         .windowResizability(.contentSize)
         .defaultPosition(.center)
 
+        Window(String(localized: "Map Local Editor"), id: "mapLocalEditor") {
+            MapLocalEditorWindowView()
+        }
+        .commandsRemoved()
+        .defaultSize(width: 960, height: 640)
+        .defaultPosition(.center)
+        .windowResizability(.contentSize)
+
         Window(String(localized: "Map Remote"), id: "mapRemote") {
             MapRemoteWindowView()
         }
@@ -95,6 +103,14 @@ struct RockxyApp: App {
         .windowResizability(.contentSize)
         .defaultPosition(.center)
         .windowToolbarStyle(.unifiedCompact)
+
+        Window(String(localized: "Map Remote Editor"), id: "mapRemoteEditor") {
+            MapRemoteEditorWindowView()
+        }
+        .commandsRemoved()
+        .defaultSize(width: 834, height: 584)
+        .defaultPosition(.center)
+        .windowResizability(.contentSize)
 
         Window(String(localized: "Block List"), id: "blockList") {
             BlockListWindowView()
@@ -155,13 +171,13 @@ struct RockxyApp: App {
         .commandsRemoved()
         .windowResizability(.contentSize)
         .defaultPosition(.center)
-        .defaultSize(width: 900, height: 640)
+        .defaultSize(width: 1_200, height: 672)
 
         Window(String(localized: "Script Editor"), id: "scriptEditor") {
             ScriptEditorWindowView()
         }
         .commandsRemoved()
-        .defaultSize(width: 1_120, height: 740)
+        .defaultSize(width: 1_120, height: 690)
         .defaultPosition(.center)
 
         Window(String(localized: "Body Previewer Tabs"), id: "bodyPreviewerTabs") {
@@ -180,6 +196,22 @@ struct RockxyApp: App {
 
         Window(String(localized: "Breakpoint Rules"), id: "breakpointRules") {
             BreakpointRulesWindowView()
+        }
+        .commandsRemoved()
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+        .windowToolbarStyle(.unifiedCompact)
+
+        Window(String(localized: "Breakpoint Rule Editor"), id: "breakpointRuleEditor") {
+            BreakpointRuleEditorWindowView()
+        }
+        .commandsRemoved()
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+        .windowToolbarStyle(.unifiedCompact)
+
+        Window(String(localized: "Breakpoint Template"), id: "breakpointTemplates") {
+            BreakpointTemplateWindowView()
         }
         .commandsRemoved()
         .windowResizability(.contentSize)
@@ -576,6 +608,12 @@ struct RockxyMenuCommands: Commands {
             }
             .keyboardShortcut("d", modifiers: [.command, .shift])
 
+            Button(String(localized: "Toggle System Proxy")) {
+                actions?.toggleSystemProxyOverride()
+            }
+            .keyboardShortcut("o", modifiers: [.command, .option])
+            .disabled(actions?.canToggleSystemProxyOverride != true)
+
             Divider()
 
             Button(String(localized: "Debug My App…")) {
@@ -607,6 +645,10 @@ struct RockxyMenuCommands: Commands {
 
             Button(String(localized: "Breakpoint Queue…")) {
                 openWindow(id: "breakpoints")
+            }
+
+            Button(String(localized: "Breakpoint Templates…")) {
+                openWindow(id: "breakpointTemplates")
             }
 
             Divider()

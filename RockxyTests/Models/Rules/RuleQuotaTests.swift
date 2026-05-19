@@ -165,29 +165,34 @@ struct RuleQuotaTests {
     // MARK: - Policy Injection (no cross-test pollution)
 
     @Test("Custom policy takes effect through .shared assignment")
-
-    func customPolicyInjectable() {
+    func customPolicyInjectable() async {
+        await RuleTestLock.shared.acquire()
         let saved = RulePolicyGate.shared
-        defer { RulePolicyGate.shared = saved }
 
         RulePolicyGate.shared = RulePolicyGate(policy: PolicyWithLimit(5))
         #expect(RulePolicyGate.shared.policy.maxActiveRulesPerTool == 5)
 
         RulePolicyGate.shared = RulePolicyGate(policy: PolicyWithLimit(99))
         #expect(RulePolicyGate.shared.policy.maxActiveRulesPerTool == 99)
+
+        RulePolicyGate.shared = saved
+        await RuleTestLock.shared.release()
     }
 
     @Test("Coordinator construction does not pollute shared gate")
     @MainActor
-    func coordinatorDoesNotPolluteGate() {
+    func coordinatorDoesNotPolluteGate() async {
+        await RuleTestLock.shared.acquire()
         let saved = RulePolicyGate.shared
-        defer { RulePolicyGate.shared = saved }
 
         RulePolicyGate.shared = RulePolicyGate(policy: PolicyWithLimit(42))
 
         // Creating a coordinator should NOT overwrite the shared gate
         _ = MainContentCoordinator(policy: PolicyWithLimit(7))
         #expect(RulePolicyGate.shared.policy.maxActiveRulesPerTool == 42)
+
+        RulePolicyGate.shared = saved
+        await RuleTestLock.shared.release()
     }
 
     // MARK: - Exclusive Network Condition Quota

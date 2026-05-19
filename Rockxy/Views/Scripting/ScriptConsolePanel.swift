@@ -11,45 +11,24 @@ struct ScriptConsolePanel: View {
     @Bindable var viewModel: ScriptEditorViewModel
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-            content
-        }
+        content
         .frame(maxHeight: .infinity)
     }
 
     // MARK: Private
 
-    private var header: some View {
-        HStack {
-            Text(viewModel.consoleEntries.isEmpty ? "Empty Console" : "Console")
-                .font(.subheadline.weight(.semibold))
-            Spacer()
-            Button {
-                viewModel.clearConsole()
-            } label: {
-                Image(systemName: "trash")
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .disabled(viewModel.consoleEntries.isEmpty)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.quaternary.opacity(0.3))
-    }
-
     @ViewBuilder private var content: some View {
         let visible = viewModel.consoleEntries.filter { viewModel.consoleFilter.contains($0.level) }
         if visible.isEmpty {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(spacing: 6) {
+                Text("Empty Console")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.primary)
                 Text("Use console.log() to log events")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Spacer()
             }
-            .padding(12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollViewReader { proxy in
                 ScrollView {

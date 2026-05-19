@@ -153,6 +153,7 @@ final class MainContentCoordinator {
     var observedDomainsByApp: [String: Set<String>] = [:]
 
     private(set) var ruleLoadTask: Task<Void, Never>?
+    var ruleMutationTask: Task<Void, Never>?
 
     var systemProxyWarning: SystemProxyWarning? {
         guard let warning = readiness.activeWarning else {

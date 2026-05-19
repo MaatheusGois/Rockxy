@@ -84,6 +84,7 @@ struct ContentView: View {
             coordinator.setupRulesObserver()
             coordinator.setupSSLProxyingObserver()
             coordinator.loadInitialRules()
+            coordinator.refreshProxyOverrideStatus()
         }
         .modifier(ConditionalScriptingWindowOpeners(isEnabled: managesLifecycle, openWindow: openWindow))
         .alert(
@@ -254,6 +255,9 @@ private struct ContentWindowNotificationHandlers: ViewModifier {
             }
             .onReceive(NotificationCenter.default.publisher(for: .stopProxyRequested)) { _ in
                 coordinator.stopProxy()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .systemProxyDidChange)) { _ in
+                coordinator.refreshProxyOverrideStatus()
             }
             .onReceive(NotificationCenter.default.publisher(
                 for: RockxyIdentity.current.notificationName("openCustomColumnsWindow")

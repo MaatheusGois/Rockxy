@@ -130,6 +130,110 @@ struct RuleEngineTests {
         #expect(afterToggle == nil)
     }
 
+    @Test("Block List tool gate skips block rules only")
+    func blockListToolGateSkipsOnlyBlockRules() async throws {
+        let engine = RuleEngine()
+        let blockRule = ProxyRule(
+            name: "Blocked",
+            isEnabled: true,
+            matchCondition: RuleMatchCondition(urlPattern: ".*example\\.com.*"),
+            action: .block(statusCode: 403)
+        )
+        let throttleRule = ProxyRule(
+            name: "Throttle",
+            isEnabled: true,
+            matchCondition: RuleMatchCondition(urlPattern: ".*example\\.com.*"),
+            action: .throttle(delayMs: 250)
+        )
+        await engine.addRule(blockRule)
+        await engine.addRule(throttleRule)
+
+        let url = try #require(URL(string: "https://example.com/test"))
+        let enabledResult = await engine.evaluate(method: "GET", url: url, headers: [])
+        guard case .block = enabledResult else {
+            Issue.record("Expected block rule while Block List tool is enabled")
+            return
+        }
+
+        await engine.setBlockListToolEnabled(false)
+        let disabledResult = await engine.evaluate(method: "GET", url: url, headers: [])
+        if case let .throttle(delayMs) = disabledResult {
+            #expect(delayMs == 250)
+        } else {
+            Issue.record("Expected non-block rule to remain active")
+        }
+    }
+
+    @Test("Map Remote tool gate skips map remote rules only")
+    func mapRemoteToolGateSkipsOnlyMapRemoteRules() async throws {
+        let engine = RuleEngine()
+        let remoteRule = ProxyRule(
+            name: "Remote",
+            isEnabled: true,
+            matchCondition: RuleMatchCondition(urlPattern: ".*example\\.com.*"),
+            action: .mapRemote(configuration: MapRemoteConfiguration(host: "staging.example.com"))
+        )
+        let throttleRule = ProxyRule(
+            name: "Throttle",
+            isEnabled: true,
+            matchCondition: RuleMatchCondition(urlPattern: ".*example\\.com.*"),
+            action: .throttle(delayMs: 250)
+        )
+        await engine.addRule(remoteRule)
+        await engine.addRule(throttleRule)
+
+        let url = try #require(URL(string: "https://example.com/test"))
+        let enabledResult = await engine.evaluate(method: "GET", url: url, headers: [])
+        guard case .mapRemote = enabledResult else {
+            Issue.record("Expected map remote rule while Map Remote tool is enabled")
+            return
+        }
+
+        await engine.setMapRemoteToolEnabled(false)
+        let disabledResult = await engine.evaluate(method: "GET", url: url, headers: [])
+        if case let .throttle(delayMs) = disabledResult {
+            #expect(delayMs == 250)
+        } else {
+            Issue.record("Expected non-map-remote rule to remain active")
+        }
+    }
+
+    @Test("Network Conditions tool gate skips network condition rules only")
+    func networkConditionsToolGateSkipsOnlyNetworkConditionRules() async throws {
+        let engine = RuleEngine()
+        let networkRule = ProxyRule(
+            name: "3G API",
+            isEnabled: true,
+            matchCondition: RuleMatchCondition(urlPattern: ".*example\\.com.*"),
+            action: .networkCondition(preset: .threeG, delayMs: 400)
+        )
+        let throttleRule = ProxyRule(
+            name: "Throttle",
+            isEnabled: true,
+            matchCondition: RuleMatchCondition(urlPattern: ".*example\\.com.*"),
+            action: .throttle(delayMs: 250)
+        )
+        await engine.addRule(networkRule)
+        await engine.addRule(throttleRule)
+
+        let url = try #require(URL(string: "https://example.com/test"))
+        let enabledResult = await engine.evaluate(method: "GET", url: url, headers: [])
+        guard case let .networkCondition(preset, delayMs) = enabledResult else {
+            Issue.record("Expected network condition rule while Network Conditions tool is enabled")
+            return
+        }
+        #expect(preset == .threeG)
+        #expect(delayMs == 400)
+
+        await engine.setNetworkConditionsToolEnabled(false)
+        let disabledResult = await engine.evaluate(method: "GET", url: url, headers: [])
+        if case let .throttle(delayMs) = disabledResult {
+            #expect(delayMs == 250)
+        } else {
+            Issue.record("Expected non-network-condition rule to remain active")
+        }
+    }
+
     @Test("Add rule and evaluate successfully")
     func addRuleAndEvaluate() async throws {
         let engine = RuleEngine()

@@ -29,7 +29,19 @@ actor RuleEngine {
     /// Used by Map Local Directory to extract the URL pattern for subpath resolution.
     func evaluateRule(method: String, url: URL, headers: [HTTPHeader]) -> ProxyRule? {
         for rule in rules where rule.isEnabled {
+            if !blockListToolEnabled, case .block = rule.action {
+                continue
+            }
             if !breakpointToolEnabled, case .breakpoint = rule.action {
+                continue
+            }
+            if !mapLocalToolEnabled, case .mapLocal = rule.action {
+                continue
+            }
+            if !mapRemoteToolEnabled, case .mapRemote = rule.action {
+                continue
+            }
+            if !networkConditionsToolEnabled, case .networkCondition = rule.action {
                 continue
             }
             let compiled = compiledPatterns[rule.id]
@@ -140,6 +152,22 @@ actor RuleEngine {
         breakpointToolEnabled = enabled
     }
 
+    func setBlockListToolEnabled(_ enabled: Bool) {
+        blockListToolEnabled = enabled
+    }
+
+    func setMapLocalToolEnabled(_ enabled: Bool) {
+        mapLocalToolEnabled = enabled
+    }
+
+    func setMapRemoteToolEnabled(_ enabled: Bool) {
+        mapRemoteToolEnabled = enabled
+    }
+
+    func setNetworkConditionsToolEnabled(_ enabled: Bool) {
+        networkConditionsToolEnabled = enabled
+    }
+
     // MARK: - Atomic Quota-Checked Operations
 
     func addRuleIfAllowed(_ rule: ProxyRule, maxPerCategory: Int) -> Bool {
@@ -209,7 +237,11 @@ actor RuleEngine {
     private static let logger = Logger(subsystem: RockxyIdentity.current.logSubsystem, category: "RuleEngine")
 
     private var rules: [ProxyRule] = []
+    private var blockListToolEnabled: Bool = true
     private var breakpointToolEnabled: Bool = true
+    private var mapLocalToolEnabled: Bool = true
+    private var mapRemoteToolEnabled: Bool = true
+    private var networkConditionsToolEnabled: Bool = true
     private var compiledPatterns: [UUID: NSRegularExpression] = [:]
 
     private func compilePatterns() {

@@ -10,14 +10,12 @@ final class BreakpointRulesViewModel {
     // MARK: Internal
 
     var selectedRuleID: UUID?
-    var showAddSheet = false
-    var editingRule: ProxyRule?
-    var pendingContext: BreakpointEditorContext?
     private(set) var allRules: [ProxyRule] = []
 
     var isFilterBarVisible = false
     var filterColumn: BreakpointFilterColumn = .name
     var filterText = ""
+    var alertMessage: String?
 
     var isBreakpointToolEnabled: Bool = UserDefaults.standard.object(
         forKey: "breakpointToolEnabled"
@@ -50,6 +48,13 @@ final class BreakpointRulesViewModel {
 
     var ruleCount: Int {
         breakpointRules.count
+    }
+
+    var selectedRule: ProxyRule? {
+        guard let id = selectedRuleID else {
+            return nil
+        }
+        return breakpointRules.first { $0.id == id }
     }
 
     func refreshFromEngine() async {
@@ -184,6 +189,39 @@ final class BreakpointRulesViewModel {
         Task { await RulePolicyGate.shared.setBreakpointToolEnabled(isBreakpointToolEnabled) }
     }
 
+    func setBreakpointToolEnabled(_ enabled: Bool) {
+        isBreakpointToolEnabled = enabled
+        Task { await RulePolicyGate.shared.setBreakpointToolEnabled(enabled) }
+    }
+
+    func methodLabel(for rule: ProxyRule) -> String {
+        rule.matchCondition.method?.uppercased() ?? "ANY"
+    }
+
+    func matchingRuleLabel(for rule: ProxyRule) -> String {
+        let decoded = AddBreakpointRuleSheet.decode(rule: rule)
+        switch decoded.matchType {
+        case .wildcard:
+            return "Wildcard: \(decoded.displayPattern)"
+        case .regex:
+            return "Regex: \(rule.matchCondition.urlPattern ?? "")"
+        }
+    }
+
+    func breaksOnRequest(_ rule: ProxyRule) -> Bool {
+        guard case let .breakpoint(phase) = rule.action else {
+            return false
+        }
+        return phase == .request || phase == .both
+    }
+
+    func breaksOnResponse(_ rule: ProxyRule) -> Bool {
+        guard case let .breakpoint(phase) = rule.action else {
+            return false
+        }
+        return phase == .response || phase == .both
+    }
+
     // MARK: Private
 
     private static func compilePattern(
@@ -227,25 +265,13 @@ struct BreakpointRulesWindowView: View {
     // MARK: Internal
 
     var body: some View {
-        VStack(spacing: 0) {
-            toolbar
-            Divider()
-            infoBanner
-            Divider()
-            content
-            if viewModel.isFilterBarVisible {
-                Divider()
-                BreakpointFilterBar(
-                    filterColumn: $viewModel.filterColumn,
-                    filterText: $viewModel.filterText,
-                    onDismiss: hideFilterBar
-                )
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-            Divider()
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            tableContent
+            shortcutStrip
             bottomBar
         }
-        .frame(width: 860, height: 620)
+        .frame(width: 1_200, height: 675)
         .task { await viewModel.refreshFromEngine() }
         .onAppear { consumePendingContext() }
         .onReceive(NotificationCenter.default.publisher(for: .openBreakpointRulesWindow)) { _ in
@@ -254,38 +280,17 @@ struct BreakpointRulesWindowView: View {
         .onReceive(NotificationCenter.default.publisher(for: .rulesDidChange)) { notification in
             viewModel.handleRulesDidChange(notification)
         }
-        .sheet(isPresented: $viewModel.showAddSheet) {
-            viewModel.pendingContext = nil
-            viewModel.editingRule = nil
-        } content: {
-            AddBreakpointRuleSheet(
-                editorContext: viewModel.editingRule == nil ? viewModel.pendingContext : nil,
-                editingRule: viewModel.editingRule
-            ) { name, pattern, method, matchType, phaseReq, phaseRes, includeSubpaths in
-                if let editing = viewModel.editingRule {
-                    viewModel.updateRule(
-                        id: editing.id,
-                        ruleName: name,
-                        urlPattern: pattern,
-                        httpMethod: method,
-                        matchType: matchType,
-                        phaseRequest: phaseReq,
-                        phaseResponse: phaseRes,
-                        includeSubpaths: includeSubpaths
-                    )
-                } else {
-                    viewModel.addBreakpointRule(
-                        ruleName: name,
-                        urlPattern: pattern,
-                        httpMethod: method,
-                        matchType: matchType,
-                        phaseRequest: phaseReq,
-                        phaseResponse: phaseRes,
-                        includeSubpaths: includeSubpaths
-                    )
-                }
-                viewModel.pendingContext = nil
-                viewModel.editingRule = nil
+        .alert(
+            String(localized: "Breakpoint Rules"),
+            isPresented: Binding(
+                get: { viewModel.alertMessage != nil },
+                set: { if !$0 { viewModel.alertMessage = nil } }
+            )
+        ) {
+            Button(String(localized: "OK")) { viewModel.alertMessage = nil }
+        } message: {
+            if let message = viewModel.alertMessage {
+                Text(message)
             }
         }
         .animation(.easeInOut(duration: 0.2), value: viewModel.isFilterBarVisible)
@@ -298,12 +303,11 @@ struct BreakpointRulesWindowView: View {
         category: "BreakpointRulesWindowView"
     )
 
+    @Environment(\.openWindow) private var openWindow
     @State private var viewModel = BreakpointRulesViewModel()
 
     private var enableDisableLabel: String {
-        guard let id = viewModel.selectedRuleID,
-              let rule = viewModel.breakpointRules.first(where: { $0.id == id }) else
-        {
+        guard let rule = viewModel.selectedRule else {
             return String(localized: "Enable Rule")
         }
         return rule.isEnabled
@@ -311,168 +315,193 @@ struct BreakpointRulesWindowView: View {
             : String(localized: "Enable Rule")
     }
 
-    private var toolbar: some View {
-        HStack {
-            Text(String(localized: "Breakpoint Rules"))
-                .font(.headline)
-            Spacer()
-            Toggle(
-                String(localized: "Enable Breakpoint Tool"),
-                isOn: Binding(
-                    get: { viewModel.isBreakpointToolEnabled },
-                    set: { _ in viewModel.toggleBreakpointTool() }
-                )
-            )
-            .toggleStyle(.switch)
-            .controlSize(.small)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-    }
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle(isOn: Binding(
+                get: { viewModel.isBreakpointToolEnabled },
+                set: { viewModel.setBreakpointToolEnabled($0) }
+            )) {
+                Text(String(localized: "Enable Breakpoint Tool"))
+                    .font(.system(size: 13))
+            }
+            .toggleStyle(.checkbox)
+            .padding(.top, 16)
 
-    private var infoBanner: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "info.circle")
+            Text(String(localized: "Modify the Request/Response on the fly. Support URL, Method, Status Code, Headers, and Body."))
+                .font(.system(size: 13))
+            Text(String(localized: "Each request is checked against the rules from top to bottom, stopping when a match is found."))
+                .font(.system(size: 13))
                 .foregroundStyle(.secondary)
-            Text(
-                String(
-                    localized:
-                    "Modify the Request/Response on the fly. Each request is checked against the rules from top to bottom, stopping when a match is found."
-                )
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            Spacer()
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(.quaternary.opacity(0.5))
-    }
 
-    @ViewBuilder private var content: some View {
-        if viewModel.breakpointRules.isEmpty {
-            emptyState
-        } else {
-            VStack(spacing: 0) {
-                columnHeader
-                Divider()
-                List(selection: $viewModel.selectedRuleID) {
-                    ForEach(viewModel.filteredBreakpointRules) { rule in
-                        BreakpointRulesRow(rule: rule) {
-                            viewModel.toggleRule(id: rule.id)
-                        }
-                        .tag(rule.id)
-                    }
-                }
-                .listStyle(.inset(alternatesRowBackgrounds: true))
+            if viewModel.isFilterBarVisible {
+                BreakpointFilterBar(
+                    filterColumn: $viewModel.filterColumn,
+                    filterText: $viewModel.filterText,
+                    onDismiss: hideFilterBar
+                )
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        .padding(.horizontal, 22)
+        .padding(.bottom, 10)
     }
 
-    private var columnHeader: some View {
-        HStack(spacing: 10) {
-            Spacer().frame(width: 24)
-            Text(String(localized: "Name"))
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 180, alignment: .leading)
-            Text(String(localized: "Method"))
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 60, alignment: .leading)
-            Text(String(localized: "Matching Rule"))
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text(String(localized: "Request"))
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 60)
-            Text(String(localized: "Response"))
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 60)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 6)
-        .background(.background.tertiary)
-    }
+    private var tableContent: some View {
+        Table(viewModel.filteredBreakpointRules, selection: $viewModel.selectedRuleID) {
+            TableColumn(String(localized: "Name")) { rule in
+                HStack(spacing: 7) {
+                    Toggle("", isOn: Binding(
+                        get: { rule.isEnabled },
+                        set: { _ in viewModel.toggleRule(id: rule.id) }
+                    ))
+                    .toggleStyle(.checkbox)
+                    .labelsHidden()
 
-    private var emptyState: some View {
-        VStack(alignment: .center, spacing: 8) {
-            Image(systemName: "pause.circle")
-                .font(.system(size: 20))
-                .foregroundStyle(.tertiary)
-            Text(String(localized: "No Breakpoint Rules"))
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
-            Text(String(localized: "Add URL patterns to pause matching requests for inspection."))
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
+                    Text(rule.name.isEmpty ? String(localized: "Untitled") : rule.name)
+                        .lineLimit(1)
+                }
+                .opacity(rule.isEnabled ? 1.0 : 0.5)
+            }
+            .width(min: 190, ideal: 240)
+
+            TableColumn(String(localized: "Method")) { rule in
+                Text(viewModel.methodLabel(for: rule))
+                    .lineLimit(1)
+                    .opacity(rule.isEnabled ? 1.0 : 0.5)
+            }
+            .width(86)
+
+            TableColumn(String(localized: "Matching Rule")) { rule in
+                Text(viewModel.matchingRuleLabel(for: rule))
+                    .lineLimit(1)
+                    .help(viewModel.matchingRuleLabel(for: rule))
+                    .opacity(rule.isEnabled ? 1.0 : 0.5)
+            }
+            .width(min: 420, ideal: 520)
+
+            TableColumn(String(localized: "Request")) { rule in
+                phaseIndicator(isActive: viewModel.breaksOnRequest(rule))
+                    .opacity(rule.isEnabled ? 1.0 : 0.5)
+            }
+            .width(78)
+
+            TableColumn(String(localized: "Response")) { rule in
+                phaseIndicator(isActive: viewModel.breaksOnResponse(rule))
+                    .opacity(rule.isEnabled ? 1.0 : 0.5)
+            }
+            .width(86)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 24)
-        .padding(.top, 12)
+        .contextMenu(forSelectionType: UUID.self) { ids in
+            tableContextMenu(ids: ids)
+        } primaryAction: { ids in
+            guard let id = ids.first,
+                  let rule = viewModel.breakpointRules.first(where: { $0.id == id }) else
+            {
+                return
+            }
+            openEditor(for: rule)
+        }
+        .overlay {
+            if viewModel.filteredBreakpointRules.isEmpty {
+                ContentUnavailableView(
+                    String(localized: "No Breakpoint Rules"),
+                    systemImage: "pause.circle",
+                    description: Text(String(localized: "Click + or create a rule from a captured request."))
+                )
+            }
+        }
+        .padding(.horizontal, 22)
     }
 
     private var bottomBar: some View {
         HStack(spacing: 8) {
-            Button {
-                viewModel.showAddSheet = true
-            } label: {
-                Image(systemName: "plus")
+            HStack(spacing: 0) {
+                Button {
+                    openNewEditor()
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 12, weight: .regular))
+                        .frame(width: 18, height: 18)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut("n", modifiers: .command)
+
+                Rectangle()
+                    .fill(Color(nsColor: .separatorColor))
+                    .frame(width: 1, height: 18)
+
+                Button {
+                    viewModel.removeSelected()
+                } label: {
+                    Image(systemName: "minus")
+                        .font(.system(size: 12, weight: .regular))
+                        .frame(width: 18, height: 18)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.delete, modifiers: .command)
+                .disabled(viewModel.selectedRuleID == nil)
             }
-            .buttonStyle(.borderless)
+            .foregroundStyle(.primary)
+            .background(Color(nsColor: .controlBackgroundColor))
+            .overlay(Rectangle().stroke(Color(nsColor: .separatorColor), lineWidth: 1))
+            .frame(width: 37, height: 19)
+
+            Button(String(localized: "New Folder")) {}
+                .disabled(true)
+                .help(String(localized: "Breakpoint folders are not supported yet."))
 
             Button {
-                viewModel.removeSelected()
+                viewModel.alertMessage = String(
+                    localized: "Breakpoint rules pause matching traffic so requests or responses can be inspected and modified before forwarding."
+                )
             } label: {
-                Image(systemName: "minus")
+                Image(systemName: "questionmark.circle")
             }
-            .buttonStyle(.borderless)
-            .disabled(viewModel.selectedRuleID == nil)
-
-            Divider()
-                .frame(height: 16)
-
-            Text(
-                "\(viewModel.ruleCount) \(viewModel.ruleCount == 1 ? String(localized: "rule") : String(localized: "rules"))"
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .buttonStyle(.bordered)
 
             Spacer()
 
             Button {
-                showFilterBar()
+                withAnimation {
+                    viewModel.isFilterBarVisible.toggle()
+                }
             } label: {
-                Label(String(localized: "Filter"), systemImage: "line.3.horizontal.decrease.circle")
+                Label(String(localized: "Filter"), systemImage: "magnifyingglass")
             }
-            .buttonStyle(.borderless)
             .keyboardShortcut("f", modifiers: .command)
+
+            Button(String(localized: "Templates...")) {
+                openWindow(id: "breakpointTemplates")
+            }
 
             moreMenu
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 22)
+        .padding(.bottom, 14)
+        .padding(.top, 8)
+    }
+
+    private var shortcutStrip: some View {
+        Text("New: ⌘N    Edit: ⌘↵    Delete: ⌘⌫    Duplicate: ⌘D    Toggle: ↵")
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 22)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
     }
 
     private var moreMenu: some View {
         Menu {
-            Button(String(localized: "New Rule...")) {
-                viewModel.showAddSheet = true
+            Button(String(localized: "New")) {
+                openNewEditor()
             }
             .keyboardShortcut("n", modifiers: .command)
 
-            Divider()
-
             Button(String(localized: "Edit")) {
-                if let id = viewModel.selectedRuleID,
-                   let rule = viewModel.breakpointRules.first(where: { $0.id == id })
-                {
-                    viewModel.editingRule = rule
-                    viewModel.showAddSheet = true
+                if let rule = viewModel.selectedRule {
+                    openEditor(for: rule)
                 }
             }
             .keyboardShortcut(.return, modifiers: .command)
@@ -501,15 +530,15 @@ struct BreakpointRulesWindowView: View {
             .keyboardShortcut(.delete, modifiers: .command)
             .disabled(viewModel.selectedRuleID == nil)
         } label: {
-            Text(String(localized: "More"))
-            Image(systemName: "chevron.down")
-                .font(.caption2)
+            HStack(spacing: 6) {
+                Text(String(localized: "More"))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+            }
         }
-        .menuStyle(.borderlessButton)
-    }
-
-    private func showFilterBar() {
-        viewModel.isFilterBarVisible = true
+        .menuIndicator(.hidden)
+        .buttonStyle(.bordered)
+        .fixedSize()
     }
 
     private func hideFilterBar() {
@@ -517,87 +546,71 @@ struct BreakpointRulesWindowView: View {
         viewModel.filterText = ""
     }
 
+    @ViewBuilder
+    private func tableContextMenu(ids: Set<UUID>) -> some View {
+        if let id = ids.first {
+            Button(String(localized: "Edit Rule")) {
+                if let rule = viewModel.breakpointRules.first(where: { $0.id == id }) {
+                    openEditor(for: rule)
+                }
+            }
+            Button(String(localized: "Duplicate")) {
+                viewModel.selectedRuleID = id
+                viewModel.duplicateRule(id: id)
+            }
+            Divider()
+            Button(String(localized: "Delete Rule"), role: .destructive) {
+                viewModel.selectedRuleID = id
+                viewModel.removeSelected()
+            }
+        }
+    }
+
+    private func phaseIndicator(isActive: Bool) -> some View {
+        HStack {
+            Spacer()
+            Image(systemName: isActive ? "checkmark.square.fill" : "square")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(isActive ? Color.accentColor : Color.secondary)
+            Spacer()
+        }
+    }
+
+    private func openNewEditor(context: BreakpointEditorContext? = nil) {
+        BreakpointRuleEditorStore.shared.openNew(context: context) { name, pattern, method, matchType, phaseReq, phaseRes, includeSubpaths in
+            viewModel.addBreakpointRule(
+                ruleName: name,
+                urlPattern: pattern,
+                httpMethod: method,
+                matchType: matchType,
+                phaseRequest: phaseReq,
+                phaseResponse: phaseRes,
+                includeSubpaths: includeSubpaths
+            )
+        }
+        openWindow(id: "breakpointRuleEditor")
+    }
+
+    private func openEditor(for rule: ProxyRule) {
+        BreakpointRuleEditorStore.shared.openExisting(rule) { name, pattern, method, matchType, phaseReq, phaseRes, includeSubpaths in
+            viewModel.updateRule(
+                id: rule.id,
+                ruleName: name,
+                urlPattern: pattern,
+                httpMethod: method,
+                matchType: matchType,
+                phaseRequest: phaseReq,
+                phaseResponse: phaseRes,
+                includeSubpaths: includeSubpaths
+            )
+        }
+        openWindow(id: "breakpointRuleEditor")
+    }
+
     private func consumePendingContext() {
         guard let context = BreakpointEditorContextStore.shared.consumePending() else {
             return
         }
-        viewModel.pendingContext = context
-        viewModel.showAddSheet = true
-    }
-}
-
-// MARK: - BreakpointRulesRow
-
-private struct BreakpointRulesRow: View {
-    // MARK: Internal
-
-    let rule: ProxyRule
-    let onToggle: () -> Void
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Toggle("", isOn: Binding(
-                get: { rule.isEnabled },
-                set: { _ in onToggle() }
-            ))
-            .toggleStyle(.switch)
-            .labelsHidden()
-            .controlSize(.small)
-
-            Text(rule.name)
-                .font(.system(size: 12, weight: .medium))
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(width: 180, alignment: .leading)
-
-            Text(rule.matchCondition.method ?? "ANY")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 60, alignment: .leading)
-
-            Text(rule.matchCondition.urlPattern ?? "")
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            requestBadge
-                .frame(width: 60)
-            responseBadge
-                .frame(width: 60)
-        }
-        .padding(.vertical, 2)
-        .opacity(rule.isEnabled ? 1.0 : 0.5)
-    }
-
-    // MARK: Private
-
-    @ViewBuilder private var requestBadge: some View {
-        if case let .breakpoint(phase) = rule.action,
-           phase == .request || phase == .both
-        {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-                .font(.caption)
-        } else {
-            Image(systemName: "circle")
-                .foregroundStyle(.quaternary)
-                .font(.caption)
-        }
-    }
-
-    @ViewBuilder private var responseBadge: some View {
-        if case let .breakpoint(phase) = rule.action,
-           phase == .response || phase == .both
-        {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-                .font(.caption)
-        } else {
-            Image(systemName: "circle")
-                .foregroundStyle(.quaternary)
-                .font(.caption)
-        }
+        openNewEditor(context: context)
     }
 }

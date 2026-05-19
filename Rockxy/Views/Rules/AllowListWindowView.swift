@@ -34,6 +34,14 @@ struct AllowListEditorSession: Identifiable {
     let mode: Mode
 }
 
+// MARK: - AllowListImportSource
+
+private enum AllowListImportSource {
+    case rockxyJSON
+    case proxyman
+    case charlesProxy
+}
+
 // MARK: - AllowListWindowViewModel
 
 @MainActor @Observable
@@ -184,6 +192,18 @@ final class AllowListWindowViewModel {
         manager.setActive(active)
     }
 
+    func exportRulesJSON() throws -> Data {
+        guard let data = manager.exportRulesJSON() else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        return data
+    }
+
+    func importRules(_ rules: [AllowListRule]) {
+        manager.replaceAll(rules)
+        selectedRuleID = rules.first?.id
+    }
+
     /// Called from the view layer's `.onChange(of: manager.rules)` to keep the
     /// table selection in sync when rules change externally (import, migration).
     func reconcileSelectionAfterRulesChange() {
@@ -202,14 +222,16 @@ struct AllowListWindowView: View {
     // MARK: Internal
 
     var body: some View {
-        VStack(spacing: 0) {
-            toolbar
-            Divider()
-            infoBanner
-            Divider()
-            content
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            AllowListTableView(
+                rules: viewModel.filteredRules,
+                selectedRuleID: $viewModel.selectedRuleID,
+                onToggle: { viewModel.toggleRule(id: $0) },
+                onEdit: openEditorForRule,
+                contextMenuItems: contextMenuItems
+            )
             if viewModel.isFilterBarVisible {
-                Divider()
                 AllowListFilterBar(
                     filterColumn: $viewModel.filterColumn,
                     filterText: $viewModel.filterText,
@@ -217,10 +239,10 @@ struct AllowListWindowView: View {
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            Divider()
-            bottomBar
+            shortcutHelp
+            footer
         }
-        .frame(width: 860, height: 620)
+        .frame(width: 1_200, height: 642)
         .onAppear { consumePendingContext() }
         .onReceive(NotificationCenter.default.publisher(for: .openAllowListWindow)) { _ in
             consumePendingContext()
@@ -265,7 +287,7 @@ struct AllowListWindowView: View {
         }
         .fileImporter(
             isPresented: $showImporter,
-            allowedContentTypes: [.json],
+            allowedContentTypes: [.json, .xml, .propertyList],
             allowsMultipleSelection: false
         ) { result in
             handleImport(result)
@@ -288,6 +310,9 @@ struct AllowListWindowView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: viewModel.isFilterBarVisible)
+        .onDeleteCommand {
+            viewModel.removeSelected()
+        }
     }
 
     // MARK: Private
@@ -306,6 +331,7 @@ struct AllowListWindowView: View {
     @State private var showImporter = false
     @State private var exportDocument: AllowListJSONDocument?
     @State private var importError: String?
+    @State private var importSource: AllowListImportSource = .rockxyJSON
 
     private var enableDisableLabel: String {
         guard let id = viewModel.selectedRuleID,
@@ -318,11 +344,8 @@ struct AllowListWindowView: View {
             : String(localized: "Enable Rule")
     }
 
-    private var toolbar: some View {
-        HStack {
-            Text(String(localized: "Allow List"))
-                .font(.headline)
-            Spacer()
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 12) {
             Toggle(
                 String(localized: "Enable Allow List Tool"),
                 isOn: Binding(
@@ -330,173 +353,104 @@ struct AllowListWindowView: View {
                     set: { viewModel.setActive($0) }
                 )
             )
-            .toggleStyle(.switch)
-            .controlSize(.small)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-    }
+            .toggleStyle(.checkbox)
+            .controlSize(.large)
+            .font(.system(size: 13, weight: .medium))
 
-    private var infoBanner: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "info.circle")
-                .foregroundStyle(.secondary)
+            Text(String(localized: "Define Rules for capturing only specific domains. Ignore others domains."))
+                .font(.system(size: 13))
+                .foregroundStyle(.primary)
+
             Text(
                 String(
                     localized:
-                    "Define URL patterns for capturing only matching requests. Each request is checked against the rules from top to bottom, stopping when a match is found."
+                    "Each request is checked against the rules from top to bottom, stopping when a match is found."
                 )
             )
-            .font(.caption)
+            .font(.system(size: 12.5))
             .foregroundStyle(.secondary)
-            Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(.quaternary.opacity(0.5))
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        .padding(.bottom, 14)
     }
 
-    @ViewBuilder private var content: some View {
-        if viewModel.manager.rules.isEmpty {
-            emptyState
-        } else {
-            VStack(spacing: 0) {
-                columnHeader
-                Divider()
-                List(selection: $viewModel.selectedRuleID) {
-                    ForEach(viewModel.filteredRules) { rule in
-                        AllowListRulesRow(rule: rule) {
-                            viewModel.toggleRule(id: rule.id)
-                        }
-                        .tag(rule.id)
-                    }
-                }
-                .listStyle(.inset(alternatesRowBackgrounds: true))
-                .contextMenu(forSelectionType: UUID.self) { _ in
-                    contextMenuItems
-                } primaryAction: { _ in
-                    openEditorForSelection()
-                }
+    private var shortcutHelp: some View {
+        Text(String(localized: "New: ⌘N    Edit: ⌘↩    Delete: ⌘⌫    Duplicate: ⌘D    Toggle: Space"))
+            .font(.system(size: 10.5))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+    }
+
+    private var footer: some View {
+        HStack(spacing: 0) {
+            addRemoveControl
+
+            Button {
+                // Help content is intentionally deferred; this mirrors the reference affordance.
+            } label: {
+                Image(systemName: "questionmark.circle.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(.secondary.opacity(0.35), .clear)
+                    .overlay(Text("?").font(.system(size: 15, weight: .medium)).foregroundStyle(.primary))
+                    .frame(width: 34, height: 22)
             }
+            .buttonStyle(.borderless)
+            .padding(.leading, 10)
+
+            Spacer()
+
+            moreMenu
         }
+        .padding(.horizontal, 20)
+        .padding(.top, 10)
+        .padding(.bottom, 18)
     }
 
-    private var columnHeader: some View {
-        HStack(spacing: 10) {
-            Spacer().frame(width: 24)
-            Text(String(localized: "Name"))
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 220, alignment: .leading)
-            Text(String(localized: "Method"))
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 70, alignment: .leading)
-            Text(String(localized: "Matching Rule"))
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 6)
-        .background(.background.tertiary)
-    }
-
-    private var emptyState: some View {
-        VStack(alignment: .center, spacing: 8) {
-            Image(systemName: "line.3.horizontal.decrease.circle")
-                .font(.system(size: 20))
-                .foregroundStyle(.tertiary)
-            Text(String(localized: "No Allow List Rules"))
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
-            Text(
-                String(
-                    localized:
-                    "Add URL patterns to capture only matching requests.\nWhen active, unmatched traffic is forwarded but not recorded."
-                )
-            )
-            .font(.caption)
-            .foregroundStyle(.tertiary)
-            .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 24)
-        .padding(.top, 12)
-    }
-
-    private var bottomBar: some View {
-        HStack(spacing: 8) {
+    private var addRemoveControl: some View {
+        HStack(spacing: 0) {
             Button {
                 viewModel.presentNewRuleEditor()
             } label: {
                 Image(systemName: "plus")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.primary)
+                    .frame(width: 21, height: 21)
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
+            .keyboardShortcut("n", modifiers: .command)
             .help(String(localized: "New Rule"))
+
+            Rectangle()
+                .fill(Color(nsColor: .separatorColor).opacity(0.7))
+                .frame(width: 1, height: 21)
 
             Button {
                 viewModel.removeSelected()
             } label: {
                 Image(systemName: "minus")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(viewModel.selectedRuleID == nil ? .tertiary : .primary)
+                    .frame(width: 21, height: 21)
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
             .disabled(viewModel.selectedRuleID == nil)
             .help(String(localized: "Delete Rule"))
-
-            Divider()
-                .frame(height: 16)
-
-            Text(
-                "\(viewModel.ruleCount) \(viewModel.ruleCount == 1 ? String(localized: "rule") : String(localized: "rules"))"
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-            Spacer()
-
-            Button {
-                showFilterBar()
-            } label: {
-                Label(String(localized: "Filter"), systemImage: "line.3.horizontal.decrease.circle")
-            }
-            .buttonStyle(.borderless)
-            .keyboardShortcut("f", modifiers: .command)
-
-            moreMenu
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-    }
-
-    @ViewBuilder private var contextMenuItems: some View {
-        Button(String(localized: "Edit…")) {
-            openEditorForSelection()
-        }
-        .keyboardShortcut(.return, modifiers: .command)
-
-        Button(String(localized: "Duplicate")) {
-            viewModel.duplicateSelected()
-        }
-        .keyboardShortcut("d", modifiers: .command)
-
-        Button(enableDisableLabel) {
-            if let id = viewModel.selectedRuleID {
-                viewModel.toggleRule(id: id)
-            }
-        }
-
-        Divider()
-
-        Button(String(localized: "Delete"), role: .destructive) {
-            viewModel.removeSelected()
-        }
-        .keyboardShortcut(.delete, modifiers: .command)
+        .frame(height: 23)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .overlay(
+            Rectangle()
+                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+        )
     }
 
     private var moreMenu: some View {
         Menu {
-            Button(String(localized: "New Rule…")) {
+            Button(String(localized: "New…")) {
                 viewModel.presentNewRuleEditor()
             }
             .keyboardShortcut("n", modifiers: .command)
@@ -520,6 +474,7 @@ struct AllowListWindowView: View {
                     viewModel.toggleRule(id: id)
                 }
             }
+            .keyboardShortcut(.space, modifiers: [])
             .disabled(viewModel.selectedRuleID == nil)
 
             Divider()
@@ -527,9 +482,23 @@ struct AllowListWindowView: View {
             Button(String(localized: "Export Settings…")) {
                 prepareExport()
             }
+            .disabled(viewModel.manager.rules.isEmpty)
 
-            Button(String(localized: "Import Settings…")) {
-                showImporter = true
+            Menu(String(localized: "Import Settings")) {
+                Button(String(localized: "From Rockxy JSON…")) {
+                    importSource = .rockxyJSON
+                    showImporter = true
+                }
+
+                Button(String(localized: "From Proxyman…")) {
+                    importSource = .proxyman
+                    showImporter = true
+                }
+
+                Button(String(localized: "From Charles Proxy…")) {
+                    importSource = .charlesProxy
+                    showImporter = true
+                }
             }
 
             Divider()
@@ -540,11 +509,49 @@ struct AllowListWindowView: View {
             .keyboardShortcut(.delete, modifiers: .command)
             .disabled(viewModel.selectedRuleID == nil)
         } label: {
-            Text(String(localized: "More"))
-            Image(systemName: "chevron.down")
-                .font(.caption2)
+            HStack(spacing: 6) {
+                Text(String(localized: "More"))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+            }
         }
-        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .buttonStyle(.bordered)
+        .fixedSize()
+    }
+
+    @ViewBuilder
+    private func contextMenuItems(for id: UUID) -> some View {
+        Button(String(localized: "Edit…")) {
+            openEditorForRule(id)
+        }
+        .keyboardShortcut(.return, modifiers: .command)
+
+        Button(String(localized: "Duplicate")) {
+            viewModel.selectedRuleID = id
+            viewModel.duplicateSelected()
+        }
+        .keyboardShortcut("d", modifiers: .command)
+
+        Button(enableDisableLabel(for: id)) {
+            viewModel.toggleRule(id: id)
+        }
+        .keyboardShortcut(.space, modifiers: [])
+
+        Divider()
+
+        Button(String(localized: "Delete"), role: .destructive) {
+            viewModel.selectedRuleID = id
+            viewModel.removeSelected()
+        }
+        .keyboardShortcut(.delete, modifiers: .command)
+    }
+
+    private func enableDisableLabel(for id: UUID) -> String {
+        guard let rule = viewModel.manager.rules.first(where: { $0.id == id }) else {
+            return String(localized: "Enable Rule")
+        }
+        return rule.isEnabled ? String(localized: "Disable Rule") : String(localized: "Enable Rule")
     }
 
     private func openEditorForSelection() {
@@ -556,8 +563,12 @@ struct AllowListWindowView: View {
         viewModel.presentEditorForEditing(rule)
     }
 
-    private func showFilterBar() {
-        viewModel.isFilterBarVisible = true
+    private func openEditorForRule(_ id: UUID) {
+        guard let rule = viewModel.manager.rules.first(where: { $0.id == id }) else {
+            return
+        }
+        viewModel.selectedRuleID = id
+        viewModel.presentEditorForEditing(rule)
     }
 
     private func hideFilterBar() {
@@ -576,11 +587,13 @@ struct AllowListWindowView: View {
     }
 
     private func prepareExport() {
-        guard let data = viewModel.manager.exportRulesJSON() else {
-            return
+        do {
+            exportDocument = try AllowListJSONDocument(data: viewModel.exportRulesJSON())
+            showExporter = true
+        } catch {
+            importError = error.localizedDescription
+            Self.logger.error("Allow list export failed: \(error.localizedDescription)")
         }
-        exportDocument = AllowListJSONDocument(data: data)
-        showExporter = true
     }
 
     private func handleImport(_ result: Result<[URL], Error>) {
@@ -604,7 +617,14 @@ struct AllowListWindowView: View {
                     return
                 }
                 let data = try Data(contentsOf: url)
-                try viewModel.manager.importRulesJSON(data)
+                switch importSource {
+                case .rockxyJSON:
+                    try viewModel.manager.importRulesJSON(data)
+                case .proxyman:
+                    try viewModel.importRules(AllowListSettingsCodec.importFromProxyman(data))
+                case .charlesProxy:
+                    try viewModel.importRules(AllowListSettingsCodec.importFromCharlesProxy(data))
+                }
             } catch {
                 importError = error.localizedDescription
                 Self.logger.error("Allow list import failed: \(error.localizedDescription)")
@@ -615,42 +635,160 @@ struct AllowListWindowView: View {
     }
 }
 
-// MARK: - AllowListRulesRow
+// MARK: - AllowListTableView
 
-private struct AllowListRulesRow: View {
+private struct AllowListTableView<ContextMenuContent: View>: View {
+    // MARK: Internal
+
+    let rules: [AllowListRule]
+    @Binding var selectedRuleID: UUID?
+
+    let onToggle: (UUID) -> Void
+    let onEdit: (UUID) -> Void
+    @ViewBuilder let contextMenuItems: (UUID) -> ContextMenuContent
+
+    var body: some View {
+        VStack(spacing: 0) {
+            columnHeader
+            ZStack {
+                zebraRows
+
+                if rules.isEmpty {
+                    Text(String(localized: "Click \"+\" or ⌘N to add new entry"))
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(Array(rules.enumerated()), id: \.element.id) { index, rule in
+                                AllowListTableRow(
+                                    rule: rule,
+                                    isSelected: selectedRuleID == rule.id,
+                                    rowIndex: index,
+                                    onSelect: { selectedRuleID = rule.id },
+                                    onToggle: { onToggle(rule.id) }
+                                )
+                                .contextMenu {
+                                    contextMenuItems(rule.id)
+                                }
+                                .onTapGesture(count: 2) {
+                                    onEdit(rule.id)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .frame(height: 399)
+        .overlay {
+            Rectangle()
+                .stroke(.secondary.opacity(0.45), lineWidth: 1)
+        }
+        .padding(.horizontal, 20)
+    }
+
+    // MARK: Private
+
+    private var columnHeader: some View {
+        HStack(spacing: 0) {
+            Text(String(localized: "Enabled"))
+                .frame(width: 66, alignment: .leading)
+            tableDivider
+            Text(String(localized: "Name"))
+                .frame(width: 303, alignment: .leading)
+            tableDivider
+            Text(String(localized: "Method"))
+                .frame(width: 80, alignment: .leading)
+            tableDivider
+            Text(String(localized: "Matching Rule"))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .font(.system(size: 11, weight: .medium))
+        .padding(.horizontal, 12)
+        .frame(height: 24)
+        .background(Color(nsColor: .textBackgroundColor))
+        .padding(.horizontal, 20)
+        .overlay(alignment: .bottom) {
+            Divider().padding(.horizontal, 20)
+        }
+    }
+
+    private var tableDivider: some View {
+        Rectangle()
+            .fill(.secondary.opacity(0.22))
+            .frame(width: 1, height: 16)
+            .padding(.trailing, 10)
+    }
+
+    private var zebraRows: some View {
+        VStack(spacing: 0) {
+            ForEach(0 ..< 17, id: \.self) { index in
+                Rectangle()
+                    .fill(index.isMultiple(of: 2) ? Color(nsColor: .textBackgroundColor) : Color.secondary
+                        .opacity(0.08))
+                    .frame(height: 22)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+// MARK: - AllowListTableRow
+
+private struct AllowListTableRow: View {
+    // MARK: Internal
+
     let rule: AllowListRule
+    let isSelected: Bool
+    let rowIndex: Int
+    let onSelect: () -> Void
     let onToggle: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 0) {
             Toggle("", isOn: Binding(
                 get: { rule.isEnabled },
                 set: { _ in onToggle() }
             ))
-            .toggleStyle(.switch)
+            .toggleStyle(.checkbox)
             .labelsHidden()
-            .controlSize(.small)
+            .frame(width: 66)
 
             Text(rule.name)
-                .font(.system(size: 12, weight: .medium))
                 .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(width: 220, alignment: .leading)
+                .truncationMode(.middle)
+                .frame(width: 314, alignment: .leading)
 
             Text(rule.method ?? "ANY")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 70, alignment: .leading)
+                .frame(width: 80, alignment: .leading)
 
             Text(rule.rawPattern)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 10.5, design: .monospaced))
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 2)
+        .font(.system(size: 10.5))
+        .foregroundStyle(rule.isEnabled ? .primary : .secondary)
+        .frame(height: 22)
+        .background(rowBackground)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onSelect()
+        }
         .opacity(rule.isEnabled ? 1.0 : 0.5)
+    }
+
+    // MARK: Private
+
+    private var rowBackground: some ShapeStyle {
+        if isSelected {
+            return AnyShapeStyle(Color.accentColor.opacity(0.22))
+        }
+        return AnyShapeStyle(rowIndex.isMultiple(of: 2) ? Color(nsColor: .textBackgroundColor) : Color.secondary
+            .opacity(0.08))
     }
 }
 

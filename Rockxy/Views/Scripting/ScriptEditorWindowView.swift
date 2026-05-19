@@ -7,10 +7,6 @@ struct ScriptEditorWindowView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            matchingRuleHeader
-            Divider()
-            runOnRow
-            Divider()
             bodySplit
             Divider()
             footer
@@ -39,90 +35,117 @@ struct ScriptEditorWindowView: View {
             Text("Matching Rule")
                 .font(.headline)
 
-            HStack(spacing: 8) {
-                Text("Name:")
-                TextField("", text: $viewModel.name)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 260)
-                Spacer()
-            }
-
-            HStack(spacing: 8) {
-                Text("URL:")
-                TextField("", text: $viewModel.urlPattern)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 12, design: .monospaced))
-                    .frame(width: 420)
-
-                Picker("", selection: $viewModel.method) {
-                    ForEach([
-                        ScriptMatchMethod.any,
-                    ]) { Text($0.label).tag($0) }
-                    Divider()
-                    ForEach([
-                        ScriptMatchMethod.get,
-                        ScriptMatchMethod.post,
-                        ScriptMatchMethod.put,
-                        ScriptMatchMethod.delete,
-                        ScriptMatchMethod.patch,
-                    ]) { Text($0.label).tag($0) }
-                    Divider()
-                    ForEach([
-                        ScriptMatchMethod.head,
-                        ScriptMatchMethod.options,
-                        ScriptMatchMethod.trace,
-                    ]) { Text($0.label).tag($0) }
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: 8) {
+                    Text("Name:")
+                        .frame(width: 58, alignment: .trailing)
+                    TextField("", text: $viewModel.name)
+                        .textFieldStyle(.roundedBorder)
                 }
-                .labelsHidden()
-                .frame(width: 90)
 
-                Picker("", selection: $viewModel.patternMode) {
-                    Text("Use Wildcard").tag(ScriptMatchPatternMode.wildcard)
-                    Text("Use Regex").tag(ScriptMatchPatternMode.regex)
-                    Divider()
-                    Text("Advanced").tag(ScriptMatchPatternMode.advanced)
+                HStack(spacing: 8) {
+                    Text("URL:")
+                        .frame(width: 58, alignment: .trailing)
+                    TextField("", text: $viewModel.urlPattern)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 12, design: .monospaced))
                 }
-                .labelsHidden()
-                .frame(width: 140)
 
-                if viewModel.patternMode == .wildcard {
-                    Text("Support wildcard * and ?.")
+                HStack(spacing: 8) {
+                    Spacer()
+                        .frame(width: 66)
+
+                    methodMenu
+                    patternModeMenu
+
+                    if viewModel.patternMode == .wildcard {
+                        Text("Support wildcard * and ?.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button {
+                        let sample = viewModel.sampleURL.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let effectiveSample = sample.isEmpty ? "https://api.example.com/path" : sample
+                        viewModel.testRulePreview = viewModel.testRule(against: effectiveSample)
+                            ? "Matches: \(effectiveSample)"
+                            : "No match for: \(effectiveSample)"
+                    } label: {
+                        Text("Test your Rule")
+                            .font(.caption.weight(.medium))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+
+                    Spacer(minLength: 0)
+                }
+
+                Toggle(isOn: $viewModel.includeSubpaths) {
+                    Text("Include all subpaths of this URL")
+                }
+                .toggleStyle(.checkbox)
+                .padding(.leading, 66)
+
+                if !viewModel.testRulePreview.isEmpty {
+                    Text(viewModel.testRulePreview)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .padding(.leading, 66)
                 }
-
-                TextField(String(localized: "Sample URL"), text: $viewModel.sampleURL)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 12, design: .monospaced))
-                    .frame(width: 240)
-
-                Button {
-                    let sample = viewModel.sampleURL.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let effectiveSample = sample.isEmpty ? "https://api.example.com/path" : sample
-                    viewModel.testRulePreview = viewModel.testRule(against: effectiveSample)
-                        ? "Matches: \(effectiveSample)"
-                        : "No match for: \(effectiveSample)"
-                } label: {
-                    Text("Test your Rule")
-                        .font(.caption.weight(.medium))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.accentColor)
             }
-
-            if !viewModel.testRulePreview.isEmpty {
-                Text(viewModel.testRulePreview)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Toggle(isOn: $viewModel.includeSubpaths) {
-                Text("Include all subpaths of this URL")
-            }
-            .toggleStyle(.checkbox)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.65))
+            )
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    private var methodMenu: some View {
+        Menu {
+            ForEach(Array(ScriptEditorMenuContent.methodSections.enumerated()), id: \.offset) { index, section in
+                ForEach(section) { method in
+                    Button {
+                        viewModel.method = method
+                    } label: {
+                        menuCheckmarkLabel(method.label, isSelected: viewModel.method == method)
+                    }
+                }
+                if index < ScriptEditorMenuContent.methodSections.count - 1 {
+                    Divider()
+                }
+            }
+        } label: {
+            menuLabel(viewModel.method.label, minWidth: 88)
+        }
+        .menuIndicator(.hidden)
+        .buttonStyle(.bordered)
+        .fixedSize()
+    }
+
+    private var patternModeMenu: some View {
+        Menu {
+            ForEach(Array(ScriptEditorMenuContent.patternModeSections.enumerated()), id: \.offset) { index, section in
+                ForEach(section) { mode in
+                    Button {
+                        viewModel.patternMode = mode
+                    } label: {
+                        menuCheckmarkLabel(mode.title, isSelected: viewModel.patternMode == mode)
+                    }
+                }
+                if index < ScriptEditorMenuContent.patternModeSections.count - 1 {
+                    Divider()
+                }
+            }
+        } label: {
+            menuLabel(viewModel.patternMode.title, minWidth: 128)
+        }
+        .menuIndicator(.hidden)
+        .buttonStyle(.bordered)
+        .fixedSize()
     }
 
     // MARK: - Run On row
@@ -135,7 +158,6 @@ struct ScriptEditorWindowView: View {
                 .toggleStyle(.checkbox)
             Toggle(isOn: $viewModel.runOnResponse) { Text("Response") }
                 .toggleStyle(.checkbox)
-            Divider().frame(height: 14)
             Toggle(isOn: $viewModel.runAsMock) { Text("Run as Mock API") }
                 .toggleStyle(.checkbox)
             Spacer()
@@ -155,12 +177,22 @@ struct ScriptEditorWindowView: View {
 
     private var bodySplit: some View {
         HStack(spacing: 0) {
-            ScriptCodeEditor(text: $viewModel.code)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            VStack(spacing: 0) {
+                matchingRuleHeader
+                    .zIndex(1)
+                runOnRow
+                    .zIndex(1)
+                Divider()
+                    .zIndex(1)
+                ScriptCodeEditor(text: $viewModel.code)
+                    .clipped()
+                    .zIndex(0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             if viewModel.consolePanelVisible {
                 Divider()
                 ScriptConsolePanel(viewModel: viewModel)
-                    .frame(width: 320)
+                    .frame(width: 230)
             }
         }
     }
@@ -169,20 +201,22 @@ struct ScriptEditorWindowView: View {
 
     private var footer: some View {
         HStack(spacing: 8) {
-            Menu("More") {
+            Menu {
                 moreMenuItems
             }
-            .menuStyle(.borderlessButton)
+            label: {
+                menuLabel(String(localized: "More"))
+            }
+            .menuIndicator(.hidden)
+            .buttonStyle(.bordered)
             .fixedSize()
 
             Button {
                 viewModel.beautify()
             } label: {
-                HStack(spacing: 4) {
-                    Text("Beautify")
-                    Text("⌘B").foregroundStyle(.secondary)
-                }
+                Text("Beautify (⌘B)")
             }
+            .buttonStyle(.bordered)
             .keyboardShortcut("b", modifiers: .command)
 
             Button {
@@ -191,20 +225,16 @@ struct ScriptEditorWindowView: View {
             } label: {
                 Text("Snippet Code")
             }
+            .buttonStyle(.bordered)
 
             Spacer()
 
             Button {
                 Task { await viewModel.saveAndActivate() }
             } label: {
-                HStack(spacing: 6) {
-                    Text("Save & Activate")
-                        .fontWeight(.semibold)
-                    Text("⌘S")
-                        .foregroundStyle(.white.opacity(0.85))
-                }
+                Text("Save & Activate ⌘S")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
             .keyboardShortcut("s", modifiers: .command)
 
             Menu {
@@ -221,13 +251,40 @@ struct ScriptEditorWindowView: View {
                     )) { Text(level.title) }
                 }
             } label: {
-                Image(systemName: "eye")
+                HStack(spacing: 3) {
+                    Image(systemName: "eye")
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .semibold))
+                }
             }
-            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .buttonStyle(.plain)
             .fixedSize()
+
+            Button {
+                viewModel.clearConsole()
+            } label: {
+                Image(systemName: "trash")
+                    .frame(width: 24, height: 18)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .disabled(viewModel.consoleEntries.isEmpty)
+
+            Button {
+                viewModel.toggleConsolePanel()
+            } label: {
+                Image(systemName: "sidebar.right")
+                    .frame(width: 24, height: 18)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 7)
+        .padding(.vertical, 4)
+        .background(Color(nsColor: .controlBackgroundColor))
     }
 
     @ViewBuilder private var moreMenuItems: some View {
@@ -256,6 +313,24 @@ struct ScriptEditorWindowView: View {
             Button("Scripting Guide") {} // deferred
             Button("Matching Rules") {}
             Button("Mock Responses") {}
+        }
+    }
+
+    private func menuCheckmarkLabel(_ title: String, isSelected: Bool) -> some View {
+        HStack(spacing: 7) {
+            if isSelected {
+                Image(systemName: "checkmark")
+            }
+            Text(title)
+        }
+    }
+
+    private func menuLabel(_ title: String, minWidth: CGFloat? = nil) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .frame(minWidth: minWidth, alignment: .leading)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 9, weight: .semibold))
         }
     }
 }

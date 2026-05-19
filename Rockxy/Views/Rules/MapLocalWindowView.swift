@@ -2,7 +2,162 @@ import AppKit
 import os
 import SwiftUI
 
-// Presents the map local window for rule editing and management.
+// Presents the Proxyman-style Map Local management and editor windows.
+
+// MARK: - MapLocalHTTPMethod
+
+enum MapLocalHTTPMethod: String, CaseIterable, Identifiable {
+    case any = "ANY"
+    case get = "GET"
+    case post = "POST"
+    case put = "PUT"
+    case delete = "DELETE"
+    case patch = "PATCH"
+    case head = "HEAD"
+    case options = "OPTIONS"
+    case trace = "TRACE"
+
+    var id: String { rawValue }
+
+    init(ruleMethod: String?) {
+        guard let ruleMethod,
+              let method = Self(rawValue: ruleMethod.uppercased()) else
+        {
+            self = .any
+            return
+        }
+        self = method
+    }
+
+    var ruleValue: String? {
+        self == .any ? nil : rawValue
+    }
+}
+
+// MARK: - MapLocalMatchType
+
+enum MapLocalMatchType: String, CaseIterable, Identifiable {
+    case wildcard
+    case regex
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .wildcard: "Use Wildcard"
+        case .regex: "Use Regex"
+        }
+    }
+}
+
+// MARK: - MapLocalTargetMode
+
+enum MapLocalTargetMode: String, CaseIterable, Identifiable {
+    case localFile
+    case localDirectory
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .localFile: "Local File"
+        case .localDirectory: "Local Directory"
+        }
+    }
+}
+
+// MARK: - MapLocalDelayPreset
+
+enum MapLocalDelayPreset: String, CaseIterable, Identifiable {
+    case none
+    case oneSecond
+    case twoSeconds
+    case threeSeconds
+    case fiveSeconds
+    case tenSeconds
+    case thirtySeconds
+    case sixtySeconds
+    case random
+    case custom
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .none: "No Delay"
+        case .oneSecond: "1 second"
+        case .twoSeconds: "2 seconds"
+        case .threeSeconds: "3 seconds"
+        case .fiveSeconds: "5 seconds"
+        case .tenSeconds: "10 seconds"
+        case .thirtySeconds: "30 seconds"
+        case .sixtySeconds: "60 seconds"
+        case .random: "Random (1-15s)"
+        case .custom: "Custom"
+        }
+    }
+
+    var delayMs: Int {
+        switch self {
+        case .none: 0
+        case .oneSecond: 1_000
+        case .twoSeconds: 2_000
+        case .threeSeconds: 3_000
+        case .fiveSeconds: 5_000
+        case .tenSeconds: 10_000
+        case .thirtySeconds: 30_000
+        case .sixtySeconds: 60_000
+        case .random: -1
+        case .custom: 0
+        }
+    }
+
+    static func from(delayMs: Int) -> Self {
+        switch delayMs {
+        case 0: .none
+        case 1_000: .oneSecond
+        case 2_000: .twoSeconds
+        case 3_000: .threeSeconds
+        case 5_000: .fiveSeconds
+        case 10_000: .tenSeconds
+        case 30_000: .thirtySeconds
+        case 60_000: .sixtySeconds
+        case -1: .random
+        default: .custom
+        }
+    }
+}
+
+// MARK: - MapLocalEditorContext
+
+struct MapLocalEditorContext {
+    var existingRule: ProxyRule?
+    var draft: MapLocalDraft?
+
+    static let blank = MapLocalEditorContext()
+}
+
+// MARK: - MapLocalEditorStore
+
+@MainActor @Observable
+final class MapLocalEditorStore {
+    private init() {}
+
+    static let shared = MapLocalEditorStore()
+
+    private(set) var context = MapLocalEditorContext.blank
+    var draftVersion: UInt64 = 0
+
+    func openNew(draft: MapLocalDraft? = nil) {
+        context = MapLocalEditorContext(existingRule: nil, draft: draft)
+        draftVersion &+= 1
+    }
+
+    func openExisting(_ rule: ProxyRule) {
+        context = MapLocalEditorContext(existingRule: rule, draft: nil)
+        draftVersion &+= 1
+    }
+}
 
 // MARK: - MapLocalViewModel
 
@@ -13,10 +168,13 @@ final class MapLocalViewModel {
     var allRules: [ProxyRule] = []
     var searchText = ""
     var selectedRuleIDs: Set<UUID> = []
-    var showEditSheet = false
-    var editingRule: ProxyRule?
-    var pendingDraft: MapLocalDraft?
+    var isFilterVisible = false
+    var isToolEnabled: Bool
     var errorMessage: String?
+
+    init(isToolEnabled: Bool? = nil) {
+        self.isToolEnabled = isToolEnabled ?? Self.defaultToolEnabled
+    }
 
     var mapLocalRules: [ProxyRule] {
         allRules.filter {
@@ -35,8 +193,16 @@ final class MapLocalViewModel {
         return mapLocalRules.filter { rule in
             rule.name.lowercased().contains(query)
                 || (rule.matchCondition.urlPattern?.lowercased().contains(query) ?? false)
+                || methodLabel(for: rule).lowercased().contains(query)
                 || filePath(for: rule).lowercased().contains(query)
         }
+    }
+
+    var selectedRule: ProxyRule? {
+        guard let id = selectedRuleIDs.first else {
+            return nil
+        }
+        return allRules.first { $0.id == id }
     }
 
     var areAllEnabled: Bool {
@@ -51,6 +217,7 @@ final class MapLocalViewModel {
                     updated[index].isEnabled = newValue
                 }
             }
+            allRules = updated
             Task {
                 await RulePolicyGate.shared.replaceAllRules(updated)
                 allRules = await RuleEngine.shared.allRules
@@ -65,7 +232,15 @@ final class MapLocalViewModel {
     func handleRulesDidChange(_ notification: Notification) {
         if let rules = notification.object as? [ProxyRule] {
             allRules = rules
+            selectedRuleIDs = selectedRuleIDs.filter { id in
+                rules.contains { $0.id == id }
+            }
         }
+    }
+
+    func setToolEnabled(_ enabled: Bool) {
+        isToolEnabled = enabled
+        Task { await RulePolicyGate.shared.setMapLocalToolEnabled(enabled) }
     }
 
     func toggleRule(id: UUID) {
@@ -83,6 +258,7 @@ final class MapLocalViewModel {
 
     func addRule(_ rule: ProxyRule) {
         allRules.append(rule)
+        selectedRuleIDs = [rule.id]
         Task {
             let accepted = await RulePolicyGate.shared.addRule(rule)
             if !accepted {
@@ -101,6 +277,9 @@ final class MapLocalViewModel {
 
     func removeSelectedRules() {
         let idsToRemove = selectedRuleIDs
+        guard !idsToRemove.isEmpty else {
+            return
+        }
         allRules.removeAll { idsToRemove.contains($0.id) }
         selectedRuleIDs.removeAll()
         let updated = allRules
@@ -113,773 +292,1052 @@ final class MapLocalViewModel {
         Task { await RulePolicyGate.shared.removeRule(id: id) }
     }
 
-    func beginEditing(_ rule: ProxyRule) {
-        editingRule = rule
-        showEditSheet = true
-    }
-
-    func beginAdding() {
-        editingRule = nil
-        showEditSheet = true
-    }
-
-    func updateFilePath(for ruleID: UUID, newPath: String) {
-        guard let index = allRules.firstIndex(where: { $0.id == ruleID }),
-              case let .mapLocal(_, statusCode, isDirectory) = allRules[index].action else
-        {
+    func duplicateSelectedRule() {
+        guard var rule = selectedRule else {
             return
         }
-        allRules[index].action = .mapLocal(filePath: newPath, statusCode: statusCode, isDirectory: isDirectory)
-        let updatedRule = allRules[index]
-        Task { await RulePolicyGate.shared.updateRule(updatedRule) }
+        rule = ProxyRule(
+            name: "\(rule.name) Copy",
+            isEnabled: rule.isEnabled,
+            matchCondition: rule.matchCondition,
+            action: rule.action,
+            priority: rule.priority
+        )
+        addRule(rule)
+    }
+
+    func createNewFolderPlaceholder() {
+        let rule = ProxyRule(
+            name: "New Folder",
+            isEnabled: false,
+            matchCondition: RuleMatchCondition(urlPattern: nil),
+            action: .mapLocal(filePath: "", isDirectory: true)
+        )
+        addRule(rule)
     }
 
     func filePath(for rule: ProxyRule) -> String {
-        if case let .mapLocal(path, _, _) = rule.action {
+        if case let .mapLocal(path, _, _, _) = rule.action {
             return path
         }
         return ""
     }
 
-    func statusCode(for rule: ProxyRule) -> String {
-        if case let .mapLocal(_, statusCode, _) = rule.action {
-            return "\(statusCode)"
+    func methodLabel(for rule: ProxyRule) -> String {
+        rule.matchCondition.method?.uppercased() ?? "ANY"
+    }
+
+    func matchingRuleLabel(for rule: ProxyRule) -> String {
+        guard let pattern = rule.matchCondition.urlPattern, !pattern.isEmpty else {
+            return "<Missing URL>"
         }
-        return "200"
+        if MapLocalPatternFormatter.prefersWildcardPresentation(pattern) {
+            return "Wildcard: \(MapLocalPatternFormatter.readablePattern(pattern))"
+        }
+        return pattern
+    }
+
+    func mapFromLabel(for rule: ProxyRule) -> String {
+        let prefix = isDirectory(for: rule) ? "Directory: " : "File: "
+        let path = filePath(for: rule)
+        return prefix + (path.isEmpty ? "<Missing Path>" : abbreviatedPath(path))
     }
 
     func isDirectory(for rule: ProxyRule) -> Bool {
-        if case let .mapLocal(_, _, isDirectory) = rule.action {
+        if case let .mapLocal(_, _, isDirectory, _) = rule.action {
             return isDirectory
         }
         return false
     }
 
+    func delayLabel(for rule: ProxyRule) -> String {
+        if case let .mapLocal(_, _, _, delayMs) = rule.action, delayMs != 0 {
+            return MapLocalDelayPreset.from(delayMs: delayMs).displayName
+        }
+        return ""
+    }
+
     // MARK: Private
 
+    private static let toolEnabledKey = "mapLocalToolEnabled"
     private static let logger = Logger(subsystem: RockxyIdentity.current.logSubsystem, category: "MapLocalViewModel")
+    private static var defaultToolEnabled: Bool {
+        UserDefaults.standard.object(forKey: toolEnabledKey) as? Bool ?? true
+    }
+
+    private func abbreviatedPath(_ path: String) -> String {
+        guard !path.isEmpty else {
+            return "<Missing Path>"
+        }
+        let maxLength = 78
+        guard path.count > maxLength else {
+            return path
+        }
+        let suffix = path.suffix(maxLength - 3)
+        return "...\(suffix)"
+    }
 }
 
 // MARK: - MapLocalWindowView
 
 struct MapLocalWindowView: View {
-    // MARK: Internal
-
+    @Environment(\.openWindow) private var openWindow
     @State var viewModel = MapLocalViewModel()
 
     var body: some View {
-        VStack(spacing: 0) {
-            toolbar
-            Divider()
-            infoBar
-            Divider()
+        VStack(alignment: .leading, spacing: 0) {
+            header
             tableContent
-            Divider()
+            shortcutStrip
             bottomBar
         }
-        .frame(width: 800, height: 480)
-        .sheet(isPresented: $viewModel.showEditSheet) {
-            MapLocalEditSheet(
-                existingRule: viewModel.editingRule,
-                draft: viewModel.pendingDraft,
-                onSave: { rule in
-                    if viewModel.editingRule != nil {
-                        viewModel.updateRule(rule)
-                    } else {
-                        viewModel.addRule(rule)
-                    }
-                    viewModel.pendingDraft = nil
-                }
-            )
-        }
+        .frame(width: 1_024, height: 570)
         .task { await viewModel.refreshFromEngine() }
-        .onAppear { consumePendingDraft() }
+        .onAppear { consumePendingDraftIfNeeded() }
         .onReceive(NotificationCenter.default.publisher(for: .openMapLocalWindow)) { _ in
-            consumePendingDraft()
+            consumePendingDraftIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: .rulesDidChange)) { notification in
             viewModel.handleRulesDidChange(notification)
         }
         .alert(
-            String(localized: "Error"),
+            String(localized: "Map Local"),
             isPresented: Binding(
                 get: { viewModel.errorMessage != nil },
-                set: { if !$0 {
-                    viewModel.errorMessage = nil
-                }
-                }
+                set: { if !$0 { viewModel.errorMessage = nil } }
             )
         ) {
-            Button(String(localized: "OK")) {
-                viewModel.errorMessage = nil
-            }
+            Button(String(localized: "OK")) { viewModel.errorMessage = nil }
         } message: {
-            if let msg = viewModel.errorMessage {
-                Text(msg)
+            if let error = viewModel.errorMessage {
+                Text(error)
             }
         }
     }
 
-    // MARK: Private
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle(isOn: Binding(
+                get: { viewModel.isToolEnabled },
+                set: { viewModel.setToolEnabled($0) }
+            )) {
+                Text(String(localized: "Enable Map Local Tool"))
+                    .font(.system(size: 13))
+            }
+            .toggleStyle(.checkbox)
+            .padding(.top, 16)
 
-    private var ruleCountLabel: String {
-        let count = viewModel.mapLocalRules.count
-        if count == 1 {
-            return String(localized: "1 rule")
-        }
-        return String(localized: "\(count) rules")
-    }
-
-    private var infoBar: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "info.circle")
+            Text(String(localized: "Map a Response with a Local File or Directory. Support Status Code, Headers and Body."))
+                .font(.system(size: 13))
+            Text(String(localized: "Each request is checked against the rules from top to bottom, stopping when a match is found."))
+                .font(.system(size: 13))
                 .foregroundStyle(.secondary)
-            Text(String(localized: "Intercept matching requests and serve responses from local files or directories."))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.5))
-    }
 
-    private var toolbar: some View {
-        HStack(spacing: 12) {
-            Toggle(isOn: $viewModel.areAllEnabled) {
-                Text(String(localized: "Enable All"))
-                    .font(.callout)
-            }
-            .toggleStyle(.switch)
-            .controlSize(.small)
-
-            Spacer()
-
-            TextField(String(localized: "Search"), text: $viewModel.searchText)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 200)
-
-            Button {
-                viewModel.beginAdding()
-            } label: {
-                Label(String(localized: "Add Rule"), systemImage: "plus")
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-    }
-
-    @ViewBuilder private var tableContent: some View {
-        if viewModel.filteredRules.isEmpty {
-            VStack(alignment: .center, spacing: 8) {
-                Image(systemName: "doc.on.doc")
-                    .font(.system(size: 20))
-                    .foregroundStyle(.tertiary)
-                Text(String(localized: "No Map Local Rules"))
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.secondary)
-                Text(String(localized: "Right-click a captured request and choose \"Map Local...\", or click + below."))
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .multilineTextAlignment(.center)
-
-                HStack(spacing: 0) {
-                    Rectangle()
-                        .fill(Color.green.opacity(0.4))
-                        .frame(width: 2)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(String(localized: "Example"))
-                            .font(.caption2)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.tertiary)
-                        HStack(spacing: 5) {
-                            Text("api.example.com/v2/users")
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(.secondary)
-                            Image(systemName: "arrow.right")
-                                .font(.system(size: 8))
-                                .foregroundStyle(.tertiary)
-                            Text("~/mock/users.json")
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(.green)
-                        }
+            if viewModel.isFilterVisible {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField(String(localized: "Filter Map Local rules"), text: $viewModel.searchText)
+                        .textFieldStyle(.roundedBorder)
+                    Button {
+                        viewModel.searchText = ""
+                        viewModel.isFilterVisible = false
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
                     }
-                    .padding(.leading, 6)
-                    .padding(.vertical, 4)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
                 }
             }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 24)
-            .padding(.top, 12)
-        } else {
-            Table(viewModel.filteredRules, selection: $viewModel.selectedRuleIDs) {
-                TableColumn(String(localized: "Enable")) { (rule: ProxyRule) in
+        }
+        .padding(.horizontal, 18)
+        .padding(.bottom, 10)
+    }
+
+    private var tableContent: some View {
+        Table(viewModel.filteredRules, selection: $viewModel.selectedRuleIDs) {
+            TableColumn(String(localized: "Name")) { rule in
+                HStack(spacing: 7) {
                     Toggle("", isOn: Binding(
                         get: { rule.isEnabled },
                         set: { _ in viewModel.toggleRule(id: rule.id) }
                     ))
-                    .labelsHidden()
                     .toggleStyle(.checkbox)
-                }
-                .width(50)
-
-                TableColumn(String(localized: "URL Pattern")) { rule in
-                    Text(rule.matchCondition.urlPattern ?? "*")
-                        .font(.system(.body, design: .monospaced))
+                    .labelsHidden()
+                    Text(rule.name.isEmpty ? String(localized: "Untitled") : rule.name)
                         .lineLimit(1)
-                        .help(rule.matchCondition.urlPattern ?? "*")
                 }
-                .width(min: 150, ideal: 220)
-
-                TableColumn(String(localized: "Local Path")) { rule in
-                    let path = viewModel.filePath(for: rule)
-                    let isDir = viewModel.isDirectory(for: rule)
-                    HStack(spacing: 4) {
-                        Image(systemName: isDir ? "folder.fill" : "doc.fill")
-                            .foregroundStyle(isDir ? .blue : .secondary)
-                            .font(.caption2)
-                        Text(abbreviatedPath(path))
-                            .lineLimit(1)
-                            .help(path)
-                        Spacer()
-                        Button {
-                            browseFile(for: rule.id)
-                        } label: {
-                            Text("…")
-                                .font(.caption.bold())
-                        }
-                        .buttonStyle(.borderless)
-                        .help(isDir
-                            ? String(localized: "Choose local directory")
-                            : String(localized: "Choose local file"))
-                    }
-                }
-                .width(min: 150, ideal: 200)
-
-                TableColumn(String(localized: "Status Code")) { rule in
-                    let code = viewModel.statusCode(for: rule)
-                    Text(code)
-                        .monospacedDigit()
-                        .foregroundColor(code == "200" ? .primary : .orange)
-                }
-                .width(70)
-
-                TableColumn(String(localized: "Comment")) { (rule: ProxyRule) in
-                    Text(rule.name)
-                        .lineLimit(1)
-                        .foregroundStyle(.secondary)
-                }
-                .width(min: 80, ideal: 120)
             }
-            .contextMenu(forSelectionType: UUID.self) { ids in
-                if let id = ids.first {
-                    Button(String(localized: "Edit Rule")) {
-                        if let rule = viewModel.allRules.first(where: { $0.id == id }) {
-                            viewModel.beginEditing(rule)
-                        }
-                    }
-                    Divider()
-                    Button(String(localized: "Delete Rule"), role: .destructive) {
-                        viewModel.removeRule(id: id)
+            .width(min: 190, ideal: 220)
+
+            TableColumn(String(localized: "Method")) { rule in
+                Text(viewModel.methodLabel(for: rule))
+                    .lineLimit(1)
+            }
+            .width(86)
+
+            TableColumn(String(localized: "Matching Rule")) { rule in
+                Text(viewModel.matchingRuleLabel(for: rule))
+                    .lineLimit(1)
+                    .help(rule.matchCondition.urlPattern ?? "<Missing URL>")
+            }
+            .width(min: 260, ideal: 320)
+
+            TableColumn(String(localized: "Map from")) { rule in
+                HStack(spacing: 6) {
+                    Text(viewModel.mapFromLabel(for: rule))
+                        .lineLimit(1)
+                        .help(viewModel.filePath(for: rule))
+                    if !viewModel.delayLabel(for: rule).isEmpty {
+                        Text(viewModel.delayLabel(for: rule))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
                 }
-            } primaryAction: { ids in
-                if let id = ids.first,
-                   let rule = viewModel.allRules.first(where: { $0.id == id })
-                {
-                    viewModel.beginEditing(rule)
-                }
+            }
+            .width(min: 360, ideal: 500)
+        }
+        .contextMenu(forSelectionType: UUID.self) { ids in
+            tableContextMenu(ids: ids)
+        } primaryAction: { ids in
+            guard let id = ids.first,
+                  let rule = viewModel.allRules.first(where: { $0.id == id }) else
+            {
+                return
+            }
+            openEditor(for: rule)
+        }
+        .overlay {
+            if viewModel.filteredRules.isEmpty {
+                ContentUnavailableView(
+                    String(localized: "No Map Local Rules"),
+                    systemImage: "folder.badge.gearshape",
+                    description: Text(String(localized: "Click + or create a rule from a captured request."))
+                )
             }
         }
+        .padding(.horizontal, 18)
+    }
+
+    private var shortcutStrip: some View {
+        Text("New: ⌘N    Edit: ⌘↩    Delete: ⌘⌫    Duplicate: ⌘D    Toggle: ↵")
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 18)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
     }
 
     private var bottomBar: some View {
-        HStack(spacing: 4) {
-            Button {
-                viewModel.beginAdding()
-            } label: {
-                Image(systemName: "plus")
+        HStack(spacing: 8) {
+            HStack(spacing: 0) {
+                Button {
+                    openNewEditor()
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 12, weight: .regular))
+                        .frame(width: 18, height: 18)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut("n", modifiers: .command)
+
+                Rectangle()
+                    .fill(Color(nsColor: .separatorColor))
+                    .frame(width: 1, height: 18)
+
+                Button {
+                    viewModel.removeSelectedRules()
+                } label: {
+                    Image(systemName: "minus")
+                        .font(.system(size: 12, weight: .regular))
+                        .frame(width: 18, height: 18)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.delete, modifiers: .command)
+                .disabled(viewModel.selectedRuleIDs.isEmpty)
             }
-            .buttonStyle(.borderless)
+            .foregroundStyle(.primary)
+            .background(Color(nsColor: .controlBackgroundColor))
+            .overlay(
+                Rectangle()
+                    .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+            )
+            .frame(width: 37, height: 19)
+
+            Button(String(localized: "New Folder")) {
+                viewModel.createNewFolderPlaceholder()
+            }
+            .keyboardShortcut("n", modifiers: [.command, .option])
 
             Button {
-                viewModel.removeSelectedRules()
+                viewModel.errorMessage = String(localized: "Map Local checks rules from top to bottom and returns the first matching local response.")
             } label: {
-                Image(systemName: "minus")
+                Image(systemName: "questionmark.circle")
             }
-            .buttonStyle(.borderless)
-            .disabled(viewModel.selectedRuleIDs.isEmpty)
+            .buttonStyle(.bordered)
 
             Spacer()
 
-            Text(ruleCountLabel)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Button {
+                withAnimation {
+                    viewModel.isFilterVisible.toggle()
+                }
+            } label: {
+                Label(String(localized: "Filter"), systemImage: "magnifyingglass")
+            }
+            .keyboardShortcut("f", modifiers: .command)
+
+            Menu {
+                Button(String(localized: "New")) { openNewEditor() }
+                    .keyboardShortcut("n", modifiers: .command)
+                Button(String(localized: "Edit")) {
+                    if let rule = viewModel.selectedRule {
+                        openEditor(for: rule)
+                    }
+                }
+                .keyboardShortcut(.return, modifiers: .command)
+                .disabled(viewModel.selectedRule == nil)
+                Button(String(localized: "Duplicate")) { viewModel.duplicateSelectedRule() }
+                    .keyboardShortcut("d", modifiers: .command)
+                    .disabled(viewModel.selectedRule == nil)
+                Button(String(localized: "Toggle")) {
+                    if let id = viewModel.selectedRuleIDs.first {
+                        viewModel.toggleRule(id: id)
+                    }
+                }
+                .keyboardShortcut(.return, modifiers: [])
+                .disabled(viewModel.selectedRule == nil)
+                Divider()
+                Button(String(localized: "Delete"), role: .destructive) {
+                    viewModel.removeSelectedRules()
+                }
+                .keyboardShortcut(.delete, modifiers: .command)
+                .disabled(viewModel.selectedRuleIDs.isEmpty)
+            } label: {
+                HStack(spacing: 6) {
+                    Text(String(localized: "More"))
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+            }
+            .menuIndicator(.hidden)
+            .buttonStyle(.bordered)
+            .fixedSize()
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 18)
+        .padding(.bottom, 14)
     }
 
-    private func consumePendingDraft() {
+    @ViewBuilder
+    private func tableContextMenu(ids: Set<UUID>) -> some View {
+        if let id = ids.first {
+            Button(String(localized: "Edit Rule")) {
+                if let rule = viewModel.allRules.first(where: { $0.id == id }) {
+                    openEditor(for: rule)
+                }
+            }
+            Button(String(localized: "Duplicate")) {
+                viewModel.selectedRuleIDs = [id]
+                viewModel.duplicateSelectedRule()
+            }
+            Divider()
+            Button(String(localized: "Delete Rule"), role: .destructive) {
+                viewModel.removeRule(id: id)
+            }
+        }
+    }
+
+    private func openNewEditor(draft: MapLocalDraft? = nil) {
+        MapLocalEditorStore.shared.openNew(draft: draft)
+        openWindow(id: "mapLocalEditor")
+    }
+
+    private func openEditor(for rule: ProxyRule) {
+        MapLocalEditorStore.shared.openExisting(rule)
+        openWindow(id: "mapLocalEditor")
+    }
+
+    private func consumePendingDraftIfNeeded() {
         guard let draft = MapLocalDraftStore.shared.consumePending() else {
             return
         }
-        viewModel.pendingDraft = draft
-        viewModel.editingRule = nil
-        viewModel.showEditSheet = true
+        openNewEditor(draft: draft)
+    }
+}
+
+// MARK: - MapLocalEditorViewModel
+
+@MainActor @Observable
+final class MapLocalEditorViewModel {
+    // MARK: Internal
+
+    var name = "Untitled"
+    var urlText = ""
+    var method: MapLocalHTTPMethod = .any
+    var matchType: MapLocalMatchType = .wildcard
+    var includeSubpaths = false
+    var delayPreset: MapLocalDelayPreset = .none
+    var customDelaySeconds = 15
+    var targetMode: MapLocalTargetMode = .localFile
+    var localFileEnabled = true
+    var localDirectoryEnabled = false
+    var filePath = ""
+    var directoryPath = ""
+    var httpMessageText = MapLocalHTTPMessage.defaultMessage(statusCode: 200)
+    var autoSave = true
+    var errorMessage: String?
+
+    private(set) var existingID: UUID?
+    private(set) var originalRule: ProxyRule?
+    private(set) var draft: MapLocalDraft?
+    private(set) var isLoaded = false
+
+    var windowTitle: String {
+        "Map Local Editor: \(name.isEmpty ? "Untitled" : name)"
     }
 
-    private func browseFile(for ruleID: UUID) {
-        let rule = viewModel.allRules.first { $0.id == ruleID }
-        let isDir = rule.map { viewModel.isDirectory(for: $0) } ?? false
+    var selectedPath: String {
+        targetMode == .localDirectory ? directoryPath : filePath
+    }
 
+    var isDirectoryValid: Bool {
+        guard !directoryPath.isEmpty else {
+            return false
+        }
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: directoryPath, isDirectory: &isDirectory) && isDirectory.boolValue
+    }
+
+    var isSaveEnabled: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !urlText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && isTargetValid
+            && RegexValidator.compile(urlPatternForSaving()).isSuccess
+    }
+
+    var delayMs: Int {
+        if delayPreset == .custom {
+            return max(0, customDelaySeconds) * 1_000
+        }
+        return delayPreset.delayMs
+    }
+
+    func load(context: MapLocalEditorContext) {
+        existingID = context.existingRule?.id
+        originalRule = context.existingRule
+        draft = context.draft
+
+        if let rule = context.existingRule {
+            load(existingRule: rule)
+        } else if let draft = context.draft {
+            load(draft: draft)
+        } else {
+            loadBlank()
+        }
+        isLoaded = true
+    }
+
+    func choosePath() {
         let panel = NSOpenPanel()
-        panel.canChooseFiles = !isDir
-        panel.canChooseDirectories = isDir
+        panel.canChooseFiles = targetMode == .localFile
+        panel.canChooseDirectories = targetMode == .localDirectory
         panel.allowsMultipleSelection = false
-        panel.message = isDir
+        panel.message = targetMode == .localDirectory
             ? String(localized: "Select a local directory to serve files from")
             : String(localized: "Select a local file to serve for matched requests")
 
         if panel.runModal() == .OK, let url = panel.url {
-            viewModel.updateFilePath(for: ruleID, newPath: url.path(percentEncoded: false))
+            if targetMode == .localDirectory {
+                directoryPath = url.path(percentEncoded: false)
+                localDirectoryEnabled = true
+            } else {
+                filePath = url.path(percentEncoded: false)
+                localFileEnabled = true
+                httpMessageText = MapLocalHTTPMessage.message(statusCode: statusCodeFromText(), filePath: filePath)
+            }
         }
     }
 
-    private func abbreviatedPath(_ path: String) -> String {
+    func showSelectedPathInFinder() {
+        let path = selectedPath
         guard !path.isEmpty else {
-            return "—"
+            return
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+    }
+
+    func openSelectedPath(with app: MapLocalExternalEditor) {
+        let path = selectedPath
+        guard !path.isEmpty else {
+            return
         }
         let url = URL(fileURLWithPath: path)
-        let name = url.lastPathComponent
-        let parent = url.deletingLastPathComponent().lastPathComponent
-        return "…/\(parent)/\(name)"
-    }
-}
-
-// MARK: - MapLocalMatchMode
-
-private enum MapLocalMatchMode: String, CaseIterable {
-    case exactPath
-    case includeSubpaths
-    case regexAdvanced
-
-    // MARK: Internal
-
-    var displayName: String {
-        switch self {
-        case .exactPath: "Exact Path"
-        case .includeSubpaths: "Subpaths"
-        case .regexAdvanced: "Regex"
-        }
-    }
-}
-
-// MARK: - MapLocalMapToMode
-
-private enum MapLocalMapToMode: String, CaseIterable {
-    case localFile
-    case localDirectory
-    case snapshot
-
-    // MARK: Internal
-
-    var displayName: String {
-        switch self {
-        case .localFile: "Local File"
-        case .localDirectory: "Directory"
-        case .snapshot: "Snapshot"
-        }
-    }
-}
-
-// MARK: - MapLocalEditSheet
-
-private struct MapLocalEditSheet: View {
-    // MARK: Lifecycle
-
-    init(
-        existingRule: ProxyRule?,
-        draft: MapLocalDraft? = nil,
-        onSave: @escaping (ProxyRule) -> Void
-    ) {
-        self.onSave = onSave
-        self.draft = draft
-        self.existingID = existingRule?.id
-
-        if let existingRule {
-            _comment = State(initialValue: existingRule.name)
-            _urlPattern = State(initialValue: existingRule.matchCondition.urlPattern ?? "")
-            _priority = State(initialValue: existingRule.priority)
-            _isEnabled = State(initialValue: existingRule.isEnabled)
-            _matchMode = State(initialValue: .regexAdvanced)
-            if case let .mapLocal(path, code, isDir) = existingRule.action {
-                _filePath = State(initialValue: path)
-                _statusCode = State(initialValue: code)
-                _mapToMode = State(initialValue: isDir ? .localDirectory : .localFile)
-            }
-        } else if let draft {
-            _comment = State(initialValue: draft.suggestedName)
-            let defaultMode: MapLocalMatchMode = draft.origin == .domainQuickCreate
-                ? .includeSubpaths : .exactPath
-            _matchMode = State(initialValue: defaultMode)
-            if let url = draft.sourceURL {
-                _urlPattern = State(initialValue: Self.generatePattern(
-                    from: url, mode: defaultMode
-                ))
-            } else {
-                _urlPattern = State(initialValue: Self.generateDomainPattern(
-                    from: draft.sourceHost, mode: defaultMode
-                ))
-            }
+        if let bundleID = app.bundleIdentifier,
+           let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
+        {
+            NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: .init()) { _, _ in }
+        } else {
+            NSWorkspace.shared.open(url)
         }
     }
 
-    // MARK: Internal
-
-    let onSave: (ProxyRule) -> Void
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Form {
-                matchingRuleSection
-                mapToSection
-            }
-            .formStyle(.grouped)
-
-            HStack {
-                Spacer()
-                Button(String(localized: "Cancel")) { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button(isEditing ? String(localized: "Save") : String(localized: "Add Rule")) {
-                    saveRule()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(!isValid)
-            }
-            .padding()
+    func makeRule() -> ProxyRule? {
+        guard isSaveEnabled else {
+            errorMessage = String(localized: "Complete the matching rule and local target before saving.")
+            return nil
         }
-        .frame(width: 540, height: 520)
+
+        do {
+            if targetMode == .localFile {
+                try saveLocalFileIfNeeded()
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+
+        var condition = originalRule?.matchCondition ?? RuleMatchCondition()
+        condition.urlPattern = urlPatternForSaving()
+        condition.method = method.ruleValue
+
+        return ProxyRule(
+            id: existingID ?? UUID(),
+            name: name,
+            isEnabled: originalRule?.isEnabled ?? true,
+            matchCondition: condition,
+            action: .mapLocal(
+                filePath: targetMode == .localDirectory ? directoryPath : filePath,
+                statusCode: statusCodeFromText(),
+                isDirectory: targetMode == .localDirectory,
+                delayMs: delayMs
+            ),
+            priority: originalRule?.priority ?? 0
+        )
+    }
+
+    func urlPatternForSaving() -> String {
+        let trimmed = urlText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard matchType == .wildcard else {
+            return trimmed
+        }
+        let pattern = includeSubpaths && !trimmed.hasSuffix("*") ? "\(trimmed)*" : trimmed
+        return MapLocalPatternFormatter.wildcardToRegex(pattern)
     }
 
     // MARK: Private
 
+    private var isTargetValid: Bool {
+        switch targetMode {
+        case .localFile:
+            return localFileEnabled && !filePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .localDirectory:
+            return localDirectoryEnabled && isDirectoryValid
+        }
+    }
+
+    private func loadBlank() {
+        name = "Untitled"
+        urlText = ""
+        method = .any
+        matchType = .wildcard
+        includeSubpaths = false
+        delayPreset = .none
+        customDelaySeconds = 15
+        targetMode = .localFile
+        localFileEnabled = true
+        localDirectoryEnabled = false
+        filePath = Self.defaultMapLocalFilePath()
+        directoryPath = ""
+        httpMessageText = MapLocalHTTPMessage.defaultMessage(statusCode: 200)
+    }
+
+    private func load(draft: MapLocalDraft) {
+        loadBlank()
+        name = draft.suggestedName.isEmpty ? "Untitled" : draft.suggestedName
+        method = MapLocalHTTPMethod(ruleMethod: draft.sourceMethod)
+        includeSubpaths = draft.origin == .domainQuickCreate
+        if let sourceURL = draft.sourceURL {
+            urlText = sourceURL.absoluteString
+        } else {
+            urlText = "https://\(draft.sourceHost)/*"
+        }
+        if let body = draft.responseBody, !body.isEmpty {
+            let status = 200
+            let contentType = draft.responseContentType ?? "application/json; charset=utf-8"
+            let bodyText = String(data: body, encoding: .utf8) ?? ""
+            httpMessageText = MapLocalHTTPMessage.message(statusCode: status, contentType: contentType, body: bodyText)
+        }
+    }
+
+    private func load(existingRule rule: ProxyRule) {
+        name = rule.name.isEmpty ? "Untitled" : rule.name
+        let storedPattern = rule.matchCondition.urlPattern ?? ""
+        if MapLocalPatternFormatter.prefersWildcardPresentation(storedPattern) {
+            urlText = MapLocalPatternFormatter.readablePattern(storedPattern)
+            matchType = .wildcard
+        } else {
+            urlText = storedPattern
+            matchType = .regex
+        }
+        method = MapLocalHTTPMethod(ruleMethod: rule.matchCondition.method)
+        includeSubpaths = false
+        if case let .mapLocal(path, statusCode, isDirectory, delayMs) = rule.action {
+            targetMode = isDirectory ? .localDirectory : .localFile
+            filePath = isDirectory ? "" : path
+            directoryPath = isDirectory ? path : ""
+            localFileEnabled = !isDirectory
+            localDirectoryEnabled = isDirectory
+            delayPreset = MapLocalDelayPreset.from(delayMs: delayMs)
+            if delayPreset == .custom {
+                customDelaySeconds = max(0, delayMs / 1_000)
+            }
+            httpMessageText = MapLocalHTTPMessage.message(statusCode: statusCode, filePath: path)
+        }
+    }
+
+    private func statusCodeFromText() -> Int {
+        MapLocalHTTPMessage.parse(httpMessageText).statusCode
+    }
+
+    private func saveLocalFileIfNeeded() throws {
+        let parsed = MapLocalHTTPMessage.parse(httpMessageText)
+        let url = URL(fileURLWithPath: filePath)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data(parsed.body.utf8).write(to: url, options: .atomic)
+    }
+
+    private static func defaultMapLocalFilePath() -> String {
+        let directory = RockxyIdentity.current
+            .appSupportDirectory()
+            .appendingPathComponent("map-local", isDirectory: true)
+        return directory
+            .appendingPathComponent("default_message_\(UUID().uuidString.prefix(8)).json")
+            .path
+    }
+}
+
+private extension Result where Success == NSRegularExpression, Failure == RegexValidator.ValidationError {
+    var isSuccess: Bool {
+        if case .success = self {
+            return true
+        }
+        return false
+    }
+}
+
+// MARK: - MapLocalEditorWindowView
+
+struct MapLocalEditorWindowView: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var comment = ""
-    @State private var urlPattern = ""
-    @State private var matchMode: MapLocalMatchMode = .exactPath
-    @State private var mapToMode: MapLocalMapToMode = .localFile
-    @State private var filePath = ""
-    @State private var statusCode = 200
-    @State private var priority = 0
-    @State private var isEnabled = true
-    @State private var regexError: String?
+    @State private var editorStore = MapLocalEditorStore.shared
+    @State var viewModel = MapLocalEditorViewModel()
 
-    private let draft: MapLocalDraft?
-    private let existingID: UUID?
-    private let statusCodeOptions = [200, 201, 204, 301, 302, 400, 403, 404, 500, 502, 503]
-
-    private var isEditing: Bool {
-        existingID != nil
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            matchingRuleSection
+            mapToSection
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 28)
+        .padding(.bottom, 14)
+        .frame(width: 1_024, height: 720)
+        .navigationTitle(viewModel.windowTitle)
+        .onAppear { viewModel.load(context: editorStore.context) }
+        .onChange(of: editorStore.draftVersion) { _, _ in
+            viewModel.load(context: editorStore.context)
+        }
+        .alert(
+            String(localized: "Map Local"),
+            isPresented: Binding(
+                get: { viewModel.errorMessage != nil },
+                set: { if !$0 { viewModel.errorMessage = nil } }
+            )
+        ) {
+            Button(String(localized: "OK")) { viewModel.errorMessage = nil }
+        } message: {
+            if let error = viewModel.errorMessage {
+                Text(error)
+            }
+        }
     }
-
-    private var isValid: Bool {
-        guard !comment.isEmpty else {
-            return false
-        }
-        if mapToMode == .snapshot {
-            return draft?.hasResponseBody == true
-        }
-        guard !filePath.isEmpty else {
-            return false
-        }
-        if matchMode == .regexAdvanced {
-            return validateRegex(urlPattern)
-        }
-        return true
-    }
-
-    // MARK: - Matching Rule Section
 
     private var matchingRuleSection: some View {
-        Section(String(localized: "Matching Rule")) {
-            TextField(String(localized: "Name"), text: $comment)
+        VStack(alignment: .leading, spacing: 7) {
+            Text(String(localized: "Matching Rule"))
+                .font(.system(size: 15))
 
-            if let draft, let url = draft.sourceURL {
-                LabeledContent(String(localized: "Source")) {
-                    Text("\(draft.sourceMethod ?? "GET") \(url.absoluteString)")
-                        .font(.system(size: 10, design: .monospaced))
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(String(localized: "Name:"))
+                        .frame(width: 70, alignment: .trailing)
+                    TextField(String(localized: "Untitled"), text: $viewModel.name)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                HStack {
+                    Text(String(localized: "URL:"))
+                        .frame(width: 70, alignment: .trailing)
+                    TextField("api.proxyman.com/v1/*", text: $viewModel.urlText)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                HStack(spacing: 10) {
+                    Spacer().frame(width: 70)
+                    methodMenu
+                    matchTypeMenu
+                    Text(String(localized: "Support wildcard * and ?."))
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .textSelection(.enabled)
+                    Button(String(localized: "Test your Rule")) {}
+                        .buttonStyle(.link)
+                }
+
+                HStack {
+                    Spacer().frame(width: 70)
+                    Toggle(String(localized: "Include all subpaths of this URL"), isOn: $viewModel.includeSubpaths)
+                        .toggleStyle(.checkbox)
+                }
+
+                Divider()
+                    .padding(.leading, 70)
+
+                HStack(spacing: 12) {
+                    Spacer().frame(width: 70)
+                    Text(String(localized: "Advanced Settings:"))
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                HStack(spacing: 10) {
+                    Text(String(localized: "Delay Response:"))
+                        .frame(width: 140, alignment: .trailing)
+                    delayMenu
+                    if viewModel.delayPreset == .custom {
+                        Stepper(
+                            String(localized: "\(viewModel.customDelaySeconds) seconds"),
+                            value: $viewModel.customDelaySeconds,
+                            in: 0 ... 300
+                        )
+                        .frame(width: 160)
+                    }
                 }
             }
-
-            Picker(String(localized: "Match"), selection: $matchMode) {
-                ForEach(MapLocalMatchMode.allCases, id: \.self) { mode in
-                    Text(mode.displayName).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .onChange(of: matchMode) { _, newMode in
-                if let draft, let url = draft.sourceURL {
-                    urlPattern = Self.generatePattern(from: url, mode: newMode)
-                } else if let draft {
-                    urlPattern = Self.generateDomainPattern(from: draft.sourceHost, mode: newMode)
-                }
-                regexError = nil
-            }
-
-            TextField(String(localized: "URL Pattern"), text: $urlPattern)
-                .font(.system(.body, design: .monospaced))
-
-            if matchMode == .regexAdvanced, let error = regexError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-
-            if let draft, draft.sourceURL != nil {
-                matchPreview
-            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color(nsColor: .controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
         }
     }
-
-    @ViewBuilder private var matchPreview: some View {
-        let sourceURL = draft?.sourceURL?.absoluteString ?? ""
-        let subpathURL = (draft?.sourceURL?.absoluteString ?? "") + "/123"
-        let siblingURL = {
-            guard let url = draft?.sourceURL else {
-                return ""
-            }
-            return url.deletingLastPathComponent().appendingPathComponent("other").absoluteString
-        }()
-
-        VStack(alignment: .leading, spacing: 2) {
-            previewLine(url: sourceURL, matches: testMatch(sourceURL))
-            previewLine(url: subpathURL, matches: testMatch(subpathURL))
-            previewLine(url: siblingURL, matches: testMatch(siblingURL))
-        }
-        .padding(7)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.5))
-        .clipShape(RoundedRectangle(cornerRadius: 5))
-    }
-
-    // MARK: - Map To Section
 
     private var mapToSection: some View {
-        Section(String(localized: "Map To")) {
-            Picker(String(localized: "Mode"), selection: $mapToMode) {
-                Text(MapLocalMapToMode.localFile.displayName).tag(MapLocalMapToMode.localFile)
-                Text(MapLocalMapToMode.localDirectory.displayName).tag(MapLocalMapToMode.localDirectory)
-                Text(MapLocalMapToMode.snapshot.displayName).tag(MapLocalMapToMode.snapshot)
-                    .disabled(draft?.hasResponseBody != true)
-            }
-            .pickerStyle(.segmented)
+        VStack(alignment: .leading, spacing: 7) {
+            Text(String(localized: "Map To"))
+                .font(.system(size: 15))
 
-            if mapToMode == .snapshot, draft?.hasResponseBody != true {
-                Text(String(localized: "No captured response body available for this draft."))
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
+            ZStack(alignment: .top) {
+                VStack(spacing: 0) {
+                    if viewModel.targetMode == .localFile {
+                        localFileSection
+                    } else {
+                        localDirectorySection
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 30)
+                .padding(.bottom, 14)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+                .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color(nsColor: .separatorColor).opacity(0.35)))
+                .padding(.top, 10)
 
-            if mapToMode == .snapshot, draft?.hasResponseBody == true {
-                let expectedPath = MapLocalSnapshotService.expectedSnapshotPath(
-                    contentType: draft?.responseContentType,
-                    requestURL: draft?.sourceURL
+                Picker("", selection: $viewModel.targetMode) {
+                    Text(MapLocalTargetMode.localFile.displayName).tag(MapLocalTargetMode.localFile)
+                    Text(MapLocalTargetMode.localDirectory.displayName).tag(MapLocalTargetMode.localDirectory)
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 240)
+                .background(
+                    Color(nsColor: .controlBackgroundColor)
+                        .padding(.horizontal, -8)
+                        .padding(.vertical, -3)
                 )
-                LabeledContent(String(localized: "Path")) {
-                    Text(expectedPath)
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                Text(String(localized: "Snapshot will be saved when you click Add Rule."))
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            } else if mapToMode != .snapshot {
-                HStack {
-                    TextField(
-                        mapToMode == .localDirectory
-                            ? String(localized: "Directory Path")
-                            : String(localized: "File Path"),
-                        text: $filePath
-                    )
-                    .font(.system(.body, design: .monospaced))
-                    .lineLimit(1)
-
-                    Button(String(localized: "Browse…")) { choosePath() }
-                }
-
-                if filePath.isEmpty {
-                    Text(String(localized: "Select a local file or directory"))
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-            }
-
-            if !filePath.isEmpty, mapToMode != .snapshot {
-                LabeledContent(String(localized: "Content-Type")) {
-                    Text(MimeTypeResolver.mimeType(for: filePath))
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Picker(String(localized: "Status Code"), selection: $statusCode) {
-                ForEach(statusCodeOptions, id: \.self) { code in
-                    Text("\(code)").tag(code)
-                }
-            }
-            .pickerStyle(.menu)
-
-            if mapToMode == .localDirectory {
-                directoryResolutionHint
+                .zIndex(1)
             }
         }
     }
 
-    @ViewBuilder private var directoryResolutionHint: some View {
-        let sourcePath = draft?.sourcePath ?? "/example/path"
-        let dirDisplay = filePath.isEmpty ? "~/Projects/dist/" : filePath
-
-        VStack(alignment: .leading, spacing: 4) {
-            Text(String(localized: "Path Resolution"))
-                .font(.caption.bold())
-                .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Request: \(sourcePath)")
-                    .font(.system(.caption2, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.down")
-                        .font(.caption2)
-                        .foregroundStyle(.green)
-                    Text("Local: \(dirDisplay)\(sourcePath)")
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundStyle(.green)
-                }
-                Text(String(localized: "Root path (/) falls back to index.html"))
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .padding(8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.5))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-    }
-
-    private func previewLine(url: String, matches: Bool) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: matches ? "checkmark.circle" : "xmark.circle")
-                .font(.system(size: 9))
-                .foregroundStyle(matches ? .green : .red)
-            Text(url)
-                .font(.system(size: 9, design: .monospaced))
+    private var localFileSection: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Toggle(String(localized: "Enable Local File"), isOn: $viewModel.localFileEnabled)
+                .toggleStyle(.checkbox)
+            Text("File: \(viewModel.filePath)")
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
-        }
-    }
-
-    private static func escapeRegex(_ string: String) -> String {
-        NSRegularExpression.escapedPattern(for: string)
-    }
-
-    private static func generatePattern(from url: URL, mode: MapLocalMatchMode) -> String {
-        let scheme = url.scheme ?? "https"
-        let host = escapeRegex(url.host ?? "")
-        let path = escapeRegex(url.path)
-
-        switch mode {
-        case .exactPath:
-            return "^\(scheme)://\(host)\(path)$"
-        case .includeSubpaths:
-            return "^\(scheme)://\(host)\(path).*"
-        case .regexAdvanced:
-            return "\(scheme)://\(host)\(path)"
-        }
-    }
-
-    private static func generateDomainPattern(from host: String, mode: MapLocalMatchMode) -> String {
-        let escapedHost = escapeRegex(host)
-        switch mode {
-        case .exactPath:
-            return "^https://\(escapedHost)/?$"
-        case .includeSubpaths:
-            return "^https://\(escapedHost)/.*"
-        case .regexAdvanced:
-            return ".*\(escapedHost).*"
-        }
-    }
-
-    private func testMatch(_ url: String) -> Bool {
-        guard !urlPattern.isEmpty else {
-            return false
-        }
-        return url.range(of: urlPattern, options: .regularExpression) != nil
-    }
-
-    private func choosePath() {
-        let isDir = mapToMode == .localDirectory
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = !isDir
-        panel.canChooseDirectories = isDir
-        panel.allowsMultipleSelection = false
-        panel.message = isDir
-            ? String(localized: "Select a local directory to serve files from")
-            : String(localized: "Select a local file to serve for matched requests")
-
-        if panel.runModal() == .OK, let url = panel.url {
-            filePath = url.path(percentEncoded: false)
-        }
-    }
-
-    private func saveRule() {
-        var resolvedPath = filePath
-        let isDir = mapToMode == .localDirectory
-
-        if mapToMode == .snapshot, let draft {
-            guard let result = MapLocalSnapshotService.saveSnapshot(
-                responseBody: draft.responseBody,
-                contentType: draft.responseContentType,
-                requestURL: draft.sourceURL
-            ) else {
-                return
+            HStack(spacing: 7) {
+                Circle()
+                    .fill(.green)
+                    .frame(width: 10, height: 10)
+                Text(String(localized: "Map Response Body with a local file (Saved)"))
+                    .foregroundStyle(.secondary)
             }
-            resolvedPath = result.path
-        }
 
-        let condition = RuleMatchCondition(
-            urlPattern: urlPattern.isEmpty ? nil : urlPattern
-        )
-        let rule = ProxyRule(
-            id: existingID ?? UUID(),
-            name: comment,
-            isEnabled: isEnabled,
-            matchCondition: condition,
-            action: .mapLocal(filePath: resolvedPath, statusCode: statusCode, isDirectory: isDir),
-            priority: priority
-        )
-        onSave(rule)
+            MapLocalHTTPMessageEditor(text: $viewModel.httpMessageText)
+                .frame(minHeight: 238)
+                .clipped()
+                .overlay(Rectangle().stroke(Color(nsColor: .separatorColor).opacity(0.35)))
+
+            HStack(spacing: 10) {
+                Button(String(localized: "Select Local File")) { viewModel.choosePath() }
+                Text(String(localized: "Accept HTTP Message Format or Local File"))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.9)
+                Button {
+                    viewModel.errorMessage = String(localized: """
+                    Paste an HTTP response message or plain body. Rockxy saves the body to the local file and uses the status line for the response code.
+                    """)
+                } label: {
+                    Image(systemName: "questionmark.circle")
+                }
+                .buttonStyle(.borderless)
+                Spacer()
+                gearMenu
+                Button(String(localized: "Save ⌘S")) { saveAndClose() }
+                    .keyboardShortcut("s", modifiers: .command)
+                    .disabled(!viewModel.isSaveEnabled)
+            }
+        }
+    }
+
+    private var localDirectorySection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Toggle(String(localized: "Enable Local Directory"), isOn: $viewModel.localDirectoryEnabled)
+                .toggleStyle(.checkbox)
+
+            HStack {
+                Text(String(localized: "Directory Path:"))
+                TextField("", text: $viewModel.directoryPath)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(viewModel.isDirectoryValid ? .green : .red)
+                    .frame(width: 10, height: 10)
+                Text(viewModel.isDirectoryValid
+                    ? String(localized: "Directory Found")
+                    : String(localized: "Directory Not Found!"))
+                .foregroundStyle(.secondary)
+            }
+            .padding(.leading, 205)
+
+            HStack(spacing: 12) {
+                Spacer().frame(width: 200)
+                Button(String(localized: "Select Directory")) { viewModel.choosePath() }
+                Button(String(localized: "Show in Finder")) { viewModel.showSelectedPathInFinder() }
+                    .disabled(!viewModel.isDirectoryValid)
+            }
+
+            HStack(spacing: 12) {
+                Spacer().frame(width: 200)
+                Text(String(localized: "Support map from Root or Sub-Directories"))
+                    .foregroundStyle(.secondary)
+                Button {
+                    viewModel.errorMessage = String(localized: """
+                    Directory mode maps request subpaths into the selected local directory. Root requests fall back to index.html when present.
+                    """)
+                } label: {
+                    Image(systemName: "questionmark.circle")
+                }
+                .buttonStyle(.borderless)
+                Spacer()
+                Button(String(localized: "Save ⌘S")) { saveAndClose() }
+                    .keyboardShortcut("s", modifiers: .command)
+                    .disabled(!viewModel.isSaveEnabled)
+            }
+            Spacer(minLength: 80)
+        }
+    }
+
+    private var methodMenu: some View {
+        Menu {
+            ForEach(Array(MapLocalEditorMenuContent.methodSections.enumerated()), id: \.offset) { index, section in
+                ForEach(section) { method in
+                    Button { viewModel.method = method } label: {
+                        menuCheckmarkLabel(method.rawValue, isSelected: viewModel.method == method)
+                    }
+                }
+                if index < MapLocalEditorMenuContent.methodSections.count - 1 {
+                    Divider()
+                }
+            }
+        } label: {
+            menuLabel(viewModel.method.rawValue)
+        }
+        .menuIndicator(.hidden)
+        .buttonStyle(.bordered)
+        .fixedSize()
+    }
+
+    private var matchTypeMenu: some View {
+        Menu {
+            ForEach(Array(MapLocalEditorMenuContent.matchTypeSections.enumerated()), id: \.offset) { index, section in
+                ForEach(section) { matchType in
+                    Button { viewModel.matchType = matchType } label: {
+                        menuCheckmarkLabel(matchType.displayName, isSelected: viewModel.matchType == matchType)
+                    }
+                }
+                if index < MapLocalEditorMenuContent.matchTypeSections.count - 1 {
+                    Divider()
+                }
+            }
+            Divider()
+            Menu(String(localized: "Advanced")) {
+                Button(String(localized: "Use Regex")) { viewModel.matchType = .regex }
+                Button(String(localized: "Use Wildcard")) { viewModel.matchType = .wildcard }
+            }
+        } label: {
+            menuLabel(viewModel.matchType.displayName)
+        }
+        .menuIndicator(.hidden)
+        .buttonStyle(.bordered)
+        .fixedSize()
+    }
+
+    private var delayMenu: some View {
+        Menu {
+            ForEach(Array(MapLocalEditorMenuContent.delaySections.enumerated()), id: \.offset) { index, section in
+                ForEach(section) { preset in
+                    Button { viewModel.delayPreset = preset } label: {
+                        menuCheckmarkLabel(preset.displayName, isSelected: viewModel.delayPreset == preset)
+                    }
+                }
+                if index < MapLocalEditorMenuContent.delaySections.count - 1 {
+                    Divider()
+                }
+            }
+        } label: {
+            menuLabel(viewModel.delayPreset.displayName, minWidth: 132)
+        }
+        .menuIndicator(.hidden)
+        .buttonStyle(.bordered)
+        .fixedSize()
+    }
+
+    private var gearMenu: some View {
+        Menu {
+            Toggle(String(localized: "Auto-Save"), isOn: $viewModel.autoSave)
+            Divider()
+            Button(String(localized: "Show in Finder...")) { viewModel.showSelectedPathInFinder() }
+            Divider()
+            ForEach(MapLocalExternalEditor.allCases) { editor in
+                Button(editor.displayName) { viewModel.openSelectedPath(with: editor) }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "gearshape.fill")
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .frame(minWidth: 50)
+        }
+        .menuIndicator(.hidden)
+        .buttonStyle(.bordered)
+        .fixedSize()
+    }
+
+    private func menuCheckmarkLabel(_ title: String, isSelected: Bool) -> some View {
+        HStack(spacing: 7) {
+            if isSelected {
+                Image(systemName: "checkmark")
+            }
+            Text(title)
+        }
+    }
+
+    private func menuLabel(_ title: String, minWidth: CGFloat = 90) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.system(size: 10, weight: .semibold))
+        }
+        .frame(minWidth: minWidth)
+    }
+
+    private func saveAndClose() {
+        guard let rule = viewModel.makeRule() else {
+            return
+        }
+        if viewModel.existingID == nil {
+            Task { await RulePolicyGate.shared.addRule(rule) }
+        } else {
+            Task { await RulePolicyGate.shared.updateRule(rule) }
+        }
         dismiss()
     }
+}
 
-    private func validateRegex(_ pattern: String) -> Bool {
-        guard !pattern.isEmpty else {
-            return false
+// MARK: - MapLocalExternalEditor
+
+enum MapLocalExternalEditor: String, CaseIterable, Identifiable {
+    case code
+    case cursor
+    case textEdit
+    case xcode
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .code: "Code"
+        case .cursor: "Cursor"
+        case .textEdit: "TextEdit"
+        case .xcode: "Xcode"
         }
-        do {
-            _ = try NSRegularExpression(pattern: pattern)
-            regexError = nil
-            return true
-        } catch {
-            regexError = String(localized: "Invalid regex: \(error.localizedDescription)")
-            return false
+    }
+
+    var bundleIdentifier: String? {
+        switch self {
+        case .code: "com.microsoft.VSCode"
+        case .cursor: "com.todesktop.230313mzl4w4u92"
+        case .textEdit: "com.apple.TextEdit"
+        case .xcode: "com.apple.dt.Xcode"
         }
+    }
+}
+
+// MARK: - MapLocalHTTPMessage
+
+enum MapLocalHTTPMessage {
+    static func defaultMessage(statusCode: Int) -> String {
+        message(statusCode: statusCode, contentType: "application/json; charset=utf-8", body: "{\n  \"status\": \"ok\"\n}")
+    }
+
+    static func message(statusCode: Int, filePath: String) -> String {
+        let body = (try? String(contentsOfFile: filePath, encoding: .utf8)) ?? "{\n  \"status\": \"ok\"\n}"
+        return message(statusCode: statusCode, contentType: MimeTypeResolver.mimeType(for: filePath), body: body)
+    }
+
+    static func message(statusCode: Int, contentType: String, body: String) -> String {
+        let status = HTTPURLResponse.localizedString(forStatusCode: statusCode).uppercased()
+        return "HTTP/1.1 \(statusCode) \(status)\nContent-Type: \(contentType)\n\n\(body)"
+    }
+
+    static func parse(_ text: String) -> (statusCode: Int, body: String) {
+        let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
+        let lines = normalized.components(separatedBy: "\n")
+        let statusCode = lines.first
+            .flatMap { line in
+                line.split(separator: " ").dropFirst().first.flatMap { Int($0) }
+            } ?? 200
+
+        if let range = normalized.range(of: "\n\n") {
+            return (statusCode, String(normalized[range.upperBound...]))
+        }
+        return (statusCode, normalized)
     }
 }

@@ -108,6 +108,34 @@ struct AllowListWindowViewModelTests {
     }
 
     @Test
+    func filterByMethodColumnMatchesAnyFallback() {
+        let (viewModel, url) = makeSetup()
+        defer { cleanup(url) }
+
+        viewModel.addRule(
+            ruleName: "all methods",
+            urlPattern: "*all.example.com*",
+            httpMethod: .any,
+            matchType: .wildcard,
+            includeSubpaths: true
+        )
+        viewModel.addRule(
+            ruleName: "post only",
+            urlPattern: "*post.example.com*",
+            httpMethod: .post,
+            matchType: .wildcard,
+            includeSubpaths: true
+        )
+
+        viewModel.filterColumn = .method
+        viewModel.filterText = "any"
+
+        let filtered = viewModel.filteredRules
+        #expect(filtered.count == 1)
+        #expect(filtered[0].name == "all methods")
+    }
+
+    @Test
     func filterByMatchingRuleColumn() {
         let (viewModel, url) = makeSetup()
         defer { cleanup(url) }
@@ -207,6 +235,37 @@ struct AllowListWindowViewModelTests {
         #expect(viewModel.selectedRuleID == originalID)
     }
 
+    @Test
+    func updateRuleWithMissingIDIsNoopAndPreservesSelection() throws {
+        let (viewModel, url) = makeSetup()
+        defer { cleanup(url) }
+
+        viewModel.addRule(
+            ruleName: "kept",
+            urlPattern: "*kept.example.com*",
+            httpMethod: .get,
+            matchType: .wildcard,
+            includeSubpaths: true
+        )
+        let selectedID = try #require(viewModel.selectedRuleID)
+
+        viewModel.updateRule(
+            id: UUID(),
+            ruleName: "missing",
+            urlPattern: "*missing.example.com*",
+            httpMethod: .post,
+            matchType: .regex,
+            includeSubpaths: false
+        )
+
+        #expect(viewModel.manager.rules.count == 1)
+        #expect(viewModel.manager.rules[0].id == selectedID)
+        #expect(viewModel.manager.rules[0].name == "kept")
+        #expect(viewModel.manager.rules[0].rawPattern == "*kept.example.com*")
+        #expect(viewModel.manager.rules[0].method == "GET")
+        #expect(viewModel.selectedRuleID == selectedID)
+    }
+
     // MARK: - Duplicate Flow
 
     @Test
@@ -232,6 +291,8 @@ struct AllowListWindowViewModelTests {
         #expect(copy.rawPattern == "*a.com*")
         #expect(copy.method == "GET")
         #expect(copy.matchType == .wildcard)
+        #expect(copy.includeSubpaths)
+        #expect(copy.isEnabled)
         #expect(viewModel.selectedRuleID == copy.id)
     }
 
@@ -274,6 +335,27 @@ struct AllowListWindowViewModelTests {
         #expect(viewModel.manager.rules.isEmpty)
         #expect(viewModel.selectedRuleID == nil)
         #expect(!viewModel.manager.rules.contains { $0.id == removedID })
+    }
+
+    @Test
+    func removeSelectedIsNoopWhenNothingSelected() {
+        let (viewModel, url) = makeSetup()
+        defer { cleanup(url) }
+
+        viewModel.addRule(
+            ruleName: "kept",
+            urlPattern: "*kept.example.com*",
+            httpMethod: .any,
+            matchType: .wildcard,
+            includeSubpaths: true
+        )
+        viewModel.selectedRuleID = nil
+
+        viewModel.removeSelected()
+
+        #expect(viewModel.manager.rules.count == 1)
+        #expect(viewModel.manager.rules[0].name == "kept")
+        #expect(viewModel.selectedRuleID == nil)
     }
 
     // MARK: - Toggle Flow
@@ -538,6 +620,72 @@ struct AllowListWindowViewModelTests {
         #expect(viewModel.manager.rules[0].name == "imported")
     }
 
+    @Test
+    func exportRulesJSONReturnsManagerPayload() throws {
+        let (viewModel, url) = makeSetup()
+        defer { cleanup(url) }
+
+        viewModel.addRule(
+            ruleName: "api",
+            urlPattern: "*api.example.com/*",
+            httpMethod: .post,
+            matchType: .wildcard,
+            includeSubpaths: true
+        )
+        viewModel.setActive(true)
+
+        let data = try viewModel.exportRulesJSON()
+        let decoded = try JSONDecoder().decode(ImportPayload.self, from: data)
+
+        #expect(decoded.isActive)
+        #expect(decoded.rules.count == 1)
+        #expect(decoded.rules[0].name == "api")
+        #expect(decoded.rules[0].method == "POST")
+    }
+
+    @Test
+    func importRulesReplacesListAndSelectsFirstImportedRule() {
+        let (viewModel, url) = makeSetup()
+        defer { cleanup(url) }
+
+        viewModel.addRule(
+            ruleName: "old",
+            urlPattern: "*old.example.com/*",
+            httpMethod: .any,
+            matchType: .wildcard,
+            includeSubpaths: true
+        )
+
+        let imported = [
+            AllowListRule(name: "first", rawPattern: "*first.example.com/*"),
+            AllowListRule(name: "second", rawPattern: "*second.example.com/*"),
+        ]
+        viewModel.importRules(imported)
+
+        #expect(viewModel.manager.rules.map(\.name) == ["first", "second"])
+        #expect(viewModel.selectedRuleID == imported[0].id)
+    }
+
+    @Test
+    func importRulesWithEmptyListClearsRulesAndSelection() {
+        let (viewModel, url) = makeSetup()
+        defer { cleanup(url) }
+
+        viewModel.addRule(
+            ruleName: "old",
+            urlPattern: "*old.example.com/*",
+            httpMethod: .any,
+            matchType: .wildcard,
+            includeSubpaths: true
+        )
+        #expect(viewModel.selectedRuleID != nil)
+
+        viewModel.importRules([])
+
+        #expect(viewModel.manager.rules.isEmpty)
+        #expect(viewModel.selectedRuleID == nil)
+    }
+
     // MARK: Private
 
     // MARK: - Helpers
@@ -560,7 +708,7 @@ struct AllowListWindowViewModelTests {
 
 /// Mirror of the private `AllowListStorage` shape so we can build fixture import data
 /// without needing to expose the internal type.
-private struct ImportPayload: Encodable {
+private struct ImportPayload: Codable {
     let schemaVersion: Int
     let isActive: Bool
     let rules: [AllowListRule]

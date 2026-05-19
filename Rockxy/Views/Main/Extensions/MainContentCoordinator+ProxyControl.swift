@@ -82,7 +82,9 @@ extension MainContentCoordinator {
                         return
                     }
                     let count = notification.userInfo?["count"] as? Int ?? Int(5e3)
-                    self.evictOldestTransactions(count: count)
+                    Task { @MainActor in
+                        self.evictOldestTransactions(count: count)
+                    }
                 }
 
                 readiness.startObserving()
@@ -92,9 +94,11 @@ extension MainContentCoordinator {
                 do {
                     try await SystemProxyManager.shared.enableSystemProxy(port: resolvedPort)
                     isSystemProxyConfigured = true
+                    isProxyOverridden = true
                     Self.logger.info("System proxy enabled on port \(resolvedPort)")
                 } catch {
                     isSystemProxyConfigured = false
+                    isProxyOverridden = false
                     readiness.setProxyEnableFailed(message: error.localizedDescription)
                     Self.logger.warning(
                         "System proxy not configured: \(error.localizedDescription). Proxy still running on 127.0.0.1:\(resolvedPort)"
@@ -130,6 +134,7 @@ extension MainContentCoordinator {
                 Self.logger.error("Failed to restore proxy: \(error.localizedDescription)")
             }
             isSystemProxyConfigured = false
+            isProxyOverridden = false
             readiness.setCaptureActive(false)
             SSLProxyingManager.shared.forceGlobalPassthrough = false
 
@@ -158,12 +163,73 @@ extension MainContentCoordinator {
             do {
                 try await SystemProxyManager.shared.enableSystemProxy(port: self.activeProxyPort)
                 isSystemProxyConfigured = true
+                isProxyOverridden = true
                 Self.logger.info("System proxy enabled on retry")
             } catch {
                 isSystemProxyConfigured = false
+                isProxyOverridden = false
                 readiness.setProxyEnableFailed(message: error.localizedDescription)
                 Self.logger.warning("System proxy retry failed: \(error.localizedDescription)")
             }
+        }
+    }
+
+    func refreshProxyOverrideStatus() {
+        Task { @MainActor in
+            let owner = await SystemProxyManager.shared.effectiveOverrideOwner()
+            let overridden = switch owner {
+            case .none:
+                false
+            case .direct, .helper:
+                true
+            }
+            isProxyOverridden = overridden
+            isSystemProxyConfigured = overridden
+        }
+    }
+
+    func switchOffSystemProxyOverride() {
+        Task { @MainActor in
+            do {
+                try await SystemProxyManager.shared.disableSystemProxy()
+                isSystemProxyConfigured = false
+                isProxyOverridden = false
+                await readiness.refresh()
+                Self.logger.info("System proxy override switched off")
+            } catch {
+                readiness.setProxyEnableFailed(message: error.localizedDescription)
+                Self.logger.error("Failed to switch off system proxy override: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func switchOnSystemProxyOverride() {
+        guard isProxyRunning else {
+            return
+        }
+        readiness.clearProxyEnableFailure()
+
+        Task { @MainActor in
+            do {
+                try await SystemProxyManager.shared.enableSystemProxy(port: self.activeProxyPort)
+                isSystemProxyConfigured = true
+                isProxyOverridden = true
+                await readiness.refresh()
+                Self.logger.info("System proxy override switched on")
+            } catch {
+                isSystemProxyConfigured = false
+                isProxyOverridden = false
+                readiness.setProxyEnableFailed(message: error.localizedDescription)
+                Self.logger.error("Failed to switch on system proxy override: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func toggleSystemProxyOverride() {
+        if isProxyOverridden {
+            switchOffSystemProxyOverride()
+        } else {
+            switchOnSystemProxyOverride()
         }
     }
 

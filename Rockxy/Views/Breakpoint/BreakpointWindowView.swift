@@ -30,14 +30,21 @@ struct BreakpointWindowView: View {
     // MARK: Private
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openWindow) private var openWindow
 
     private let manager = BreakpointManager.shared
     private let windowModel = BreakpointWindowModel.shared
 
     private var actionBar: some View {
-        HStack {
+        HStack(spacing: 10) {
             Button(String(localized: "Cancel")) { dismiss() }
                 .keyboardShortcut(.cancelAction)
+
+            Button {
+                openWindow(id: "breakpointTemplates")
+            } label: {
+                Label(String(localized: "Templates"), systemImage: "doc.text")
+            }
 
             Spacer()
 
