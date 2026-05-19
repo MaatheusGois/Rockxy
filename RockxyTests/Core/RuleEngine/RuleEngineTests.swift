@@ -150,10 +150,9 @@ struct RuleEngineTests {
 
         let url = try #require(URL(string: "https://example.com/test"))
         let enabledResult = await engine.evaluate(method: "GET", url: url, headers: [])
-        if case .block = enabledResult {
-            #expect(true)
-        } else {
+        guard case .block = enabledResult else {
             Issue.record("Expected block rule while Block List tool is enabled")
+            return
         }
 
         await engine.setBlockListToolEnabled(false)
@@ -162,6 +161,40 @@ struct RuleEngineTests {
             #expect(delayMs == 250)
         } else {
             Issue.record("Expected non-block rule to remain active")
+        }
+    }
+
+    @Test("Map Remote tool gate skips map remote rules only")
+    func mapRemoteToolGateSkipsOnlyMapRemoteRules() async throws {
+        let engine = RuleEngine()
+        let remoteRule = ProxyRule(
+            name: "Remote",
+            isEnabled: true,
+            matchCondition: RuleMatchCondition(urlPattern: ".*example\\.com.*"),
+            action: .mapRemote(configuration: MapRemoteConfiguration(host: "staging.example.com"))
+        )
+        let throttleRule = ProxyRule(
+            name: "Throttle",
+            isEnabled: true,
+            matchCondition: RuleMatchCondition(urlPattern: ".*example\\.com.*"),
+            action: .throttle(delayMs: 250)
+        )
+        await engine.addRule(remoteRule)
+        await engine.addRule(throttleRule)
+
+        let url = try #require(URL(string: "https://example.com/test"))
+        let enabledResult = await engine.evaluate(method: "GET", url: url, headers: [])
+        guard case .mapRemote = enabledResult else {
+            Issue.record("Expected map remote rule while Map Remote tool is enabled")
+            return
+        }
+
+        await engine.setMapRemoteToolEnabled(false)
+        let disabledResult = await engine.evaluate(method: "GET", url: url, headers: [])
+        if case let .throttle(delayMs) = disabledResult {
+            #expect(delayMs == 250)
+        } else {
+            Issue.record("Expected non-map-remote rule to remain active")
         }
     }
 

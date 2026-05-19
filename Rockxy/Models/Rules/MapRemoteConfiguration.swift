@@ -11,6 +11,7 @@ struct MapRemoteConfiguration: Codable, Hashable {
         port: Int? = nil,
         path: String? = nil,
         query: String? = nil,
+        preserveOriginalURL: Bool = false,
         preserveHostHeader: Bool = false
     ) {
         self.scheme = scheme
@@ -18,6 +19,7 @@ struct MapRemoteConfiguration: Codable, Hashable {
         self.port = port
         self.path = path
         self.query = query
+        self.preserveOriginalURL = preserveOriginalURL
         self.preserveHostHeader = preserveHostHeader
     }
 
@@ -28,6 +30,7 @@ struct MapRemoteConfiguration: Codable, Hashable {
         port = try container.decodeIfPresent(Int.self, forKey: .port)
         path = try container.decodeIfPresent(String.self, forKey: .path)
         query = try container.decodeIfPresent(String.self, forKey: .query)
+        preserveOriginalURL = try container.decodeIfPresent(Bool.self, forKey: .preserveOriginalURL) ?? false
         preserveHostHeader = try container.decodeIfPresent(Bool.self, forKey: .preserveHostHeader) ?? false
     }
 
@@ -43,6 +46,7 @@ struct MapRemoteConfiguration: Codable, Hashable {
             port: components.port,
             path: components.path.isEmpty ? nil : components.path,
             query: components.query,
+            preserveOriginalURL: false,
             preserveHostHeader: false
         )
     }
@@ -54,6 +58,7 @@ struct MapRemoteConfiguration: Codable, Hashable {
     var port: Int?
     var path: String?
     var query: String?
+    var preserveOriginalURL: Bool
     var preserveHostHeader: Bool
 
     /// Whether any destination override is set.

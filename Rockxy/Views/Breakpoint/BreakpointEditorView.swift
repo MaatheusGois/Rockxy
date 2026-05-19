@@ -46,6 +46,9 @@ struct BreakpointEditorView: View {
     @State private var selectedTab: BreakpointEditorTab = .headers
     @State private var queryItems: [EditableQueryItem] = []
     @State private var lastSyncedURL: String = ""
+    @State private var rawMessage: String = ""
+    @State private var rawMessageItemID: UUID?
+    @State private var templateStore = BreakpointTemplateStore.shared
 
     private var emptyState: some View {
         VStack(spacing: 4) {
@@ -170,6 +173,8 @@ struct BreakpointEditorView: View {
                     headersEditor(itemId: itemId)
                 case .body:
                     bodyEditor(itemId: itemId)
+                case .raw:
+                    rawEditor(itemId: itemId)
                 case .query:
                     queryDisplay(itemId: itemId)
                 }
@@ -266,6 +271,48 @@ struct BreakpointEditorView: View {
         .padding(8)
     }
 
+    private func rawEditor(itemId: UUID) -> some View {
+        let kind = rawKind(for: itemId)
+        let validation = BreakpointRawMessage.validation(for: rawMessage, kind: kind)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Label(validation.message, systemImage: "circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(validation.isValid ? Color.green : Color.red)
+                Spacer()
+                Menu {
+                    ForEach(templateStore.templates(for: kind)) { template in
+                        Button(template.name.isEmpty ? String(localized: "Untitled") : template.name) {
+                            applyTemplate(template, to: itemId)
+                        }
+                    }
+                } label: {
+                    Label(String(localized: "Template"), systemImage: "doc.text")
+                }
+                .disabled(templateStore.templates(for: kind).isEmpty)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+
+            MapLocalHTTPMessageEditor(text: Binding(
+                get: { rawMessage },
+                set: { updateRawMessage($0, itemId: itemId) }
+            ))
+            .overlay(Rectangle().stroke(Color(nsColor: .separatorColor).opacity(0.35)))
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
+        }
+        .onAppear { syncRawMessageFromDraft(itemId: itemId, force: true) }
+        .onChange(of: manager.selectedItemId) { _, _ in
+            syncRawMessageFromDraft(itemId: itemId, force: true)
+        }
+        .onChange(of: selectedTab) { _, newValue in
+            if newValue == .raw {
+                syncRawMessageFromDraft(itemId: itemId, force: rawMessageItemID != itemId)
+            }
+        }
+    }
+
     private func queryDisplay(itemId: UUID) -> some View {
         VStack(spacing: 0) {
             HStack {
@@ -348,9 +395,9 @@ struct BreakpointEditorView: View {
 
     private func availableTabs(for itemId: UUID) -> [BreakpointEditorTab] {
         if itemPhase(itemId: itemId) == .response {
-            return [.headers, .body]
+            return [.headers, .body, .raw]
         }
-        return [.headers, .body, .query]
+        return [.headers, .body, .raw, .query]
     }
 
     private func syncQueryItemsFromURL(itemId: UUID) {
@@ -384,6 +431,40 @@ struct BreakpointEditorView: View {
     private func headerValue(itemId: UUID, headerId: UUID) -> EditableHeader? {
         draftFor(itemId)?.headers.first(where: { $0.id == headerId })
     }
+
+    private func rawKind(for itemId: UUID) -> BreakpointTemplateKind {
+        itemPhase(itemId: itemId) == .response ? .response : .request
+    }
+
+    private func syncRawMessageFromDraft(itemId: UUID, force: Bool = false) {
+        guard force || rawMessageItemID != itemId,
+              let draft = draftFor(itemId)
+        else {
+            return
+        }
+        rawMessageItemID = itemId
+        rawMessage = BreakpointRawMessage.rawMessage(from: draft, kind: rawKind(for: itemId))
+    }
+
+    private func updateRawMessage(_ newValue: String, itemId: UUID) {
+        rawMessageItemID = itemId
+        rawMessage = newValue
+        let kind = rawKind(for: itemId)
+        guard BreakpointRawMessage.validation(for: newValue, kind: kind).isValid else {
+            return
+        }
+        manager.updateDraft(id: itemId) { draft in
+            if let updated = try? BreakpointRawMessage.applying(newValue, kind: kind, to: draft) {
+                draft = updated
+            }
+        }
+    }
+
+    private func applyTemplate(_ template: BreakpointTemplate, to itemId: UUID) {
+        rawMessageItemID = itemId
+        rawMessage = template.rawMessage
+        updateRawMessage(template.rawMessage, itemId: itemId)
+    }
 }
 
 // MARK: - BreakpointEditorTab
@@ -391,6 +472,7 @@ struct BreakpointEditorView: View {
 private enum BreakpointEditorTab: String, CaseIterable, Identifiable {
     case headers
     case body
+    case raw
     case query
 
     // MARK: Internal
@@ -403,6 +485,7 @@ private enum BreakpointEditorTab: String, CaseIterable, Identifiable {
         switch self {
         case .headers: String(localized: "Headers")
         case .body: String(localized: "Body")
+        case .raw: String(localized: "Raw")
         case .query: String(localized: "Query")
         }
     }

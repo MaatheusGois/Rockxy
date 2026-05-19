@@ -13,6 +13,7 @@ enum FooterActionKind: String, CaseIterable {
     case mapRemote
     case breakpoint
     case networkConditions
+    case proxyOverride
 }
 
 // MARK: - FooterActionDescriptor
@@ -25,8 +26,8 @@ struct FooterActionDescriptor: Identifiable, Equatable {
     let isActive: Bool
     let isEnabled: Bool
 
-    static func toolingActions(isAllowListActive: Bool) -> [Self] {
-        [
+    static func toolingActions(isAllowListActive: Bool, isProxyOverridden: Bool = false) -> [Self] {
+        var actions: [Self] = [
             .init(
                 id: .blockList,
                 title: String(localized: "Block List"),
@@ -84,6 +85,19 @@ struct FooterActionDescriptor: Identifiable, Equatable {
                 isEnabled: true
             ),
         ]
+
+        if isProxyOverridden {
+            actions.append(.init(
+                id: .proxyOverride,
+                title: String(localized: "Proxy Overridden"),
+                systemImage: "checkmark.circle.fill",
+                help: String(localized: "Show system proxy override details. Toggle by: ⌥⌘O"),
+                isActive: true,
+                isEnabled: true
+            ))
+        }
+
+        return actions
     }
 }
 
@@ -111,6 +125,69 @@ private struct FooterToolingButton: View {
     // MARK: Private
 
     @State private var isHovered = false
+}
+
+// MARK: - FooterProxyOverrideButton
+
+private struct FooterProxyOverrideButton: View {
+    let descriptor: FooterActionDescriptor
+    let proxyHost: String
+    let proxyPort: Int
+    let onSwitchOff: () -> Void
+
+    var body: some View {
+        FooterToolingButton(descriptor: descriptor) {
+            showPopover.toggle()
+        }
+        .popover(isPresented: $showPopover, arrowEdge: .bottom) {
+            FooterProxyOverridePopover(
+                proxyHost: proxyHost,
+                proxyPort: proxyPort,
+                isPresented: $showPopover,
+                onSwitchOff: onSwitchOff
+            )
+        }
+    }
+
+    // MARK: Private
+
+    @State private var showPopover = false
+}
+
+// MARK: - FooterProxyOverridePopover
+
+private struct FooterProxyOverridePopover: View {
+    let proxyHost: String
+    let proxyPort: Int
+    @Binding var isPresented: Bool
+    let onSwitchOff: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color(nsColor: .systemGreen))
+
+            Text(statusText)
+                .font(.system(size: 13))
+                .foregroundStyle(Color(nsColor: .labelColor))
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Button(String(localized: "Switch Off")) {
+                isPresented = false
+                onSwitchOff()
+            }
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(width: 660, alignment: .leading)
+    }
+
+    private var statusText: String {
+        String(localized: "System Proxy is Overridden by Rockxy (IP=\(proxyHost) Port=\(proxyPort)) (Toggle by: ⌥⌘O)")
+    }
 }
 
 // MARK: - FooterToolingChrome
@@ -188,6 +265,7 @@ struct StatusBarView: View {
     let totalCount: Int
     let selectedCount: Int
     var isProxyRunning: Bool = false
+    var proxyHost: String = "127.0.0.1"
     var proxyPort: Int = 9_090
     var totalDataSize: Int64 = 0
     var uploadSpeed: Int64 = 0
@@ -206,6 +284,7 @@ struct StatusBarView: View {
     var onClear: () -> Void = {}
     var onFilter: () -> Void = {}
     var onAutoSelect: () -> Void = {}
+    var onSwitchOffProxyOverride: () -> Void = {}
 
     var body: some View {
         HStack(spacing: 0) {
@@ -323,10 +402,6 @@ struct StatusBarView: View {
             if isNoCachingActive {
                 statusPill(String(localized: "No Cache"), color: Color(nsColor: .systemOrange))
             }
-
-            if isProxyOverridden {
-                statusPill(String(localized: "Proxy Overridden"), color: Color(nsColor: .tertiaryLabelColor))
-            }
         }
         .lineLimit(1)
     }
@@ -346,9 +421,21 @@ struct StatusBarView: View {
 
     @ViewBuilder
     private var toolingButtons: some View {
-        ForEach(FooterActionDescriptor.toolingActions(isAllowListActive: isAllowListActive)) { descriptor in
-            FooterToolingButton(descriptor: descriptor) {
-                performAction(descriptor.id)
+        ForEach(FooterActionDescriptor.toolingActions(
+            isAllowListActive: isAllowListActive,
+            isProxyOverridden: isProxyOverridden
+        )) { descriptor in
+            if descriptor.id == .proxyOverride {
+                FooterProxyOverrideButton(
+                    descriptor: descriptor,
+                    proxyHost: proxyHost,
+                    proxyPort: proxyPort,
+                    onSwitchOff: onSwitchOffProxyOverride
+                )
+            } else {
+                FooterToolingButton(descriptor: descriptor) {
+                    performAction(descriptor.id)
+                }
             }
         }
     }
@@ -379,6 +466,8 @@ struct StatusBarView: View {
             openWindow(id: "breakpointRules")
         case .networkConditions:
             openWindow(id: "networkConditions")
+        case .proxyOverride:
+            break
         }
     }
 }

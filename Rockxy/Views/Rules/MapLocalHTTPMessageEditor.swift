@@ -101,6 +101,13 @@ struct MapLocalHTTPMessageEditor: NSViewRepresentable {
                 spans: &spans
             )
             appendSpans(
+                #"(?m)^(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|TRACE)\s+\S+\s+HTTP/\d(?:\.\d)?"#,
+                role: .status,
+                text: text,
+                range: fullRange,
+                spans: &spans
+            )
+            appendSpans(
                 #"(?m)^[A-Za-z0-9!#$%&'*+.^_`|~-]+:"#,
                 role: .header,
                 text: text,

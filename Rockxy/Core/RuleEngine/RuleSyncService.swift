@@ -131,6 +131,16 @@ enum RuleSyncService {
         await RuleEngine.shared.setMapLocalToolEnabled(enabled)
     }
 
+    static func setMapRemoteToolEnabled(_ enabled: Bool) async {
+        UserDefaults.standard.set(enabled, forKey: "mapRemoteToolEnabled")
+        await RuleEngine.shared.setMapRemoteToolEnabled(enabled)
+    }
+
+    static func setNetworkConditionsToolEnabled(_ enabled: Bool) async {
+        UserDefaults.standard.set(enabled, forKey: "networkConditionsToolEnabled")
+        await RuleEngine.shared.setNetworkConditionsToolEnabled(enabled)
+    }
+
     static func loadFromDisk() async {
         // Read and apply the breakpoint-tool flag BEFORE loading rules so the
         // rule engine has the correct evaluation gate in place when rules are
@@ -141,6 +151,12 @@ enum RuleSyncService {
         await RuleEngine.shared.setBreakpointToolEnabled(bpEnabled)
         let mapLocalEnabled = UserDefaults.standard.object(forKey: "mapLocalToolEnabled") as? Bool ?? true
         await RuleEngine.shared.setMapLocalToolEnabled(mapLocalEnabled)
+        let mapRemoteEnabled = UserDefaults.standard.object(forKey: "mapRemoteToolEnabled") as? Bool ?? true
+        await RuleEngine.shared.setMapRemoteToolEnabled(mapRemoteEnabled)
+        let networkConditionsEnabled = UserDefaults.standard.object(
+            forKey: "networkConditionsToolEnabled"
+        ) as? Bool ?? true
+        await RuleEngine.shared.setNetworkConditionsToolEnabled(networkConditionsEnabled)
         try? await RuleEngine.shared.loadRules(from: RuleStore())
         await syncAll()
     }

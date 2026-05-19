@@ -69,6 +69,8 @@ struct CenterContentView: View {
                 totalCount: coordinator.filteredTransactions.count,
                 selectedCount: selectedIDs.count,
                 isProxyRunning: coordinator.isProxyRunning,
+                proxyHost: AppSettingsManager.shared.settings.effectiveListenAddress,
+                proxyPort: coordinator.activeProxyPort,
                 totalDataSize: coordinator.totalDataSize,
                 uploadSpeed: coordinator.uploadSpeed,
                 downloadSpeed: coordinator.downloadSpeed,
@@ -95,6 +97,9 @@ struct CenterContentView: View {
                 },
                 onAutoSelect: {
                     coordinator.isAutoSelectEnabled.toggle()
+                },
+                onSwitchOffProxyOverride: {
+                    coordinator.switchOffSystemProxyOverride()
                 }
             )
         }

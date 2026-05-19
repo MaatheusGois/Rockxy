@@ -18,6 +18,30 @@ struct FooterActionDescriptorTests {
         ])
     }
 
+    @Test("Proxy override action appears after Network Conditions only when active")
+    func proxyOverrideActionIsConditional() {
+        let inactive = FooterActionDescriptor.toolingActions(
+            isAllowListActive: false,
+            isProxyOverridden: false
+        )
+        let active = FooterActionDescriptor.toolingActions(
+            isAllowListActive: false,
+            isProxyOverridden: true
+        )
+
+        #expect(!inactive.contains { $0.id == .proxyOverride })
+        #expect(active.map(\.id) == [
+            .blockList,
+            .allowList,
+            .mapLocal,
+            .scripting,
+            .mapRemote,
+            .breakpoint,
+            .networkConditions,
+            .proxyOverride,
+        ])
+    }
+
     @Test("Footer actions use SF Symbol names")
     func actionSymbolsArePresent() {
         let actions = FooterActionDescriptor.toolingActions(isAllowListActive: false)
@@ -30,6 +54,13 @@ struct FooterActionDescriptorTests {
         #expect(actions.first { $0.id == .mapRemote }?.systemImage == "arrow.triangle.branch")
         #expect(actions.first { $0.id == .breakpoint }?.systemImage == "pause.circle")
         #expect(actions.first { $0.id == .networkConditions }?.systemImage == "speedometer")
+
+        let activeActions = FooterActionDescriptor.toolingActions(
+            isAllowListActive: false,
+            isProxyOverridden: true
+        )
+        #expect(activeActions.first { $0.id == .proxyOverride }?.systemImage == "checkmark.circle.fill")
+        #expect(activeActions.first { $0.id == .proxyOverride }?.help.contains("⌥⌘O") == true)
     }
 
     @Test("Allow List active state reflects manager state")
@@ -43,6 +74,6 @@ struct FooterActionDescriptorTests {
     func toolActionsRemainInline() {
         let actions = FooterActionDescriptor.toolingActions(isAllowListActive: false)
 
-        #expect(FooterActionKind.allCases == actions.map(\.id))
+        #expect(FooterActionKind.allCases.filter { $0 != .proxyOverride } == actions.map(\.id))
     }
 }

@@ -12,8 +12,9 @@ extension MainContentCoordinator {
     // MARK: - Rule Management
 
     func addRule(_ rule: ProxyRule) {
-        Task {
-            let accepted = await RulePolicyGate.shared.addRule(rule)
+        let gate = RulePolicyGate.shared
+        ruleMutationTask = Task {
+            let accepted = await gate.addRule(rule)
             if !accepted {
                 Self.logger.info("Rule add rejected — quota reached for \(rule.action.toolCategory)")
                 activeToast = ToastMessage(
@@ -25,12 +26,14 @@ extension MainContentCoordinator {
     }
 
     func removeRule(id: UUID) {
-        Task { await RulePolicyGate.shared.removeRule(id: id) }
+        let gate = RulePolicyGate.shared
+        ruleMutationTask = Task { await gate.removeRule(id: id) }
     }
 
     func toggleRule(id: UUID) {
-        Task {
-            let accepted = await RulePolicyGate.shared.toggleRule(id: id)
+        let gate = RulePolicyGate.shared
+        ruleMutationTask = Task {
+            let accepted = await gate.toggleRule(id: id)
             if !accepted {
                 Self.logger.info("Rule toggle rejected — quota reached")
                 activeToast = ToastMessage(

@@ -181,6 +181,14 @@ final class RulePolicyGate: @unchecked Sendable {
         await RuleSyncService.setMapLocalToolEnabled(enabled)
     }
 
+    func setMapRemoteToolEnabled(_ enabled: Bool) async {
+        await RuleSyncService.setMapRemoteToolEnabled(enabled)
+    }
+
+    func setNetworkConditionsToolEnabled(_ enabled: Bool) async {
+        await RuleSyncService.setNetworkConditionsToolEnabled(enabled)
+    }
+
     // MARK: Private
 
     private static let logger = Logger(

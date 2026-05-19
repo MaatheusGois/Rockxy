@@ -38,6 +38,12 @@ actor RuleEngine {
             if !mapLocalToolEnabled, case .mapLocal = rule.action {
                 continue
             }
+            if !mapRemoteToolEnabled, case .mapRemote = rule.action {
+                continue
+            }
+            if !networkConditionsToolEnabled, case .networkCondition = rule.action {
+                continue
+            }
             let compiled = compiledPatterns[rule.id]
             if rule.matchCondition.matches(method: method, url: url, headers: headers, compiledPattern: compiled) {
                 Self.logger.debug("Rule matched: \(rule.name)")
@@ -154,6 +160,14 @@ actor RuleEngine {
         mapLocalToolEnabled = enabled
     }
 
+    func setMapRemoteToolEnabled(_ enabled: Bool) {
+        mapRemoteToolEnabled = enabled
+    }
+
+    func setNetworkConditionsToolEnabled(_ enabled: Bool) {
+        networkConditionsToolEnabled = enabled
+    }
+
     // MARK: - Atomic Quota-Checked Operations
 
     func addRuleIfAllowed(_ rule: ProxyRule, maxPerCategory: Int) -> Bool {
@@ -226,6 +240,8 @@ actor RuleEngine {
     private var blockListToolEnabled: Bool = true
     private var breakpointToolEnabled: Bool = true
     private var mapLocalToolEnabled: Bool = true
+    private var mapRemoteToolEnabled: Bool = true
+    private var networkConditionsToolEnabled: Bool = true
     private var compiledPatterns: [UUID: NSRegularExpression] = [:]
 
     private func compilePatterns() {

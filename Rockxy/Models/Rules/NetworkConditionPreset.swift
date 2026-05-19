@@ -1,6 +1,7 @@
 import Foundation
 
-/// Named latency presets for Network Conditions, modeled after Apple's Network Link Conditioner.
+/// Named presets for Network Conditions, modeled after Apple's Network Link Conditioner
+/// naming and Proxyman-style bandwidth profile ranges.
 enum NetworkConditionPreset: String, CaseIterable, Codable {
     case threeG
     case edge
@@ -31,6 +32,58 @@ enum NetworkConditionPreset: String, CaseIterable, Codable {
         case .wifi: 2
         case .custom: 0
         }
+    }
+
+    /// Download bandwidth cap in kilobits per second. `nil` means the profile does
+    /// not apply a bandwidth cap, which is currently only true for Custom.
+    var downloadBandwidthKbps: Int? {
+        switch self {
+        case .threeG: 780
+        case .edge: 240
+        case .lte: 50_000
+        case .veryBadNetwork: 1_000
+        case .wifi: 40_000
+        case .custom: nil
+        }
+    }
+
+    /// Upload bandwidth cap in kilobits per second. `nil` means the profile does
+    /// not apply a bandwidth cap, which is currently only true for Custom.
+    var uploadBandwidthKbps: Int? {
+        switch self {
+        case .threeG: 330
+        case .edge: 200
+        case .lte: 10_000
+        case .veryBadNetwork: 1_000
+        case .wifi: 30_000
+        case .custom: nil
+        }
+    }
+
+    var downloadBandwidthLabel: String {
+        Self.bandwidthLabel(for: downloadBandwidthKbps)
+    }
+
+    var uploadBandwidthLabel: String {
+        Self.bandwidthLabel(for: uploadBandwidthKbps)
+    }
+
+    var packetLossLabel: String {
+        String(format: "%.1f%%", packetLossRate)
+    }
+
+    var downloadBytesPerSecond: Int? {
+        downloadBandwidthKbps.map { ($0 * 1_000) / 8 }
+    }
+
+    var uploadBytesPerSecond: Int? {
+        uploadBandwidthKbps.map { ($0 * 1_000) / 8 }
+    }
+
+    /// Packet loss remains disabled until the proxy engine has packet-dropping
+    /// semantics for HTTP body chunks and WebSocket frames.
+    var packetLossRate: Double {
+        0.0
     }
 
     var systemImage: String {
@@ -66,5 +119,17 @@ enum NetworkConditionPreset: String, CaseIterable, Codable {
             matchCondition: matchCondition,
             action: .networkCondition(preset: preset, delayMs: latencyMs)
         )
+    }
+
+    // MARK: Private
+
+    private static func bandwidthLabel(for kbps: Int?) -> String {
+        guard let kbps else {
+            return "Unlimited"
+        }
+        if kbps >= 1_000, kbps.isMultiple(of: 1_000) {
+            return "< \(kbps / 1_000) Mbps"
+        }
+        return "< \(kbps) kbps"
     }
 }

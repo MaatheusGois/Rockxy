@@ -7,9 +7,9 @@ import Testing
 struct MapRemoteConfigurationCodableTests {
     @Test("Legacy URL string decodes into structured configuration")
     func legacyDecode() throws {
-        let json = """
+        let json = Data("""
         {"type":"mapRemote","url":"https://staging.example.com:8443/api/v2?debug=true"}
-        """.data(using: .utf8)!
+        """.utf8)
         let decoded = try JSONDecoder().decode(RuleAction.self, from: json)
 
         if case let .mapRemote(config) = decoded {
@@ -32,6 +32,7 @@ struct MapRemoteConfigurationCodableTests {
             port: 8_443,
             path: "/api/v2",
             query: "debug=true",
+            preserveOriginalURL: true,
             preserveHostHeader: true
         )
         let action = RuleAction.mapRemote(configuration: config)
@@ -44,6 +45,7 @@ struct MapRemoteConfigurationCodableTests {
             #expect(decodedConfig.port == 8_443)
             #expect(decodedConfig.path == "/api/v2")
             #expect(decodedConfig.query == "debug=true")
+            #expect(decodedConfig.preserveOriginalURL == true)
             #expect(decodedConfig.preserveHostHeader == true)
         } else {
             Issue.record("Expected .mapRemote")
@@ -71,9 +73,9 @@ struct MapRemoteConfigurationCodableTests {
 
     @Test("Empty configuration decodes without error")
     func emptyConfig() throws {
-        let json = """
+        let json = Data("""
         {"type":"mapRemote","configuration":{}}
-        """.data(using: .utf8)!
+        """.utf8)
         let decoded = try JSONDecoder().decode(RuleAction.self, from: json)
 
         if case let .mapRemote(config) = decoded {

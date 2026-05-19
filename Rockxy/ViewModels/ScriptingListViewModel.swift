@@ -493,7 +493,7 @@ final class ScriptingListViewModel {
         case .name:
             script.name.lowercased().contains(needle)
         case .method:
-            (script.method ?? "").lowercased().contains(needle)
+            (script.method ?? "ANY").lowercased().contains(needle)
         case .urlPattern:
             (script.urlPattern ?? "").lowercased().contains(needle)
         }

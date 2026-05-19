@@ -15,6 +15,29 @@ struct NetworkConditionPresetTests {
         #expect(NetworkConditionPreset.custom.defaultLatencyMs == 0)
     }
 
+    @Test("presets expose bandwidth metadata")
+    func presetBandwidthMetadata() {
+        #expect(NetworkConditionPreset.threeG.downloadBandwidthKbps == 780)
+        #expect(NetworkConditionPreset.threeG.uploadBandwidthKbps == 330)
+        #expect(NetworkConditionPreset.edge.downloadBandwidthKbps == 240)
+        #expect(NetworkConditionPreset.edge.uploadBandwidthKbps == 200)
+        #expect(NetworkConditionPreset.lte.downloadBandwidthKbps == 50_000)
+        #expect(NetworkConditionPreset.lte.uploadBandwidthKbps == 10_000)
+        #expect(NetworkConditionPreset.veryBadNetwork.downloadBandwidthKbps == 1_000)
+        #expect(NetworkConditionPreset.veryBadNetwork.uploadBandwidthKbps == 1_000)
+        #expect(NetworkConditionPreset.wifi.downloadBandwidthKbps == 40_000)
+        #expect(NetworkConditionPreset.wifi.uploadBandwidthKbps == 30_000)
+        #expect(NetworkConditionPreset.custom.downloadBandwidthKbps == nil)
+        #expect(NetworkConditionPreset.custom.uploadBandwidthKbps == nil)
+    }
+
+    @Test("packet loss stays disabled for all presets")
+    func packetLossDisabled() {
+        for preset in NetworkConditionPreset.allCases {
+            #expect(preset.packetLossRate == 0.0)
+        }
+    }
+
     @Test("each preset returns correct display name")
     func presetDisplayNames() {
         #expect(NetworkConditionPreset.threeG.displayName == "3G")

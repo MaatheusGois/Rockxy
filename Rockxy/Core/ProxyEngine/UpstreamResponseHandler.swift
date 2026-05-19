@@ -35,6 +35,7 @@ final class UpstreamResponseHandler: ChannelInboundHandler, @unchecked Sendable 
         sourcePort: UInt16? = nil,
         breakpointPhase: BreakpointRulePhase? = nil,
         headerResponseOperations: [HeaderOperation]? = nil,
+        networkConditionProfile: NetworkConditionProfile? = nil,
         scriptPluginManager: ScriptPluginManager? = nil,
         onBreakpointHit: (@Sendable (BreakpointRequestData) async -> (BreakpointDecision, BreakpointRequestData))? =
             nil,
@@ -51,6 +52,7 @@ final class UpstreamResponseHandler: ChannelInboundHandler, @unchecked Sendable 
         self.sourcePort = sourcePort
         self.breakpointPhase = breakpointPhase
         self.headerResponseOperations = headerResponseOperations
+        self.networkConditionProfile = networkConditionProfile
         self.scriptPluginManager = scriptPluginManager
         self.onBreakpointHit = onBreakpointHit
         self.onTransactionComplete = onTransactionComplete
@@ -307,6 +309,7 @@ final class UpstreamResponseHandler: ChannelInboundHandler, @unchecked Sendable 
     private let sourcePort: UInt16?
     private let breakpointPhase: BreakpointRulePhase?
     private let headerResponseOperations: [HeaderOperation]?
+    private let networkConditionProfile: NetworkConditionProfile?
     private let scriptPluginManager: ScriptPluginManager?
     private let hasResponseScript: Bool
     private let onBreakpointHit: (@Sendable (BreakpointRequestData) async -> (
@@ -323,6 +326,8 @@ final class UpstreamResponseHandler: ChannelInboundHandler, @unchecked Sendable 
     private var firstByteTime: DispatchTime?
     private var completed = false
     private var readTimeoutTask: Scheduled<Void>?
+    private var downloadReadyAtNanos: UInt64?
+    private var downloadTailFuture: EventLoopFuture<Void>?
 
     /// True while we are buffering the response before relaying, because a
     /// matching response-side script is expected to mutate it. Flipped to false
@@ -353,30 +358,86 @@ final class UpstreamResponseHandler: ChannelInboundHandler, @unchecked Sendable 
             return
         }
         let proxyHead = HTTPResponseHead(version: head.version, status: head.status, headers: head.headers)
-        clientContext.write(
-            NIOAny(HTTPServerResponsePart.head(proxyHead)),
-            promise: nil
-        )
+        let part = NIOAny(HTTPServerResponsePart.head(proxyHead))
+        if networkConditionProfile?.downloadBytesPerSecond != nil {
+            clientContext.writeAndFlush(part, promise: nil)
+        } else {
+            clientContext.write(part, promise: nil)
+        }
     }
 
     nonisolated private func relayResponseBody(_ buffer: ByteBuffer) {
         guard clientContext.channel.isActive else {
             return
         }
-        clientContext.write(
-            NIOAny(HTTPServerResponsePart.body(.byteBuffer(buffer))),
-            promise: nil
-        )
+        guard let plan = NetworkThrottlePlanner.makePlan(
+            byteCount: buffer.readableBytes,
+            bytesPerSecond: networkConditionProfile?.downloadBytesPerSecond,
+            earliestReadyAtNanos: downloadReadyAtNanos
+        ) else {
+            clientContext.write(
+                NIOAny(HTTPServerResponsePart.body(.byteBuffer(buffer))),
+                promise: nil
+            )
+            return
+        }
+
+        downloadReadyAtNanos = plan.readyAtNanos
+        for chunk in plan.chunks {
+            let isLastChunk = chunk == plan.chunks.last
+            let tailPromise = isLastChunk ? clientContext.eventLoop.makePromise(of: Void.self) : nil
+            if let tailPromise {
+                downloadTailFuture = tailPromise.futureResult
+            }
+            clientContext.eventLoop.scheduleTask(in: .milliseconds(chunk.delayMs)) { [clientContext] in
+                guard clientContext.channel.isActive else {
+                    tailPromise?.fail(ChannelError.ioOnClosedChannel)
+                    return
+                }
+                var chunkBuffer = buffer
+                chunkBuffer.moveReaderIndex(forwardBy: chunk.offset)
+                let slice = chunkBuffer.readSlice(length: chunk.length) ?? chunkBuffer
+                let bodyPromise = clientContext.eventLoop.makePromise(of: Void.self)
+                clientContext.writeAndFlush(
+                    NIOAny(HTTPServerResponsePart.body(.byteBuffer(slice))),
+                    promise: bodyPromise
+                )
+                if let tailPromise {
+                    bodyPromise.futureResult.whenComplete { result in
+                        tailPromise.completeWith(result)
+                    }
+                }
+            }
+        }
     }
 
     nonisolated private func relayResponseEnd() {
         guard clientContext.channel.isActive else {
             return
         }
-        clientContext.writeAndFlush(
-            NIOAny(HTTPServerResponsePart.end(nil)),
-            promise: nil
-        )
+        if let downloadTailFuture {
+            self.downloadTailFuture = nil
+            downloadTailFuture.whenComplete { [clientContext] _ in
+                guard clientContext.channel.isActive else {
+                    return
+                }
+                clientContext.writeAndFlush(
+                    NIOAny(HTTPServerResponsePart.end(nil)),
+                    promise: nil
+                )
+            }
+            return
+        }
+        let delayMs = NetworkThrottlePlanner.millisecondsUntil(readyAtNanos: downloadReadyAtNanos)
+        clientContext.eventLoop.scheduleTask(in: .milliseconds(delayMs)) { [clientContext] in
+            guard clientContext.channel.isActive else {
+                return
+            }
+            clientContext.writeAndFlush(
+                NIOAny(HTTPServerResponsePart.end(nil)),
+                promise: nil
+            )
+        }
     }
 
     // MARK: - Response Script

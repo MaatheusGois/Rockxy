@@ -18,6 +18,7 @@ struct RuleCoordinatorWiringTests {
         let coordinator = MainContentCoordinator()
         let rule = TestFixtures.makeRule(name: "WiringAdd", action: .block(statusCode: 403))
         coordinator.addRule(rule)
+        await coordinator.ruleMutationTask?.value
 
         for _ in 0 ..< 500 {
             let rules = await RuleEngine.shared.allRules
@@ -50,6 +51,7 @@ struct RuleCoordinatorWiringTests {
         let coordinator = MainContentCoordinator()
         let overflow = TestFixtures.makeRule(name: "Overflow", action: .block(statusCode: 403))
         coordinator.addRule(overflow)
+        await coordinator.ruleMutationTask?.value
 
         for _ in 0 ..< 500 {
             if coordinator.activeToast != nil {
@@ -80,6 +82,7 @@ struct RuleCoordinatorWiringTests {
 
         let coordinator = MainContentCoordinator()
         coordinator.toggleRule(id: rule.id)
+        await coordinator.ruleMutationTask?.value
 
         for _ in 0 ..< 500 {
             let rules = await RuleEngine.shared.allRules
@@ -113,6 +116,7 @@ struct RuleCoordinatorWiringTests {
 
         let coordinator = MainContentCoordinator()
         coordinator.toggleRule(id: disabled.id)
+        await coordinator.ruleMutationTask?.value
 
         for _ in 0 ..< 500 {
             if coordinator.activeToast != nil {

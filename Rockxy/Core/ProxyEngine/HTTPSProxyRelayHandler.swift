@@ -260,6 +260,7 @@ final class HTTPSProxyRelayHandler: ChannelInboundHandler, @unchecked Sendable {
         graphQLInfo: GraphQLInfo?,
         startTime: DispatchTime,
         responseHeaderOperations: [HeaderOperation]? = nil,
+        networkConditionProfile: NetworkConditionProfile? = nil,
         callback: @escaping @Sendable (HTTPTransaction) -> Void
     ) {
         let upstreamHost = self.host
@@ -308,6 +309,7 @@ final class HTTPSProxyRelayHandler: ChannelInboundHandler, @unchecked Sendable {
                         upstreamHost: upstreamHost,
                         upstreamPort: upstreamPort,
                         responseHeaderOperations: responseHeaderOperations,
+                        networkConditionProfile: networkConditionProfile,
                         callback: callback
                     )
                 }
@@ -329,6 +331,7 @@ final class HTTPSProxyRelayHandler: ChannelInboundHandler, @unchecked Sendable {
         upstreamHost: String,
         upstreamPort: Int,
         responseHeaderOperations: [HeaderOperation]? = nil,
+        networkConditionProfile: NetworkConditionProfile? = nil,
         callback: @escaping @Sendable (HTTPTransaction) -> Void
     ) {
         let limiter = connectionLimiter
@@ -346,6 +349,7 @@ final class HTTPSProxyRelayHandler: ChannelInboundHandler, @unchecked Sendable {
                 sourcePort: self.clientSourcePort,
                 breakpointPhase: self.pendingBreakpointPhase,
                 headerResponseOperations: responseHeaderOperations,
+                networkConditionProfile: networkConditionProfile,
                 scriptPluginManager: self.scriptPluginManager,
                 onBreakpointHit: self.onBreakpointHit,
                 onTransactionComplete: callback,
@@ -361,21 +365,18 @@ final class HTTPSProxyRelayHandler: ChannelInboundHandler, @unchecked Sendable {
                     )
                     clientChannel.write(NIOAny(HTTPClientRequestPart.head(forwardHead)), promise: nil)
                     if let bodyData = requestData.body, !bodyData.isEmpty {
-                        var bodyBuffer = clientChannel.allocator.buffer(capacity: bodyData.count)
-                        bodyBuffer.writeBytes(bodyData)
-                        clientChannel.write(
-                            NIOAny(HTTPClientRequestPart.body(.byteBuffer(bodyBuffer))),
-                            promise: nil
+                        NetworkConditionIOThrottle.writeClientRequestBodyAndEnd(
+                            bodyData: bodyData,
+                            to: clientChannel,
+                            uploadBytesPerSecond: networkConditionProfile?.uploadBytesPerSecond
+                        )
+                    } else {
+                        NetworkConditionIOThrottle.writeClientRequestBodyAndEnd(
+                            bodyData: nil,
+                            to: clientChannel,
+                            uploadBytesPerSecond: networkConditionProfile?.uploadBytesPerSecond
                         )
                     }
-                    let endPromise = clientChannel.eventLoop.makePromise(of: Void.self)
-                    endPromise.futureResult.whenFailure { _ in
-                        clientChannel.close(promise: nil)
-                    }
-                    clientChannel.writeAndFlush(
-                        NIOAny(HTTPClientRequestPart.end(nil)),
-                        promise: endPromise
-                    )
                 case let .failure(error):
                     httpsRelayLogger.error(
                         "Failed to add response handler to upstream: \(error.localizedDescription)"
@@ -469,15 +470,16 @@ final class HTTPSProxyRelayHandler: ChannelInboundHandler, @unchecked Sendable {
                 )
             }
 
-        case let .networkCondition(_, delayMs):
-            let delay = TimeAmount.milliseconds(Int64(delayMs))
-            context.eventLoop.scheduleTask(in: delay) { [weak self] in
+        case let .networkCondition(preset, delayMs):
+            let profile = NetworkConditionProfile(preset: preset, latencyMs: delayMs)
+            context.eventLoop.scheduleTask(in: profile.latencyDelay) { [weak self] in
                 self?.connectToUpstream(
                     context: context,
                     head: head,
                     requestData: requestData,
                     graphQLInfo: graphQLInfo,
                     startTime: startTime,
+                    networkConditionProfile: profile,
                     callback: callback
                 )
             }
@@ -652,7 +654,7 @@ final class HTTPSProxyRelayHandler: ChannelInboundHandler, @unchecked Sendable {
         let uri = remoteQuery.map { "\(effectivePath)?\($0)" } ?? effectivePath
 
         var modifiedHead = head
-        modifiedHead.uri = uri
+        modifiedHead.uri = configuration.preserveOriginalURL ? head.uri : uri
 
         let hostHeaderValue: String = if configuration.preserveHostHeader {
             originalURL.host ?? remoteHost

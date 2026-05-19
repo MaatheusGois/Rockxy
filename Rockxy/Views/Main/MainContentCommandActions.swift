@@ -16,6 +16,10 @@ struct MainContentCommandActions {
         coordinator.isProxyRunning
     }
 
+    var canToggleSystemProxyOverride: Bool {
+        coordinator.isProxyRunning
+    }
+
     var hasSelectedTransaction: Bool {
         coordinator.selectedTransaction != nil
     }
@@ -54,6 +58,10 @@ struct MainContentCommandActions {
 
     func toggleRecording() {
         coordinator.toggleRecording()
+    }
+
+    func toggleSystemProxyOverride() {
+        coordinator.toggleSystemProxyOverride()
     }
 
     // MARK: - Session I/O
