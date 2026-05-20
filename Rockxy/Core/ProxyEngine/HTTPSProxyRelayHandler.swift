@@ -173,17 +173,42 @@ final class HTTPSProxyRelayHandler: ChannelInboundHandler, @unchecked Sendable {
         let ruleEngine = self.ruleEngine
 
         eventLoop.makeFutureWithTask {
-            await ruleEngine.evaluateRule(
+            let breakpointRule = await ruleEngine.evaluateBreakpointRule(
                 method: head.method.rawValue,
                 url: parsedURL,
                 headers: requestData.headers
             )
+            let matchedRule = await ruleEngine.evaluateRule(
+                method: head.method.rawValue,
+                url: parsedURL,
+                headers: requestData.headers
+            )
+            return (breakpointRule, matchedRule)
         }.whenComplete { [weak self] result in
             guard let self else {
                 return
             }
-            let matchedRule: ProxyRule? = (try? result.get()) ?? nil
+            let evaluation = try? result.get()
+            let breakpointRule = evaluation?.0
+            let matchedRule = evaluation?.1
             let matchedRuleCallback = self.makeTransactionCallback(for: matchedRule)
+
+            if let breakpointRule,
+               case let .breakpoint(phase) = breakpointRule.action,
+               phase == .request || phase == .both
+            {
+                self.handleRuleAction(
+                    breakpointRule.action,
+                    context: context,
+                    head: head,
+                    requestData: requestData,
+                    graphQLInfo: graphQLInfo,
+                    startTime: startTime,
+                    callback: self.makeTransactionCallback(for: breakpointRule),
+                    urlPattern: breakpointRule.matchCondition.urlPattern
+                )
+                return
+            }
 
             if let matchedRule {
                 self.handleRuleAction(
@@ -383,14 +408,14 @@ final class HTTPSProxyRelayHandler: ChannelInboundHandler, @unchecked Sendable {
                     )
                     clientChannel.close(promise: nil)
                     limiter.release(host: upstreamHost, port: upstreamPort)
-                    self.sendErrorResponse(context: context, status: 502)
+                    self.sendErrorResponse(context: context, status: 502, requestData: requestData, callback: callback)
                 }
             }
 
         case let .failure(error):
             httpsRelayLogger.error("Upstream connection failed: \(error.localizedDescription)")
             limiter.release(host: upstreamHost, port: upstreamPort)
-            self.sendErrorResponse(context: context, status: 502)
+            self.sendErrorResponse(context: context, status: 502, requestData: requestData, callback: callback)
         }
     }
 
@@ -643,46 +668,21 @@ final class HTTPSProxyRelayHandler: ChannelInboundHandler, @unchecked Sendable {
         startTime: DispatchTime,
         callback: @escaping @Sendable (HTTPTransaction) -> Void
     ) {
-        let originalURL = requestData.url
-        let remoteHost = configuration.host ?? (originalURL.host ?? self.host)
-        let scheme = configuration.scheme ?? (originalURL.scheme ?? "https")
-        let remotePort = configuration.port ?? (scheme == "https" ? 443 : 80)
-        let remotePath = configuration.path ?? originalURL.path
-        let remoteQuery = configuration.query ?? originalURL.query
-
-        let effectivePath = remotePath.isEmpty ? "/" : remotePath
-        let uri = remoteQuery.map { "\(effectivePath)?\($0)" } ?? effectivePath
-
-        var modifiedHead = head
-        modifiedHead.uri = configuration.preserveOriginalURL ? head.uri : uri
-
-        let hostHeaderValue: String = if configuration.preserveHostHeader {
-            originalURL.host ?? remoteHost
-        } else {
-            remoteHost
-        }
-        modifiedHead.headers.replaceOrAdd(name: "Host", value: NetworkValidator.sanitizeHeaderValue(hostHeaderValue))
-
-        var urlString = "\(scheme)://\(remoteHost)"
-        if remotePort != 80, remotePort != 443 {
-            urlString += ":\(remotePort)"
-        }
-        urlString += uri
-
-        // swiftlint:disable:next force_unwrapping
-        let fallbackURL = URL(string: "https://localhost/")!
-        let modifiedRequestData = HTTPRequestData(
-            method: requestData.method,
-            url: URL(string: urlString) ?? fallbackURL,
-            httpVersion: requestData.httpVersion,
-            headers: requestData.headers,
-            body: requestData.body,
-            contentType: requestData.contentType
+        let rewrite = ProxyHandlerShared.buildMapRemoteRewrite(
+            configuration: configuration,
+            originalHead: head,
+            requestData: requestData,
+            fallbackScheme: "https",
+            fallbackHost: host,
+            fallbackPort: port
         )
+        let remoteHost = rewrite.upstreamHost
+        let remotePort = rewrite.upstreamPort
+        let scheme = rewrite.scheme
 
         guard connectionLimiter.acquire(host: remoteHost, port: remotePort) else {
             httpsRelayLogger.warning("Connection limit reached for \(remoteHost):\(remotePort)")
-            sendErrorResponse(context: context, status: 503)
+            sendErrorResponse(context: context, status: 503, requestData: rewrite.requestData, callback: callback)
             return
         }
         let limiter = connectionLimiter
@@ -722,8 +722,8 @@ final class HTTPSProxyRelayHandler: ChannelInboundHandler, @unchecked Sendable {
                         self.handleUpstreamConnection(
                             result: result,
                             context: context,
-                            head: modifiedHead,
-                            requestData: modifiedRequestData,
+                            head: rewrite.head,
+                            requestData: rewrite.requestData,
                             graphQLInfo: graphQLInfo,
                             startTime: startTime,
                             connectTime: connectTime,
@@ -735,7 +735,7 @@ final class HTTPSProxyRelayHandler: ChannelInboundHandler, @unchecked Sendable {
             } catch {
                 httpsRelayLogger.error("Map remote TLS setup failed: \(error.localizedDescription)")
                 limiter.release(host: remoteHost, port: remotePort)
-                sendErrorResponse(context: context, status: 502)
+                sendErrorResponse(context: context, status: 502, requestData: rewrite.requestData, callback: callback)
             }
         } else {
             let connectTime = DispatchTime.now()
@@ -756,8 +756,8 @@ final class HTTPSProxyRelayHandler: ChannelInboundHandler, @unchecked Sendable {
                     self.handleUpstreamConnection(
                         result: result,
                         context: context,
-                        head: modifiedHead,
-                        requestData: modifiedRequestData,
+                        head: rewrite.head,
+                        requestData: rewrite.requestData,
                         graphQLInfo: graphQLInfo,
                         startTime: startTime,
                         connectTime: connectTime,
@@ -812,6 +812,37 @@ final class HTTPSProxyRelayHandler: ChannelInboundHandler, @unchecked Sendable {
         context.writeAndFlush(NIOAny(HTTPServerResponsePart.end(nil))).whenComplete { _ in
             context.close(promise: nil)
         }
+    }
+
+    nonisolated private func sendErrorResponse(
+        context: ChannelHandlerContext,
+        status: Int,
+        requestData: HTTPRequestData,
+        callback: @escaping @Sendable (HTTPTransaction) -> Void
+    ) {
+        guard context.channel.isActive else {
+            return
+        }
+        let httpStatus = HTTPResponseStatus(statusCode: status)
+        var responseHead = HTTPResponseHead(version: .http1_1, status: httpStatus)
+        responseHead.headers.add(name: "Connection", value: "close")
+        context.write(NIOAny(HTTPServerResponsePart.head(responseHead)), promise: nil)
+        context.writeAndFlush(NIOAny(HTTPServerResponsePart.end(nil))).whenComplete { _ in
+            context.close(promise: nil)
+        }
+
+        let transaction = HTTPTransaction(
+            request: requestData,
+            response: HTTPResponseData(
+                statusCode: status,
+                statusMessage: httpStatus.reasonPhrase,
+                headers: []
+            ),
+            state: status == 403 ? .blocked : .failed
+        )
+        transaction.measuredDuration = requestElapsedDuration()
+        transaction.sourcePort = clientSourcePort
+        callback(transaction)
     }
 
     nonisolated private func requestElapsedDuration() -> TimeInterval? {

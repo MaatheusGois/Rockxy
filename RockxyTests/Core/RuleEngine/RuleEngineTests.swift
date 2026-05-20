@@ -164,6 +164,90 @@ struct RuleEngineTests {
         }
     }
 
+    @Test("Breakpoint tool gate skips breakpoint rules only")
+    func breakpointToolGateSkipsOnlyBreakpointRules() async throws {
+        let engine = RuleEngine()
+        let breakpointRule = ProxyRule(
+            name: "Pause",
+            isEnabled: true,
+            matchCondition: RuleMatchCondition(urlPattern: ".*example\\.com.*"),
+            action: .breakpoint(phase: .both)
+        )
+        let throttleRule = ProxyRule(
+            name: "Throttle",
+            isEnabled: true,
+            matchCondition: RuleMatchCondition(urlPattern: ".*example\\.com.*"),
+            action: .throttle(delayMs: 250)
+        )
+        await engine.addRule(breakpointRule)
+        await engine.addRule(throttleRule)
+
+        let url = try #require(URL(string: "https://example.com/test"))
+        let enabledBreakpoint = await engine.evaluateBreakpointRule(method: "GET", url: url, headers: [])
+        #expect(enabledBreakpoint?.id == breakpointRule.id)
+
+        await engine.setBreakpointToolEnabled(false)
+        let disabledBreakpoint = await engine.evaluateBreakpointRule(method: "GET", url: url, headers: [])
+        #expect(disabledBreakpoint == nil)
+
+        let disabledResult = await engine.evaluate(method: "GET", url: url, headers: [])
+        if case let .throttle(delayMs) = disabledResult {
+            #expect(delayMs == 250)
+        } else {
+            Issue.record("Expected non-breakpoint rule to remain active")
+        }
+    }
+
+    @Test("Breakpoint host port path wildcard exact match handles query boundary")
+    func breakpointHostPortPathWildcardExactMatch() async throws {
+        let engine = RuleEngine()
+        let pattern = RulePatternBuilder.regexSource(
+            rawPattern: "127.0.0.1:43210/rockxy-demo/profile",
+            matchType: .wildcard,
+            includeSubpaths: false
+        )
+        let rule = ProxyRule(
+            name: "Profile Breakpoint",
+            matchCondition: RuleMatchCondition(urlPattern: pattern),
+            action: .breakpoint(phase: .both)
+        )
+        await engine.addRule(rule)
+
+        let exact = try #require(URL(string: "http://127.0.0.1:43210/rockxy-demo/profile"))
+        let query = try #require(URL(string: "http://127.0.0.1:43210/rockxy-demo/profile?expected=staging"))
+        let child = try #require(URL(string: "http://127.0.0.1:43210/rockxy-demo/profile/child"))
+        let sibling = try #require(URL(string: "http://127.0.0.1:43210/rockxy-demo/profile-prod"))
+
+        #expect(await engine.evaluateBreakpointRule(method: "GET", url: exact, headers: [])?.id == rule.id)
+        #expect(await engine.evaluateBreakpointRule(method: "GET", url: query, headers: [])?.id == rule.id)
+        #expect(await engine.evaluateBreakpointRule(method: "GET", url: child, headers: []) == nil)
+        #expect(await engine.evaluateBreakpointRule(method: "GET", url: sibling, headers: []) == nil)
+    }
+
+    @Test("Breakpoint-specific evaluation finds breakpoint shadowed by earlier rule")
+    func breakpointSpecificEvaluationFindsShadowedBreakpoint() async throws {
+        let engine = RuleEngine()
+        let mapRule = ProxyRule(
+            name: "Map",
+            matchCondition: RuleMatchCondition(urlPattern: ".*example\\.com/profile.*"),
+            action: .mapRemote(configuration: MapRemoteConfiguration(host: "staging.example.com"))
+        )
+        let breakpointRule = ProxyRule(
+            name: "Pause",
+            matchCondition: RuleMatchCondition(urlPattern: ".*example\\.com/profile.*"),
+            action: .breakpoint(phase: .both)
+        )
+        await engine.addRule(mapRule)
+        await engine.addRule(breakpointRule)
+
+        let url = try #require(URL(string: "https://example.com/profile"))
+        let generalMatch = await engine.evaluateRule(method: "GET", url: url, headers: [])
+        let breakpointMatch = await engine.evaluateBreakpointRule(method: "GET", url: url, headers: [])
+
+        #expect(generalMatch?.id == mapRule.id)
+        #expect(breakpointMatch?.id == breakpointRule.id)
+    }
+
     @Test("Map Remote tool gate skips map remote rules only")
     func mapRemoteToolGateSkipsOnlyMapRemoteRules() async throws {
         let engine = RuleEngine()

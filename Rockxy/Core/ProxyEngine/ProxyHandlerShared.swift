@@ -14,6 +14,14 @@ nonisolated(unsafe) private let proxyHandlerSharedLogger = Logger(
 enum ProxyHandlerShared {
     // MARK: Internal
 
+    struct MapRemoteRewrite {
+        let head: HTTPRequestHead
+        let requestData: HTTPRequestData
+        let upstreamHost: String
+        let upstreamPort: Int
+        let scheme: String
+    }
+
     /// Decision returned by `oversizeRelayDecision` when a response body chunk
     /// pushes the capture buffer past the cap. Drives both the script-deferral
     /// flush logic and the response-breakpoint preservation.
@@ -145,6 +153,74 @@ enum ProxyHandlerShared {
         )
     }
 
+    nonisolated static func buildMapRemoteRewrite(
+        configuration: MapRemoteConfiguration,
+        originalHead: HTTPRequestHead,
+        requestData: HTTPRequestData,
+        fallbackScheme: String,
+        fallbackHost: String,
+        fallbackPort: Int? = nil
+    )
+        -> MapRemoteRewrite
+    {
+        let originalURL = requestData.url
+        let schemeOverride = normalizedScheme(configuration.scheme)
+        let originalScheme = normalizedScheme(originalURL.scheme) ?? fallbackScheme.lowercased()
+        let scheme = schemeOverride ?? originalScheme
+        let upstreamHost = configuration.host ?? (originalURL.host ?? fallbackHost)
+        let upstreamPort = resolvedMapRemotePort(
+            configuration: configuration,
+            schemeOverride: schemeOverride,
+            scheme: scheme,
+            originalURL: originalURL,
+            fallbackPort: fallbackPort
+        )
+        let remotePath = configuration.path ?? originalURL.path
+        let remoteQuery = configuration.query ?? originalURL.query
+
+        let effectivePath = remotePath.isEmpty ? "/" : remotePath
+        let encodedQuery = remoteQuery.flatMap(percentEncodedQuery)
+        let uri = encodedQuery.map { "\(effectivePath)?\($0)" } ?? effectivePath
+
+        var modifiedHead = originalHead
+        modifiedHead.uri = configuration.preserveOriginalURL ? originalHead.uri : uri
+
+        let hostHeaderValue: String
+        if configuration.preserveHostHeader {
+            hostHeaderValue = originalHead.headers.first(name: "Host")
+                ?? hostHeader(host: originalURL.host ?? fallbackHost, port: originalURL.port ?? fallbackPort, scheme: originalScheme)
+        } else {
+            hostHeaderValue = hostHeader(host: upstreamHost, port: upstreamPort, scheme: scheme)
+        }
+        modifiedHead.headers.replaceOrAdd(name: "Host", value: NetworkValidator.sanitizeHeaderValue(hostHeaderValue))
+
+        let urlString = mapRemoteURLString(
+            scheme: scheme,
+            host: upstreamHost,
+            port: upstreamPort,
+            pathAndQuery: uri
+        )
+
+        // swiftlint:disable:next force_unwrapping
+        let fallbackURL = URL(string: "\(fallbackScheme.lowercased())://localhost/")!
+        let modifiedData = HTTPRequestData(
+            method: requestData.method,
+            url: URL(string: urlString) ?? fallbackURL,
+            httpVersion: requestData.httpVersion,
+            headers: modifiedHead.headers.map { HTTPHeader(name: $0.name, value: $0.value) },
+            body: requestData.body,
+            contentType: requestData.contentType
+        )
+
+        return MapRemoteRewrite(
+            head: modifiedHead,
+            requestData: modifiedData,
+            upstreamHost: upstreamHost,
+            upstreamPort: upstreamPort,
+            scheme: scheme
+        )
+    }
+
     /// Rebuild the outbound response head from a script-mutated `HTTPResponseData`.
     ///
     /// The relay path sends the full mutated body in a fixed-length write, so
@@ -188,5 +264,87 @@ enum ProxyHandlerShared {
         }
         warned.insert(key)
         proxyHandlerSharedLogger.warning("buildForwardHead: \(kind) \(details)")
+    }
+
+    private static func normalizedScheme(_ scheme: String?) -> String? {
+        guard let scheme = scheme?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !scheme.isEmpty else
+        {
+            return nil
+        }
+        return scheme.lowercased()
+    }
+
+    private static func resolvedMapRemotePort(
+        configuration: MapRemoteConfiguration,
+        schemeOverride: String?,
+        scheme: String,
+        originalURL: URL,
+        fallbackPort: Int?
+    )
+        -> Int
+    {
+        if let port = configuration.port {
+            return port
+        }
+        if schemeOverride == nil {
+            return originalURL.port ?? fallbackPort ?? defaultPort(for: scheme)
+        }
+        return defaultPort(for: scheme)
+    }
+
+    private static func defaultPort(for scheme: String) -> Int {
+        switch scheme.lowercased() {
+        case "https", "wss":
+            443
+        default:
+            80
+        }
+    }
+
+    private static func isDefaultPort(_ port: Int, for scheme: String) -> Bool {
+        port == defaultPort(for: scheme)
+    }
+
+    private static func hostHeader(host: String, port: Int?, scheme: String) -> String {
+        guard let port, !isDefaultPort(port, for: scheme) else {
+            return host
+        }
+        return "\(hostForAuthority(host)):\(port)"
+    }
+
+    private static func hostForAuthority(_ host: String) -> String {
+        if host.contains(":"), !host.hasPrefix("["), !host.hasSuffix("]") {
+            return "[\(host)]"
+        }
+        return host
+    }
+
+    private static func mapRemoteURLString(
+        scheme: String,
+        host: String,
+        port: Int,
+        pathAndQuery: String
+    )
+        -> String
+    {
+        var urlString = "\(scheme)://\(hostForAuthority(host))"
+        if !isDefaultPort(port, for: scheme) {
+            urlString += ":\(port)"
+        }
+        urlString += pathAndQuery
+        return urlString
+    }
+
+    private static func percentEncodedQuery(_ query: String) -> String? {
+        guard !query.isEmpty else {
+            return query
+        }
+        if let components = URLComponents(string: "https://rockxy.invalid/?\(query)"),
+           let encoded = components.percentEncodedQuery
+        {
+            return encoded
+        }
+        return query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
     }
 }

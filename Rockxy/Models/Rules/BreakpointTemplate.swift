@@ -306,6 +306,9 @@ enum BreakpointTemplateValidator {
             }
             return .invalid(String(localized: "Invalid headers."))
         }
+        if let jsonError = validateJSONBodyIfNeeded(body, headers: parsedHeaders) {
+            return .invalid(jsonError)
+        }
 
         let parsed = BreakpointTemplateParsedRequest(
             method: method,
@@ -345,6 +348,9 @@ enum BreakpointTemplateValidator {
             }
             return .invalid(String(localized: "Invalid headers."))
         }
+        if let jsonError = validateJSONBodyIfNeeded(body, headers: parsedHeaders) {
+            return .invalid(jsonError)
+        }
 
         let parsed = BreakpointTemplateParsedResponse(
             httpVersion: parts[0],
@@ -377,6 +383,31 @@ enum BreakpointTemplateValidator {
             headers.append(BreakpointTemplateHeader(name: name, value: value))
         }
         return .valid(headers)
+    }
+
+    private static func validateJSONBodyIfNeeded(
+        _ body: String,
+        headers: [BreakpointTemplateHeader]
+    )
+        -> String?
+    {
+        let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedBody.isEmpty,
+              headers.contains(where: {
+                  $0.name.caseInsensitiveCompare("content-type") == .orderedSame
+                      && $0.value.localizedCaseInsensitiveContains("json")
+              }),
+              let data = trimmedBody.data(using: .utf8)
+        else {
+            return nil
+        }
+
+        do {
+            _ = try JSONSerialization.jsonObject(with: data)
+            return nil
+        } catch {
+            return String(localized: "Invalid JSON body: \(error.localizedDescription)")
+        }
     }
 
     private static func normalize(_ rawMessage: String) -> String {

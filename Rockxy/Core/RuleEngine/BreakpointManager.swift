@@ -10,9 +10,13 @@ import os
 /// to the proxy pipeline when the user resolves the item.
 struct PausedBreakpointItem: Identifiable {
     let id: UUID
+    let sequenceNumber: Int
     let phase: BreakpointPhase
     let host: String
     let path: String
+    let url: String
+    let client: String
+    let queryName: String
     let method: String
     let statusCode: Int?
     let matchedRuleName: String?
@@ -46,11 +50,16 @@ final class BreakpointManager {
         let path = components?.path ?? "/"
 
         let itemId = UUID()
+        nextSequenceNumber += 1
         let item = PausedBreakpointItem(
             id: itemId,
+            sequenceNumber: nextSequenceNumber,
             phase: data.phase,
             host: host,
             path: path,
+            url: Self.displayURL(from: data.url),
+            client: Self.clientLabel(from: data.headers),
+            queryName: Self.queryName(from: data),
             method: data.method,
             statusCode: data.phase == .response ? data.statusCode : nil,
             matchedRuleName: nil,
@@ -117,4 +126,79 @@ final class BreakpointManager {
     private static let logger = Logger(subsystem: RockxyIdentity.current.logSubsystem, category: "BreakpointManager")
 
     private var continuations: [UUID: CheckedContinuation<(BreakpointDecision, BreakpointRequestData), Never>] = [:]
+    private var nextSequenceNumber = 0
+
+    private static func displayURL(from urlString: String) -> String {
+        guard let components = URLComponents(string: urlString) else {
+            return urlString
+        }
+        var display = components.host ?? urlString
+        if let port = components.port {
+            display += ":\(port)"
+        }
+        display += components.path.isEmpty ? "/" : components.path
+        if let query = components.percentEncodedQuery, !query.isEmpty {
+            display += "?\(query)"
+        }
+        return display
+    }
+
+    private static func clientLabel(from headers: [EditableHeader]) -> String {
+        let directHeaderNames = [
+            "x-rockxy-runtime",
+            "x-client",
+            "x-client-name",
+            "x-runtime",
+        ]
+        for headerName in directHeaderNames {
+            if let value = headers.first(where: { $0.name.lowercased() == headerName })?.value
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !value.isEmpty
+            {
+                return value
+            }
+        }
+        guard let userAgent = headers.first(where: { $0.name.lowercased() == "user-agent" })?.value,
+              !userAgent.isEmpty
+        else {
+            return String(localized: "Unknown")
+        }
+        if !userAgent.contains("Mozilla/"), let slash = userAgent.firstIndex(of: "/") {
+            let name = String(userAgent[..<slash])
+            return name.isEmpty ? userAgent : name
+        }
+        if userAgent.contains("Chrome/") {
+            return "Google Chrome"
+        }
+        if userAgent.contains("Firefox/") {
+            return "Firefox"
+        }
+        if userAgent.contains("Safari/") {
+            return "Safari"
+        }
+        return userAgent
+    }
+
+    private static func queryName(from data: BreakpointRequestData) -> String {
+        if let components = URLComponents(string: data.url),
+           let operationName = components.queryItems?.first(where: {
+               ["operationName", "queryName"].contains($0.name)
+           })?.value,
+           !operationName.isEmpty
+        {
+            return operationName
+        }
+        guard let contentType = data.headers.first(where: {
+            $0.name.caseInsensitiveCompare("content-type") == .orderedSame
+        })?.value.lowercased(),
+              contentType.contains("json"),
+              let bodyData = data.body.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any],
+              let operationName = object["operationName"] as? String,
+              !operationName.isEmpty
+        else {
+            return ""
+        }
+        return operationName
+    }
 }

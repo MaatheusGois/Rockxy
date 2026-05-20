@@ -19,7 +19,7 @@ enum BreakpointDecision {
     case execute
     /// Drop the request and return a 503 Service Unavailable response.
     case abort
-    /// Drop the request silently with no response.
+    /// Forward the original paused message without applying the current draft.
     case cancel
 }
 

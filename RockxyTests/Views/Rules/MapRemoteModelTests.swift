@@ -291,13 +291,13 @@ struct MapRemoteModelTests {
         let vm = MapRemoteEditorViewModel()
         vm.load(context: .blank)
 
-        vm.tryParseDestinationURL("https://api.production.com:8443/v2/api?id=123")
+        vm.tryParseDestinationURL("HTTPS://api.production.com:8443/v2/api?filter=hello%20world&id=1&id=2")
 
         #expect(vm.destScheme == "https")
         #expect(vm.destHost == "api.production.com")
         #expect(vm.destPort == "8443")
         #expect(vm.destPath == "v2/api")
-        #expect(vm.destQuery == "id=123")
+        #expect(vm.destQuery == "filter=hello%20world&id=1&id=2")
     }
 
     @Test("editor loads transaction and domain drafts")
@@ -393,6 +393,30 @@ struct MapRemoteModelTests {
 
         #expect(vm.makeRule() == nil)
         #expect(vm.errorMessage != nil)
+    }
+
+    @Test("editor saves wildcard rule with exact boundary when subpaths are off")
+    func editorExactWildcardBoundaryWhenSubpathsOff() throws {
+        let vm = MapRemoteEditorViewModel()
+        vm.load(context: .blank)
+        vm.name = "Baseline"
+        vm.urlText = "127.0.0.1:43210/rockxy-demo/environment"
+        vm.matchType = .wildcard
+        vm.includeSubpaths = false
+        vm.destScheme = "HTTPS"
+        vm.destHost = "httpbin.org"
+        vm.destPath = "get"
+
+        let rule = try #require(vm.makeRule())
+
+        #expect(rule.matchCondition.urlPattern == #"127\.0\.0\.1:43210\/rockxy-demo\/environment($|[?#])"#)
+        if case let .mapRemote(config) = rule.action {
+            #expect(config.scheme == "https")
+            #expect(config.host == "httpbin.org")
+            #expect(config.path == "/get")
+        } else {
+            Issue.record("Expected Map Remote rule")
+        }
     }
 
     @Test("editor destination preview uses placeholders and normalized path")

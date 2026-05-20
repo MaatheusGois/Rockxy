@@ -579,6 +579,30 @@ struct RuleActionTests {
         #expect(headers.contains { $0.name == "X-Debug" && $0.value == "true" })
     }
 
+    @Test("HeaderMutator Set operation replaces duplicate request header values")
+    func setOperationReplacesDuplicateRequestHeaderValues() {
+        var headers = [
+            HTTPHeader(name: "Authorization", value: "Bearer expired-token"),
+            HTTPHeader(name: "authorization", value: "Bearer stale-token"),
+            HTTPHeader(name: "Accept", value: "application/json"),
+        ]
+        let ops = [
+            HeaderOperation(
+                type: .replace,
+                headerName: "Authorization",
+                headerValue: "Bearer demo-access-token",
+                phase: .request
+            ),
+        ]
+
+        HeaderMutator.apply(ops, to: &headers)
+
+        let authHeaders = headers.filter { $0.name.caseInsensitiveCompare("Authorization") == .orderedSame }
+        #expect(authHeaders.count == 1)
+        #expect(authHeaders[0].value == "Bearer demo-access-token")
+        #expect(headers.contains { $0.name == "Accept" && $0.value == "application/json" })
+    }
+
     @Test("Mixed phases produce correct summary labels")
     func mixedPhaseSummaryLabels() {
         let reqOnly = [HeaderOperation(type: .add, headerName: "A", headerValue: "1", phase: .request)]

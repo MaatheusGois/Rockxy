@@ -82,4 +82,31 @@ struct BreakpointManagerTests {
 
         #expect(manager.selectedItemId == manager.pausedItems.first?.id)
     }
+
+    @Test("enqueue projects Proxyman-style queue metadata")
+    func enqueueProjectsQueueMetadata() async throws {
+        let manager = BreakpointManager()
+        let data = BreakpointRequestData(
+            method: "POST",
+            url: "http://127.0.0.1:43210/rockxy-demo/profile?operationName=ExpiredToken",
+            headers: [
+                EditableHeader(name: "X-Rockxy-Runtime", value: "Flutter"),
+                EditableHeader(name: "Content-Type", value: "application/json"),
+            ],
+            body: #"{"operationName":"BodyName"}"#,
+            statusCode: 200,
+            phase: .request
+        )
+
+        Task { _ = await manager.enqueueAndWait(data) }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let item = try #require(manager.pausedItems.first)
+        #expect(item.sequenceNumber == 1)
+        #expect(item.url == "127.0.0.1:43210/rockxy-demo/profile?operationName=ExpiredToken")
+        #expect(item.client == "Flutter")
+        #expect(item.queryName == "ExpiredToken")
+
+        manager.resolve(id: item.id, decision: .cancel)
+    }
 }

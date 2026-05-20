@@ -44,6 +44,46 @@ struct RuleStoreTests {
         #expect(loaded[1].isEnabled == false)
     }
 
+    @Test("RuleStore save and load roundtrip preserves breakpoint rule fields")
+    func saveLoadBreakpointRuleRoundtrip() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(
+            at: tempDir, withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let store = TestableRuleStore(directory: tempDir)
+        let rule = ProxyRule(
+            name: "Case 5 - auth profile",
+            isEnabled: true,
+            matchCondition: RuleMatchCondition(
+                urlPattern: "http://127\\.0\\.0\\.1:43210/rockxy-demo/profile(?:\\?.*)?$",
+                method: "GET",
+                headerName: "Authorization",
+                headerValue: "Bearer expired-demo-token"
+            ),
+            action: .breakpoint(phase: .both)
+        )
+
+        try store.saveRules([rule])
+        let loaded = try store.loadRules()
+
+        #expect(loaded.count == 1)
+        #expect(loaded[0].id == rule.id)
+        #expect(loaded[0].name == "Case 5 - auth profile")
+        #expect(loaded[0].isEnabled == true)
+        #expect(loaded[0].matchCondition.urlPattern == rule.matchCondition.urlPattern)
+        #expect(loaded[0].matchCondition.method == "GET")
+        #expect(loaded[0].matchCondition.headerName == "Authorization")
+        #expect(loaded[0].matchCondition.headerValue == "Bearer expired-demo-token")
+        if case let .breakpoint(phase) = loaded[0].action {
+            #expect(phase == .both)
+        } else {
+            Issue.record("Expected breakpoint action to survive rule-store roundtrip")
+        }
+    }
+
     @Test("RuleStore load from non-existent file returns empty array")
     func loadNonExistentReturnsEmpty() throws {
         let tempDir = FileManager.default.temporaryDirectory
@@ -172,7 +212,7 @@ struct RuleStoreTests {
 
         let store = TestableRuleStore(directory: tempDir)
         let invalidURL = tempDir.appendingPathComponent("invalid.json")
-        try #require("this is not json at all".data(using: .utf8)).write(to: invalidURL)
+        try Data("this is not json at all".utf8).write(to: invalidURL)
 
         #expect(throws: (any Error).self) {
             _ = try store.importRules(from: invalidURL)

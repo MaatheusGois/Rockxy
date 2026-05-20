@@ -144,6 +144,42 @@ struct RuleSyncServiceTests {
         }
     }
 
+    @Test("setBreakpointToolEnabled persists UserDefaults and updates breakpoint matcher gate")
+    func setBreakpointToolEnabledPersistsAndUpdatesGate() async {
+        await withRuleTestLock { [self] in
+            let defaultsBackup = backupBreakpointToolDefault()
+            let breakpointRule = ProxyRule(
+                name: "Auth Profile Breakpoint",
+                isEnabled: true,
+                matchCondition: RuleMatchCondition(urlPattern: ".*example\\.com/profile.*", method: "GET"),
+                action: .breakpoint(phase: .both)
+            )
+            await RuleSyncService.replaceAllRules([breakpointRule])
+
+            guard let url = URL(string: "https://example.com/profile") else {
+                Issue.record("Expected test URL to be valid")
+                restoreBreakpointToolDefault(defaultsBackup)
+                await RuleEngine.shared.setBreakpointToolEnabled(true)
+                return
+            }
+
+            await RuleSyncService.setBreakpointToolEnabled(false)
+
+            #expect(UserDefaults.standard.object(forKey: Self.breakpointToolEnabledKey) as? Bool == false)
+            let disabledResult = await RuleEngine.shared.evaluateBreakpointRule(method: "GET", url: url, headers: [])
+            #expect(disabledResult == nil)
+
+            await RuleSyncService.setBreakpointToolEnabled(true)
+
+            #expect(UserDefaults.standard.object(forKey: Self.breakpointToolEnabledKey) as? Bool == true)
+            let enabledResult = await RuleEngine.shared.evaluateBreakpointRule(method: "GET", url: url, headers: [])
+            #expect(enabledResult?.id == breakpointRule.id)
+
+            restoreBreakpointToolDefault(defaultsBackup)
+            await RuleEngine.shared.setBreakpointToolEnabled(defaultsBackup ?? true)
+        }
+    }
+
     // MARK: Private
 
     private struct RulesBackup {
@@ -151,6 +187,7 @@ struct RuleSyncServiceTests {
         let engineRules: [ProxyRule]
     }
 
+    private static let breakpointToolEnabledKey = "breakpointToolEnabled"
     private static let networkConditionsToolEnabledKey = "networkConditionsToolEnabled"
 
     private static let rulesPath: URL = {
@@ -187,6 +224,18 @@ struct RuleSyncServiceTests {
             UserDefaults.standard.set(value, forKey: Self.networkConditionsToolEnabledKey)
         } else {
             UserDefaults.standard.removeObject(forKey: Self.networkConditionsToolEnabledKey)
+        }
+    }
+
+    private func backupBreakpointToolDefault() -> Bool? {
+        UserDefaults.standard.object(forKey: Self.breakpointToolEnabledKey) as? Bool
+    }
+
+    private func restoreBreakpointToolDefault(_ value: Bool?) {
+        if let value {
+            UserDefaults.standard.set(value, forKey: Self.breakpointToolEnabledKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Self.breakpointToolEnabledKey)
         }
     }
 

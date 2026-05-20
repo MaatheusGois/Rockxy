@@ -88,6 +88,37 @@ struct BreakpointTemplateStoreTests {
         #expect(validation.message.contains("HTTP"))
     }
 
+    @Test("Validation rejects malformed JSON request body when content type is JSON")
+    func validationRejectsMalformedJSONRequestBody() {
+        let validation = BreakpointTemplateValidator.validate(
+            rawMessage: """
+            POST /profile HTTP/1.1
+            Content-Type: application/json
+
+            {"token":"expired" "missingComma":true}
+            """,
+            kind: .request
+        )
+
+        #expect(!validation.isValid)
+        #expect(validation.message.contains("Invalid JSON body"))
+    }
+
+    @Test("Validation accepts malformed-looking text body when content type is not JSON")
+    func validationDoesNotParseNonJSONBody() {
+        let validation = BreakpointTemplateValidator.validate(
+            rawMessage: """
+            POST /profile HTTP/1.1
+            Content-Type: text/plain
+
+            {"token":"expired" "missingComma":true}
+            """,
+            kind: .request
+        )
+
+        #expect(validation.isValid)
+    }
+
     @Test("Selected application payload applies request fields to breakpoint draft")
     func requestApplicationPayloadAppliesToDraft() throws {
         let store = BreakpointTemplateStore(defaults: makeDefaults(), storageKey: storageKey, seedDefaults: false)
@@ -206,6 +237,20 @@ struct BreakpointTemplateStoreTests {
         #expect(store.templates.isEmpty)
         #expect(store.selectedTemplateID == nil)
         #expect(!store.selectedValidation.isValid)
+    }
+
+    @Test("Deleted default templates are not re-seeded on reload")
+    func deletedDefaultTemplatesAreNotReseededOnReload() {
+        let defaults = makeDefaults()
+        let store = BreakpointTemplateStore(defaults: defaults, storageKey: storageKey)
+        for template in store.templates {
+            store.deleteTemplate(id: template.id)
+        }
+
+        let fresh = BreakpointTemplateStore(defaults: defaults, storageKey: storageKey)
+
+        #expect(fresh.templates.isEmpty)
+        #expect(fresh.selectedTemplateID == nil)
     }
 
     @Test("Update selected sanitizes blank names and reset restores sample")

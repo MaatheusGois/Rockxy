@@ -89,24 +89,25 @@ final class ModifyHeaderWindowViewModel {
         editorSession = nil
     }
 
-    func addRule(_ rule: ProxyRule) {
-        allRules.append(rule)
-        selectedRuleID = rule.id
-        Task {
-            let accepted = await RulePolicyGate.shared.addRule(rule)
-            if !accepted {
-                allRules = await RuleEngine.shared.allRules
-            }
+    @discardableResult
+    func addRule(_ rule: ProxyRule) async -> Bool {
+        let accepted = await RulePolicyGate.shared.addRule(rule)
+        allRules = await RuleEngine.shared.allRules
+        if accepted {
+            selectedRuleID = rule.id
         }
+        return accepted
     }
 
-    func updateRule(_ rule: ProxyRule) {
-        guard let index = allRules.firstIndex(where: { $0.id == rule.id }) else {
-            return
+    @discardableResult
+    func updateRule(_ rule: ProxyRule) async -> Bool {
+        guard allRules.contains(where: { $0.id == rule.id }) else {
+            return false
         }
-        allRules[index] = rule
+        await RulePolicyGate.shared.updateRule(rule)
+        allRules = await RuleEngine.shared.allRules
         selectedRuleID = rule.id
-        Task { await RulePolicyGate.shared.updateRule(rule) }
+        return true
     }
 
     func removeRule(id: UUID) {
@@ -117,6 +118,7 @@ final class ModifyHeaderWindowViewModel {
         Task { await RulePolicyGate.shared.removeRule(id: id) }
     }
 
+    @discardableResult
     func saveRule(
         existingRule: ProxyRule?,
         ruleName: String,
@@ -125,7 +127,9 @@ final class ModifyHeaderWindowViewModel {
         matchType: RuleMatchType,
         includeSubpaths: Bool,
         operations: [EditableHeaderOperation]
-    ) {
+    )
+        async -> Bool
+    {
         let rule = ModifyHeaderRuleBuilder.build(
             existingRule: existingRule,
             ruleName: ruleName,
@@ -136,10 +140,9 @@ final class ModifyHeaderWindowViewModel {
             operations: operations.toHeaderOperations()
         )
         if existingRule == nil {
-            addRule(rule)
-        } else {
-            updateRule(rule)
+            return await addRule(rule)
         }
+        return await updateRule(rule)
     }
 
     func operations(for rule: ProxyRule) -> [HeaderOperation] {
@@ -198,7 +201,7 @@ struct ModifyHeaderWindowView: View {
                 } else {
                     nil
                 }
-                viewModel.saveRule(
+                let accepted = await viewModel.saveRule(
                     existingRule: existingRule,
                     ruleName: name,
                     urlPattern: pattern,
@@ -207,7 +210,9 @@ struct ModifyHeaderWindowView: View {
                     includeSubpaths: includeSubpaths,
                     operations: operations
                 )
-                viewModel.dismissEditor()
+                if accepted {
+                    viewModel.dismissEditor()
+                }
             }
         }
     }
@@ -310,7 +315,7 @@ struct ModifyHeaderWindowView: View {
                 .foregroundStyle(.secondary)
             Text(
                 String(
-                    localized: "Add, remove, or replace HTTP headers on matching requests and responses. Each rule can have multiple header operations."
+                    localized: "Set, add, or remove HTTP headers on matching requests and responses. Each rule can have multiple header operations."
                 )
             )
             .font(.caption)
@@ -380,13 +385,13 @@ struct ModifyHeaderWindowView: View {
     private var presetsMenu: some View {
         Menu {
             Button(String(localized: "Add CORS Headers")) {
-                viewModel.addRule(HeaderModifyPresets.corsHeaders())
+                Task { await viewModel.addRule(HeaderModifyPresets.corsHeaders()) }
             }
             Button(String(localized: "Remove Authorization")) {
-                viewModel.addRule(HeaderModifyPresets.removeAuthorization())
+                Task { await viewModel.addRule(HeaderModifyPresets.removeAuthorization()) }
             }
             Button(String(localized: "Strip Server Header")) {
-                viewModel.addRule(HeaderModifyPresets.stripServerHeader())
+                Task { await viewModel.addRule(HeaderModifyPresets.stripServerHeader()) }
             }
         } label: {
             Text(String(localized: "Presets"))
@@ -469,7 +474,7 @@ private struct ModifyHeaderEditSheet: View {
 
     init(
         session: ModifyHeaderEditorSession,
-        onSave: @escaping (String, String, HTTPMethodFilter, RuleMatchType, Bool, [EditableHeaderOperation]) -> Void
+        onSave: @escaping (String, String, HTTPMethodFilter, RuleMatchType, Bool, [EditableHeaderOperation]) async -> Void
     ) {
         self.session = session
         self.onSave = onSave
@@ -504,7 +509,7 @@ private struct ModifyHeaderEditSheet: View {
     // MARK: Internal
 
     let session: ModifyHeaderEditorSession
-    let onSave: (String, String, HTTPMethodFilter, RuleMatchType, Bool, [EditableHeaderOperation]) -> Void
+    let onSave: (String, String, HTTPMethodFilter, RuleMatchType, Bool, [EditableHeaderOperation]) async -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -529,6 +534,13 @@ private struct ModifyHeaderEditSheet: View {
                         .font(.system(size: 13, weight: .medium))
                     ScrollView {
                         ModifyHeaderEditorView(operations: $operations)
+                            .padding(10)
+                    }
+                    .background(Color(nsColor: .windowBackgroundColor))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
                     }
                     .frame(maxHeight: 300)
                 }
@@ -546,18 +558,21 @@ private struct ModifyHeaderEditSheet: View {
                 .keyboardShortcut(.cancelAction)
 
                 Button(isEditing ? String(localized: "Save") : String(localized: "Add")) {
-                    onSave(
-                        trimmedName,
-                        trimmedPattern,
-                        httpMethod,
-                        matchType,
-                        matchType == .wildcard ? includeSubpaths : false,
-                        operations
-                    )
-                    dismiss()
+                    Task {
+                        isSaving = true
+                        await onSave(
+                            trimmedName,
+                            trimmedPattern,
+                            httpMethod,
+                            matchType,
+                            matchType == .wildcard ? includeSubpaths : false,
+                            operations
+                        )
+                        isSaving = false
+                    }
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(!isValid)
+                .disabled(!isValid || isSaving)
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 8)
@@ -578,6 +593,7 @@ private struct ModifyHeaderEditSheet: View {
     @State private var matchType: RuleMatchType
     @State private var includeSubpaths: Bool
     @State private var operations: [EditableHeaderOperation] = [EditableHeaderOperation()]
+    @State private var isSaving = false
 
     private var isEditing: Bool {
         if case .edit = session.mode {

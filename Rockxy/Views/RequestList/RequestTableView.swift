@@ -261,6 +261,8 @@ extension RequestTableView {
         /// coordinator state back into NSTableView.
         private(set) var isUpdatingSortDescriptors = false
 
+        private var lastSyncedSelectionIDs: Set<UUID> = []
+
         // MARK: - NSTableViewDataSource
 
         func numberOfRows(in tableView: NSTableView) -> Int {
@@ -361,6 +363,7 @@ extension RequestTableView {
                 ids.insert(rows[index].id)
             }
 
+            lastSyncedSelectionIDs = ids
             parent.selectedIDs = ids
             parent.onSelectionChanged?(ids)
         }
@@ -704,12 +707,26 @@ extension RequestTableView {
             }
 
             guard currentSelected != desired else {
+                lastSyncedSelectionIDs = ids
                 return
             }
+
+            let shouldPreserveScroll = ids == lastSyncedSelectionIDs
+            let visibleOrigin = shouldPreserveScroll
+                ? tableView.enclosingScrollView?.contentView.bounds.origin
+                : nil
 
             isUpdatingSelection = true
             tableView.selectRowIndexes(desired, byExtendingSelection: false)
             isUpdatingSelection = false
+            lastSyncedSelectionIDs = ids
+
+            if let visibleOrigin,
+               let scrollView = tableView.enclosingScrollView
+            {
+                scrollView.contentView.scroll(to: visibleOrigin)
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+            }
         }
 
         func syncHeaderColumns(in tableView: NSTableView) {

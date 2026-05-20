@@ -151,12 +151,16 @@ final class HTTPProxyHandler: ChannelInboundHandler, RemovableChannelHandler, @u
         let ruleEngine = self.ruleEngine
 
         eventLoop.makeFutureWithTask {
-            await ruleEngine.evaluateRule(method: method, url: url, headers: headers)
+            let breakpointRule = await ruleEngine.evaluateBreakpointRule(method: method, url: url, headers: headers)
+            let matchedRule = await ruleEngine.evaluateRule(method: method, url: url, headers: headers)
+            return (breakpointRule, matchedRule)
         }.whenComplete { [weak self] result in
             guard let self else {
                 return
             }
-            let matchedRule: ProxyRule? = (try? result.get()) ?? nil
+            let evaluation = try? result.get()
+            let breakpointRule = evaluation?.0
+            let matchedRule = evaluation?.1
             let callback = self.makeTransactionCallback(for: matchedRule)
 
             // CONNECT policy: only .block is meaningful on tunnel establishment (sends
@@ -186,6 +190,21 @@ final class HTTPProxyHandler: ChannelInboundHandler, RemovableChannelHandler, @u
                     }
                 }
                 self.handleConnect(context: context, head: head)
+                return
+            }
+
+            if let breakpointRule,
+               case let .breakpoint(phase) = breakpointRule.action,
+               phase == .request || phase == .both
+            {
+                self.handleRuleAction(
+                    breakpointRule.action,
+                    context: context,
+                    head: head,
+                    requestData: requestData,
+                    callback: self.makeTransactionCallback(for: breakpointRule),
+                    urlPattern: breakpointRule.matchCondition.urlPattern
+                )
                 return
             }
 
@@ -406,44 +425,15 @@ final class HTTPProxyHandler: ChannelInboundHandler, RemovableChannelHandler, @u
             return
         }
 
-        let originalURL = requestData.url
-        let upstreamHost = configuration.host ?? (originalURL.host ?? "localhost")
-        let scheme = configuration.scheme ?? (originalURL.scheme ?? "http")
-        let port = configuration.port ?? (scheme == "https" ? 443 : (originalURL.port ?? 80))
-        let path = configuration.path ?? originalURL.path
-        let query = configuration.query ?? originalURL.query
-
-        let effectivePath = path.isEmpty ? "/" : path
-        let uri = query.map { "\(effectivePath)?\($0)" } ?? effectivePath
-
-        var modifiedHead = head
-        modifiedHead.uri = configuration.preserveOriginalURL ? head.uri : uri
-
-        let hostHeaderValue: String = if configuration.preserveHostHeader {
-            originalURL.host ?? upstreamHost
-        } else {
-            upstreamHost
-        }
-        modifiedHead.headers.replaceOrAdd(name: "Host", value: NetworkValidator.sanitizeHeaderValue(hostHeaderValue))
-
-        var urlString = "\(scheme)://\(upstreamHost)"
-        if port != 80, port != 443 {
-            urlString += ":\(port)"
-        }
-        urlString += uri
-
-        // swiftlint:disable:next force_unwrapping
-        let fallbackURL = URL(string: "http://localhost/")!
-        let modifiedData = HTTPRequestData(
-            method: requestData.method,
-            url: URL(string: urlString) ?? fallbackURL,
-            httpVersion: requestData.httpVersion,
-            headers: requestData.headers,
-            body: requestData.body,
-            contentType: requestData.contentType
+        let rewrite = ProxyHandlerShared.buildMapRemoteRewrite(
+            configuration: configuration,
+            originalHead: head,
+            requestData: requestData,
+            fallbackScheme: "http",
+            fallbackHost: "localhost"
         )
 
-        forwardRequest(context: context, head: modifiedHead, requestData: modifiedData, callback: callback)
+        forwardRequest(context: context, head: rewrite.head, requestData: rewrite.requestData, callback: callback)
     }
 
     nonisolated private func handleMapLocal(

@@ -25,6 +25,26 @@ actor RuleEngine {
         evaluateRule(method: method, url: url, headers: headers)?.action
     }
 
+    /// Evaluates only Breakpoint rules and returns the first matching enabled rule.
+    /// Breakpoint is an interruption tool, so request-phase breakpoints need a chance
+    /// to pause traffic before another rule category consumes the same request.
+    func evaluateBreakpointRule(method: String, url: URL, headers: [HTTPHeader]) -> ProxyRule? {
+        guard breakpointToolEnabled else {
+            return nil
+        }
+        for rule in rules where rule.isEnabled {
+            guard case .breakpoint = rule.action else {
+                continue
+            }
+            let compiled = compiledPatterns[rule.id]
+            if rule.matchCondition.matches(method: method, url: url, headers: headers, compiledPattern: compiled) {
+                Self.logger.debug("Breakpoint rule matched: \(rule.name)")
+                return rule
+            }
+        }
+        return nil
+    }
+
     /// Evaluates rules and returns the full matching rule (action + match condition).
     /// Used by Map Local Directory to extract the URL pattern for subpath resolution.
     func evaluateRule(method: String, url: URL, headers: [HTTPHeader]) -> ProxyRule? {

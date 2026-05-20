@@ -49,6 +49,10 @@ struct BreakpointEditorView: View {
     @State private var rawMessage: String = ""
     @State private var rawMessageItemID: UUID?
     @State private var templateStore = BreakpointTemplateStore.shared
+    @State private var isSaveTemplateSheetPresented = false
+    @State private var saveTemplateName = ""
+    @State private var pendingTemplateKind: BreakpointTemplateKind = .request
+    @State private var pendingTemplateRawMessage = ""
 
     private var emptyState: some View {
         VStack(spacing: 4) {
@@ -179,29 +183,15 @@ struct BreakpointEditorView: View {
                     queryDisplay(itemId: itemId)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
 
     private func headersEditor(itemId: UUID) -> some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(String(localized: "Name"))
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text(String(localized: "Value"))
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Color.clear.frame(width: 24)
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
+        ScrollView {
+            LazyVStack(spacing: 6) {
+                columnHeaders(name: "Name", value: "Value")
 
-            List {
                 let headers = draftFor(itemId)?.headers ?? []
                 ForEach(headers) { header in
                     HStack(spacing: 8) {
@@ -242,23 +232,15 @@ struct BreakpointEditorView: View {
                         .buttonStyle(.plain)
                     }
                 }
-            }
-            .listStyle(.plain)
 
-            HStack {
-                Button {
+                addButton(String(localized: "Add Header")) {
                     manager.updateDraft(id: itemId) { draft in
                         draft.headers.append(EditableHeader(name: "", value: ""))
                     }
-                } label: {
-                    Label(String(localized: "Add Header"), systemImage: "plus.circle")
-                        .font(.caption)
                 }
-                .buttonStyle(.plain)
-                Spacer()
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 8)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(12)
         }
     }
 
@@ -281,6 +263,13 @@ struct BreakpointEditorView: View {
                     .foregroundStyle(validation.isValid ? Color.green : Color.red)
                 Spacer()
                 Menu {
+                    Button(String(localized: "Save current message as new template...")) {
+                        pendingTemplateKind = kind
+                        pendingTemplateRawMessage = rawMessage
+                        saveTemplateName = defaultTemplateName(for: kind)
+                        isSaveTemplateSheetPresented = true
+                    }
+                    Divider()
                     ForEach(templateStore.templates(for: kind)) { template in
                         Button(template.name.isEmpty ? String(localized: "Untitled") : template.name) {
                             applyTemplate(template, to: itemId)
@@ -289,7 +278,6 @@ struct BreakpointEditorView: View {
                 } label: {
                     Label(String(localized: "Template"), systemImage: "doc.text")
                 }
-                .disabled(templateStore.templates(for: kind).isEmpty)
             }
             .padding(.horizontal, 12)
             .padding(.top, 8)
@@ -311,27 +299,16 @@ struct BreakpointEditorView: View {
                 syncRawMessageFromDraft(itemId: itemId, force: rawMessageItemID != itemId)
             }
         }
+        .sheet(isPresented: $isSaveTemplateSheetPresented) {
+            saveTemplateSheet
+        }
     }
 
     private func queryDisplay(itemId: UUID) -> some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(String(localized: "Name"))
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text(String(localized: "Value"))
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Color.clear.frame(width: 24)
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
+        ScrollView {
+            LazyVStack(spacing: 6) {
+                columnHeaders(name: "Name", value: "Value")
 
-            List {
                 ForEach(queryItems) { item in
                     HStack(spacing: 8) {
                         TextField(String(localized: "Parameter name"), text: Binding(
@@ -368,22 +345,14 @@ struct BreakpointEditorView: View {
                         .buttonStyle(.plain)
                     }
                 }
-            }
-            .listStyle(.plain)
 
-            HStack {
-                Button {
+                addButton(String(localized: "Add Parameter")) {
                     queryItems.append(EditableQueryItem(name: "", value: ""))
                     rebuildURLFromQuery(itemId: itemId)
-                } label: {
-                    Label(String(localized: "Add Parameter"), systemImage: "plus.circle")
-                        .font(.caption)
                 }
-                .buttonStyle(.plain)
-                Spacer()
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 8)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(12)
         }
         .onAppear { syncQueryItemsFromURL(itemId: itemId) }
         .onChange(of: draftFor(itemId)?.url) { _, _ in syncQueryItemsFromURL(itemId: itemId) }
@@ -432,6 +401,35 @@ struct BreakpointEditorView: View {
         draftFor(itemId)?.headers.first(where: { $0.id == headerId })
     }
 
+    private func columnHeaders(name: String, value: String) -> some View {
+        HStack {
+            Text(String(localized: String.LocalizationValue(name)))
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(String(localized: String.LocalizationValue(value)))
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Color.clear.frame(width: 24)
+        }
+        .padding(.bottom, 4)
+    }
+
+    private func addButton(_ title: String, action: @escaping () -> Void) -> some View {
+        HStack {
+            Button(action: action) {
+                Label(title, systemImage: "plus.circle")
+                    .font(.caption)
+            }
+            .buttonStyle(.plain)
+            Spacer()
+        }
+        .padding(.top, 2)
+    }
+
     private func rawKind(for itemId: UUID) -> BreakpointTemplateKind {
         itemPhase(itemId: itemId) == .response ? .response : .request
     }
@@ -464,6 +462,56 @@ struct BreakpointEditorView: View {
         rawMessageItemID = itemId
         rawMessage = template.rawMessage
         updateRawMessage(template.rawMessage, itemId: itemId)
+    }
+
+    private var saveTemplateSheet: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(String(localized: "Save Template"))
+                .font(.headline)
+
+            TextField(String(localized: "Template name"), text: $saveTemplateName)
+                .textFieldStyle(.roundedBorder)
+
+            let validation = BreakpointRawMessage.validation(for: pendingTemplateRawMessage, kind: pendingTemplateKind)
+            Label(validation.message, systemImage: "circle.fill")
+                .font(.caption)
+                .foregroundStyle(validation.isValid ? Color.green : Color.red)
+
+            HStack {
+                Spacer()
+                Button(String(localized: "Cancel")) {
+                    isSaveTemplateSheetPresented = false
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Button(String(localized: "Save")) {
+                    savePendingTemplate()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!validation.isValid)
+            }
+        }
+        .padding(20)
+        .frame(width: 380)
+    }
+
+    private func defaultTemplateName(for kind: BreakpointTemplateKind) -> String {
+        switch kind {
+        case .request:
+            String(localized: "Saved Request")
+        case .response:
+            String(localized: "Saved Response")
+        }
+    }
+
+    private func savePendingTemplate() {
+        let template = templateStore.addTemplate(kind: pendingTemplateKind)
+        templateStore.updateTemplate(
+            id: template.id,
+            name: saveTemplateName,
+            rawMessage: pendingTemplateRawMessage
+        )
+        isSaveTemplateSheetPresented = false
     }
 }
 

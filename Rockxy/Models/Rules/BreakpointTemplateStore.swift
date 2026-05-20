@@ -196,6 +196,9 @@ final class BreakpointTemplateStore {
     private let defaults: UserDefaults
     private let storageKey: String
     private let seedDefaults: Bool
+    private var seedMarkerKey: String {
+        "\(storageKey).seeded"
+    }
 
     private func uniqueName(for kind: BreakpointTemplateKind) -> String {
         let base = kind.emptyName
@@ -225,9 +228,12 @@ final class BreakpointTemplateStore {
 
     private func load() {
         guard let data = defaults.data(forKey: storageKey) else {
-            templates = seedDefaults ? BreakpointTemplate.defaultTemplates : []
-            if seedDefaults {
+            if seedDefaults, !defaults.bool(forKey: seedMarkerKey) {
+                templates = BreakpointTemplate.defaultTemplates
+                defaults.set(true, forKey: seedMarkerKey)
                 save()
+            } else {
+                templates = []
             }
             return
         }
@@ -235,10 +241,6 @@ final class BreakpointTemplateStore {
         do {
             let decoded = try JSONDecoder().decode([BreakpointTemplate].self, from: data)
             templates = decoded
-            if templates.isEmpty, seedDefaults {
-                templates = BreakpointTemplate.defaultTemplates
-                save()
-            }
         } catch {
             Self.logger.error("Failed to load breakpoint templates: \(error.localizedDescription)")
             templates = seedDefaults ? BreakpointTemplate.defaultTemplates : []

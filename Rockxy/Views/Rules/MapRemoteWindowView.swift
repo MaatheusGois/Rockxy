@@ -616,7 +616,7 @@ final class MapRemoteEditorViewModel {
             return
         }
 
-        destScheme = components.scheme ?? ""
+        destScheme = components.scheme?.lowercased() ?? ""
         destHost = host
         if let port = components.port {
             destPort = String(port)
@@ -624,7 +624,7 @@ final class MapRemoteEditorViewModel {
         if !components.path.isEmpty, components.path != "/" {
             destPath = String(components.path.drop(while: { $0 == "/" }))
         }
-        if let query = components.query {
+        if let query = components.percentEncodedQuery {
             destQuery = query
         }
     }
@@ -640,7 +640,7 @@ final class MapRemoteEditorViewModel {
         condition.method = method.ruleValue
 
         let config = MapRemoteConfiguration(
-            scheme: destScheme.isEmpty ? nil : destScheme,
+            scheme: destScheme.isEmpty ? nil : destScheme.lowercased(),
             host: nilIfBlank(destHost),
             port: parsedPort,
             path: nilIfBlank(normalizedPath()),
@@ -664,8 +664,11 @@ final class MapRemoteEditorViewModel {
         guard matchType == .wildcard else {
             return trimmed
         }
-        let pattern = includeSubpaths && !trimmed.hasSuffix("*") ? "\(trimmed)*" : trimmed
-        return MapLocalPatternFormatter.wildcardToRegex(pattern)
+        return RulePatternBuilder.regexSource(
+            rawPattern: trimmed,
+            matchType: .wildcard,
+            includeSubpaths: includeSubpaths
+        )
     }
 
     // MARK: Private

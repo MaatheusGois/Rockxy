@@ -12,7 +12,7 @@ final class EditableHeaderOperation: Identifiable {
     init(
         id: UUID = UUID(),
         phase: HeaderModifyPhase = .request,
-        type: HeaderOperationType = .add,
+        type: HeaderOperationType = .replace,
         headerName: String = "",
         headerValue: String = ""
     ) {
@@ -49,7 +49,7 @@ final class EditableHeaderOperation: Identifiable {
             return String(localized: "Header Name is required")
         }
         if type != .remove, headerValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return String(localized: "Header Value is required for \(type.rawValue.capitalized)")
+            return String(localized: "Header Value is required for \(type.editorLabel)")
         }
         return nil
     }
@@ -80,7 +80,7 @@ struct ModifyHeaderEditorView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Layout.sectionSpacing) {
+        VStack(alignment: .leading, spacing: 10) {
             helperText
 
             if operations.isEmpty {
@@ -101,14 +101,15 @@ struct ModifyHeaderEditorView: View {
     private static let operationWidth: CGFloat = 104
     private static let minFieldWidth: CGFloat = 150
     private static let removeWidth: CGFloat = 24
+    private static let rowSpacing: CGFloat = 8
 
     private var helperText: some View {
         HStack(spacing: 6) {
             Image(systemName: "info.circle")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.accentColor)
             Text(String(localized: "Operations are applied in order. Later rows can overwrite earlier rows."))
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color(nsColor: .labelColor).opacity(0.72))
             Spacer()
         }
     }
@@ -125,17 +126,26 @@ struct ModifyHeaderEditorView: View {
     }
 
     private var operationsTable: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 0) {
             headerRow
 
-            ForEach(operations) { operation in
-                operationRow(operation)
+            VStack(spacing: 6) {
+                ForEach(operations) { operation in
+                    operationRow(operation)
+                }
             }
+            .padding(8)
+        }
+        .background(Color(nsColor: .textBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay {
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
         }
     }
 
     private var headerRow: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Self.rowSpacing) {
             Text(String(localized: "Phase"))
                 .frame(width: Self.phaseWidth, alignment: .leading)
             Text(String(localized: "Operation"))
@@ -149,8 +159,10 @@ struct ModifyHeaderEditorView: View {
         }
         .font(.caption)
         .fontWeight(.semibold)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 4)
+        .foregroundStyle(Color(nsColor: .labelColor))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color(nsColor: .controlBackgroundColor))
     }
 
     private var addButton: some View {
@@ -161,8 +173,9 @@ struct ModifyHeaderEditorView: View {
         } label: {
             Label(String(localized: "Add Operation"), systemImage: "plus")
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.plain)
         .controlSize(.small)
+        .foregroundStyle(Color.accentColor)
         .padding(.horizontal, 2)
     }
 
@@ -186,7 +199,7 @@ struct ModifyHeaderEditorView: View {
     }
 
     private func operationRow(_ operation: EditableHeaderOperation) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Self.rowSpacing) {
             Picker("", selection: Binding(
                 get: { operation.phase },
                 set: { operation.phase = $0 }
@@ -204,9 +217,9 @@ struct ModifyHeaderEditorView: View {
                 get: { operation.type },
                 set: { operation.type = $0 }
             )) {
-                Text(String(localized: "Add")).tag(HeaderOperationType.add)
-                Text(String(localized: "Remove")).tag(HeaderOperationType.remove)
-                Text(String(localized: "Replace")).tag(HeaderOperationType.replace)
+                Text(HeaderOperationType.replace.editorLabel).tag(HeaderOperationType.replace)
+                Text(HeaderOperationType.add.editorLabel).tag(HeaderOperationType.add)
+                Text(HeaderOperationType.remove.editorLabel).tag(HeaderOperationType.remove)
             }
             .labelsHidden()
             .pickerStyle(.menu)
@@ -225,21 +238,7 @@ struct ModifyHeaderEditorView: View {
             .controlSize(.small)
             .frame(minWidth: Self.minFieldWidth)
 
-            TextField(
-                operation.type == .remove
-                    ? String(localized: "Not used")
-                    : String(localized: "Header value"),
-                text: Binding(
-                    get: { operation.headerValue },
-                    set: { operation.headerValue = $0 }
-                )
-            )
-            .font(.system(.body, design: .monospaced))
-            .textFieldStyle(.roundedBorder)
-            .controlSize(.small)
-            .disabled(operation.type == .remove)
-            .opacity(operation.type == .remove ? 0.4 : 1.0)
-            .frame(minWidth: Self.minFieldWidth)
+            headerValueField(for: operation)
 
             Button(role: .destructive) {
                 withAnimation(.easeInOut(duration: 0.2)) {
@@ -250,9 +249,34 @@ struct ModifyHeaderEditorView: View {
                     .font(.caption)
             }
             .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+            .help(String(localized: "Remove operation"))
             .frame(width: Self.removeWidth)
         }
-        .padding(.horizontal, 2)
+    }
+
+    @ViewBuilder private func headerValueField(for operation: EditableHeaderOperation) -> some View {
+        if operation.type == .remove {
+            Text(String(localized: "Not used"))
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(minWidth: Self.minFieldWidth, minHeight: 22, alignment: .leading)
+                .padding(.horizontal, 7)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 5))
+        } else {
+            TextField(
+                String(localized: "Header value"),
+                text: Binding(
+                    get: { operation.headerValue },
+                    set: { operation.headerValue = $0 }
+                )
+            )
+            .font(.system(.body, design: .monospaced))
+            .textFieldStyle(.roundedBorder)
+            .controlSize(.small)
+            .frame(minWidth: Self.minFieldWidth)
+        }
     }
 }
 
@@ -303,5 +327,20 @@ extension [HeaderOperation] {
             return "\(prefix)\(op.headerName)"
         }
         .joined(separator: ", ")
+    }
+}
+
+// MARK: - HeaderOperationType + Editor Labels
+
+extension HeaderOperationType {
+    var editorLabel: String {
+        switch self {
+        case .add:
+            String(localized: "Add")
+        case .remove:
+            String(localized: "Remove")
+        case .replace:
+            String(localized: "Set")
+        }
     }
 }

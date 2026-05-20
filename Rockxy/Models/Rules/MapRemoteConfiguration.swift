@@ -41,11 +41,11 @@ struct MapRemoteConfiguration: Codable, Hashable {
             return
         }
         self.init(
-            scheme: components.scheme,
+            scheme: components.scheme?.lowercased(),
             host: components.host,
             port: components.port,
             path: components.path.isEmpty ? nil : components.path,
-            query: components.query,
+            query: components.percentEncodedQuery,
             preserveOriginalURL: false,
             preserveHostHeader: false
         )
