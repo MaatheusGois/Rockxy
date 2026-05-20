@@ -183,29 +183,15 @@ struct BreakpointEditorView: View {
                     queryDisplay(itemId: itemId)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
 
     private func headersEditor(itemId: UUID) -> some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(String(localized: "Name"))
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text(String(localized: "Value"))
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Color.clear.frame(width: 24)
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
+        ScrollView {
+            LazyVStack(spacing: 6) {
+                columnHeaders(name: "Name", value: "Value")
 
-            List {
                 let headers = draftFor(itemId)?.headers ?? []
                 ForEach(headers) { header in
                     HStack(spacing: 8) {
@@ -246,23 +232,15 @@ struct BreakpointEditorView: View {
                         .buttonStyle(.plain)
                     }
                 }
-            }
-            .listStyle(.plain)
 
-            HStack {
-                Button {
+                addButton(String(localized: "Add Header")) {
                     manager.updateDraft(id: itemId) { draft in
                         draft.headers.append(EditableHeader(name: "", value: ""))
                     }
-                } label: {
-                    Label(String(localized: "Add Header"), systemImage: "plus.circle")
-                        .font(.caption)
                 }
-                .buttonStyle(.plain)
-                Spacer()
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 8)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(12)
         }
     }
 
@@ -327,24 +305,10 @@ struct BreakpointEditorView: View {
     }
 
     private func queryDisplay(itemId: UUID) -> some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(String(localized: "Name"))
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text(String(localized: "Value"))
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Color.clear.frame(width: 24)
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
+        ScrollView {
+            LazyVStack(spacing: 6) {
+                columnHeaders(name: "Name", value: "Value")
 
-            List {
                 ForEach(queryItems) { item in
                     HStack(spacing: 8) {
                         TextField(String(localized: "Parameter name"), text: Binding(
@@ -381,22 +345,14 @@ struct BreakpointEditorView: View {
                         .buttonStyle(.plain)
                     }
                 }
-            }
-            .listStyle(.plain)
 
-            HStack {
-                Button {
+                addButton(String(localized: "Add Parameter")) {
                     queryItems.append(EditableQueryItem(name: "", value: ""))
                     rebuildURLFromQuery(itemId: itemId)
-                } label: {
-                    Label(String(localized: "Add Parameter"), systemImage: "plus.circle")
-                        .font(.caption)
                 }
-                .buttonStyle(.plain)
-                Spacer()
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 8)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(12)
         }
         .onAppear { syncQueryItemsFromURL(itemId: itemId) }
         .onChange(of: draftFor(itemId)?.url) { _, _ in syncQueryItemsFromURL(itemId: itemId) }
@@ -443,6 +399,35 @@ struct BreakpointEditorView: View {
 
     private func headerValue(itemId: UUID, headerId: UUID) -> EditableHeader? {
         draftFor(itemId)?.headers.first(where: { $0.id == headerId })
+    }
+
+    private func columnHeaders(name: String, value: String) -> some View {
+        HStack {
+            Text(String(localized: String.LocalizationValue(name)))
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(String(localized: String.LocalizationValue(value)))
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Color.clear.frame(width: 24)
+        }
+        .padding(.bottom, 4)
+    }
+
+    private func addButton(_ title: String, action: @escaping () -> Void) -> some View {
+        HStack {
+            Button(action: action) {
+                Label(title, systemImage: "plus.circle")
+                    .font(.caption)
+            }
+            .buttonStyle(.plain)
+            Spacer()
+        }
+        .padding(.top, 2)
     }
 
     private func rawKind(for itemId: UUID) -> BreakpointTemplateKind {
