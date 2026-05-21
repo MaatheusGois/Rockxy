@@ -41,14 +41,16 @@
 <!-- BEGIN GENERATED: latest-release -->
 ## Latest Tagged Release
 
-**v0.20.1** — 2026-05-20
+**v0.21.0** — 2026-05-21
+
+### Added
+
+- Improve compose history and fresh request flow
+- Normalize keyboard shortcuts
 
 ### Fixed
 
-- Fixed Map Remote edge cases so rewritten requests preserve expected paths, queries, and upstream routing more reliably.
-- Preserved request table scroll position when selection changes, reducing jumpiness during review.
-- Improved Modify Headers editor contrast and persistence for clearer, more reliable rule editing.
-- Hardened Breakpoints queue handling, persistence, and table layout for smoother interception workflows.
+- Persist breakpoint rules after restart
 
 See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 <!-- END GENERATED: latest-release -->

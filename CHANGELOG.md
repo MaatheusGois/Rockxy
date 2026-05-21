@@ -12,6 +12,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+## [0.21.0] - 2026-05-21
+
+### Added
+
+- Improve compose history and fresh request flow
+- Normalize keyboard shortcuts
+
+### Fixed
+
+- Persist breakpoint rules after restart
+
 ## [0.20.1] - 2026-05-20
 
 ### Fixed
