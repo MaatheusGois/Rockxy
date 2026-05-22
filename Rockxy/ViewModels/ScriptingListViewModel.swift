@@ -391,13 +391,13 @@ final class ScriptingListViewModel {
     private static func snapshot(from info: PluginInfo) -> PluginInfoSnapshot {
         let behavior = info.manifest.scriptBehavior ?? ScriptBehavior.defaults()
         let method = behavior.matchCondition?.method?.uppercased()
-        let pattern = behavior.matchCondition?.urlPattern
+        let pattern = ScriptEditorViewModel.editorPattern(for: behavior.matchCondition).pattern
         return PluginInfoSnapshot(
             id: info.id,
             name: info.manifest.name,
             isEnabled: info.isEnabled,
             method: method,
-            urlPattern: pattern,
+            urlPattern: pattern.isEmpty ? nil : pattern,
             statusText: info.statusText
         )
     }

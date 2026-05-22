@@ -91,6 +91,41 @@ struct MCPRuleQueryServiceTests {
         #expect(condition.isEmpty)
     }
 
+    @Test("listRules redacts sensitive match headers when enabled")
+    func listRulesRedactsSensitiveMatchHeaders() async throws {
+        let engine = RuleEngine()
+        await engine.addRule(
+            ProxyRule(
+                name: "Protected API",
+                isEnabled: true,
+                matchCondition: RuleMatchCondition(
+                    urlPattern: "api.example.com",
+                    method: "GET",
+                    headerName: "Authorization",
+                    headerValue: "Bearer rule-secret"
+                ),
+                action: .modifyHeader(operations: []),
+                priority: 0
+            )
+        )
+
+        let service = MCPRuleQueryService(
+            ruleEngine: engine,
+            redactionPolicy: MCPRedactionPolicy(isEnabled: true)
+        )
+        let result = await service.listRules()
+        let json = try decodeJSONObject(from: result)
+        let rules = try #require(json["rules"] as? [[String: Any]])
+        let rule = try #require(rules.first)
+        let condition = try #require(rule["match_condition"] as? [String: Any])
+
+        #expect(condition["header_name"] as? String == "Authorization")
+        #expect(condition["header_value"] as? String == "[REDACTED]")
+
+        let text = try #require(result.content.first?.text)
+        #expect(!text.contains("rule-secret"))
+    }
+
     @Test("listRules handles empty rule set")
     func listRulesEmpty() async throws {
         let engine = RuleEngine()

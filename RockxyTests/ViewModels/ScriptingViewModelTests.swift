@@ -38,9 +38,17 @@ struct ScriptingViewModelTests {
     @Test("Wildcard-to-regex helper escapes specials and anchors when no subpath")
     func wildcardHelper() {
         let pattern = ScriptEditorViewModel.wildcardToRegex("api.example.com/v1/*")
-        #expect(pattern == "^api\\.example\\.com/v1/.*$")
+        #expect(pattern == RulePatternBuilder.regexSource(
+            rawPattern: "api.example.com/v1/*",
+            matchType: .wildcard,
+            includeSubpaths: false
+        ))
         let sub = ScriptEditorViewModel.wildcardToRegex("api.example.com/v1/*", includeSubpaths: true)
-        #expect(sub == "api\\.example\\.com/v1/.*")
+        #expect(sub == RulePatternBuilder.regexSource(
+            rawPattern: "api.example.com/v1/*",
+            matchType: .wildcard,
+            includeSubpaths: true
+        ))
     }
 
     @Test("Beautify normalizes indentation on a dedented JS block")
@@ -542,7 +550,9 @@ struct ScriptingViewModelTests {
             defaults: env.defaults,
             enabled: true,
             method: "POST",
-            urlPattern: #"https:\/\/api\.example\.com\/v1\/.*"#,
+            urlPattern: "https://api.example.com/v1/*",
+            matchType: .wildcard,
+            includeSubpaths: true,
             runOnRequest: false,
             runOnResponse: true,
             runAsMock: true,
@@ -558,7 +568,9 @@ struct ScriptingViewModelTests {
         await vm.load(intent: .edit(pluginID: pluginID))
 
         #expect(vm.name == "Loaded Script")
-        #expect(vm.urlPattern == #"https:\/\/api\.example\.com\/v1\/.*"#)
+        #expect(vm.urlPattern == "https://api.example.com/v1/*")
+        #expect(vm.patternMode == .wildcard)
+        #expect(vm.includeSubpaths == true)
         #expect(vm.method == .post)
         #expect(vm.runOnRequest == false)
         #expect(vm.runOnResponse == true)
@@ -574,6 +586,9 @@ struct ScriptingViewModelTests {
         #expect(vm.testRule(against: "https://api.example.com/v1/users"))
         #expect(!vm.testRule(against: "https://api.example.com/v2/users"))
 
+        vm.urlPattern = "127.0.0.1:43210/rockxy-demo/pricing-experiment"
+        #expect(vm.testRule(against: "http://127.0.0.1:43210/rockxy-demo/pricing-experiment"))
+
         vm.patternMode = .regex
         vm.urlPattern = "["
         #expect(!vm.testRule(against: "https://api.example.com/v1/users"))
@@ -581,6 +596,62 @@ struct ScriptingViewModelTests {
         vm.patternMode = .advanced
         vm.urlPattern = #"api\.example\.com/v1/.+"#
         #expect(vm.testRule(against: "https://api.example.com/v1/users"))
+    }
+
+    @Test("Validate updates status tone for valid and invalid scripts")
+    func validateUpdatesStatusTone() {
+        let vm = ScriptEditorViewModel()
+        vm.runOnRequest = false
+        vm.runOnResponse = true
+        vm.code = """
+        function onResponse(response) {
+          if (response.request.headers["X-Rockxy-Scenario-Id"] !== "scripted-mock") {
+            return response;
+          }
+          response.headers["Content-Type"] = "application/json";
+          return response;
+        }
+        """
+
+        vm.validateScript()
+
+        #expect(vm.statusTone == .success)
+        #expect(vm.statusMessage == "Script is valid")
+
+        vm.code = "function onResponse(response) {"
+        vm.validateScript()
+
+        #expect(vm.statusTone == .error)
+        #expect(vm.statusMessage == "Validation failed")
+        #expect(vm.consoleEntries.contains { $0.level == .errors && $0.message.contains("Validation failed") })
+    }
+
+    @Test("Script editor unwraps previously generated wildcard regex for display")
+    func legacyGeneratedWildcardLoadsAsRawUserPattern() async throws {
+        let env = TestFixtures.makeIsolatedPluginEnv()
+        defer { env.cleanup() }
+        let pluginID = "script.legacy-pattern.\(UUID().uuidString)"
+        try makeScriptPlugin(
+            id: pluginID,
+            name: "Legacy Pattern",
+            in: env.pluginsDir,
+            defaults: env.defaults,
+            enabled: true,
+            urlPattern: #"127\.0\.0\.1:43210\/rockxy-demo\/pricing-experiment($|[?#])"#
+        )
+        await env.manager.loadAllPlugins()
+
+        let vm = ScriptEditorViewModel(
+            pluginManager: env.manager,
+            policyGate: ScriptPolicyGate(policy: DefaultAppPolicy()),
+            pluginsDirectory: env.pluginsDir
+        )
+        await vm.load(intent: .edit(pluginID: pluginID))
+
+        #expect(vm.urlPattern == "127.0.0.1:43210/rockxy-demo/pricing-experiment")
+        #expect(vm.patternMode == .wildcard)
+        #expect(vm.includeSubpaths == false)
+        #expect(vm.testRule(against: "http://127.0.0.1:43210/rockxy-demo/pricing-experiment"))
     }
 
     @Test("Save & Activate persists matching rule run options and source")
@@ -624,11 +695,57 @@ struct ScriptingViewModelTests {
         let source = try String(contentsOf: pluginDir.appendingPathComponent("index.js"), encoding: .utf8)
         #expect(manifest.name == "Persisted Script")
         #expect(manifest.scriptBehavior?.matchCondition?.method == "POST")
-        #expect(manifest.scriptBehavior?.matchCondition?.urlPattern == #"https://api\.example\.com/v1/.*"#)
+        #expect(manifest.scriptBehavior?.matchCondition?.urlPattern == "https://api.example.com/v1/*")
+        #expect(manifest.scriptBehavior?.matchCondition?.matchType == .wildcard)
+        #expect(manifest.scriptBehavior?.matchCondition?.includeSubpaths == true)
         #expect(manifest.scriptBehavior?.runOnRequest == false)
         #expect(manifest.scriptBehavior?.runOnResponse == true)
         #expect(manifest.scriptBehavior?.runAsMock == true)
         #expect(source == updatedSource)
+
+        let postSnap = await env.manager.plugins.first(where: { $0.id == pluginID })
+        #expect(postSnap?.manifest.name == "Persisted Script")
+        #expect(postSnap?.manifest.scriptBehavior?.matchCondition?.urlPattern == "https://api.example.com/v1/*")
+        #expect(postSnap?.manifest.scriptBehavior?.matchCondition?.matchType == .wildcard)
+    }
+
+    @Test("Save & Activate updates scripting list matching rule snapshot")
+    func saveAndActivateUpdatesListMatchingRuleSnapshot() async throws {
+        let env = TestFixtures.makeIsolatedPluginEnv()
+        defer { env.cleanup() }
+        let folderStore = ScriptFolderStore(defaults: env.defaults)
+        let pluginID = "script.list-refresh.\(UUID().uuidString)"
+        try makeScriptPlugin(
+            id: pluginID,
+            name: "List Refresh",
+            in: env.pluginsDir,
+            defaults: env.defaults,
+            enabled: false
+        )
+        await env.manager.loadAllPlugins()
+
+        let listVM = ScriptingListViewModel(
+            pluginManager: env.manager,
+            folderStore: folderStore,
+            pluginsDirectory: env.pluginsDir
+        )
+        await listVM.refresh()
+        #expect(listVM.plugins.first(where: { $0.id == pluginID })?.urlPattern == nil)
+
+        let editorVM = ScriptEditorViewModel(
+            pluginManager: env.manager,
+            policyGate: ScriptPolicyGate(policy: DefaultAppPolicy()),
+            pluginsDirectory: env.pluginsDir
+        )
+        await editorVM.load(intent: .edit(pluginID: pluginID))
+        editorVM.urlPattern = "127.0.0.1:43210/rockxy-demo/pricing-experiment"
+        editorVM.patternMode = .wildcard
+
+        await editorVM.saveAndActivate()
+        await listVM.refresh()
+
+        let updated = listVM.plugins.first(where: { $0.id == pluginID })
+        #expect(updated?.urlPattern == "127.0.0.1:43210/rockxy-demo/pricing-experiment")
     }
 
     @Test("Script editor footer actions update code console visibility and shared state")
@@ -758,6 +875,8 @@ struct ScriptingViewModelTests {
         enabled: Bool,
         method: String? = nil,
         urlPattern: String? = nil,
+        matchType: RuleMatchType? = nil,
+        includeSubpaths: Bool? = nil,
         runOnRequest: Bool = true,
         runOnResponse: Bool = true,
         runAsMock: Bool = false,
@@ -783,7 +902,12 @@ struct ScriptingViewModelTests {
             homepage: nil,
             license: nil,
             scriptBehavior: ScriptBehavior(
-                matchCondition: RuleMatchCondition(urlPattern: urlPattern, method: method),
+                matchCondition: RuleMatchCondition(
+                    urlPattern: urlPattern,
+                    method: method,
+                    matchType: matchType,
+                    includeSubpaths: includeSubpaths
+                ),
                 runOnRequest: runOnRequest,
                 runOnResponse: runOnResponse,
                 runAsMock: runAsMock

@@ -14,15 +14,9 @@ struct ScriptResponseContext {
     init(request: HTTPRequestData, response: HTTPResponseData) {
         self.method = request.method
         self.url = request.url.absoluteString
-        self.requestHeaders = Dictionary(
-            request.headers.map { ($0.name, $0.value) },
-            uniquingKeysWith: { _, last in last }
-        )
+        self.requestHeaders = ScriptHeaderDictionary.storage(from: request.headers)
         self.statusCode = response.statusCode
-        self.responseHeaders = Dictionary(
-            response.headers.map { ($0.name, $0.value) },
-            uniquingKeysWith: { _, last in last }
-        )
+        self.responseHeaders = ScriptHeaderDictionary.storage(from: response.headers)
         if let body = response.body {
             let utf8String = String(data: body, encoding: .utf8)
             self.body = utf8String ?? body.base64EncodedString()
@@ -69,8 +63,18 @@ struct ScriptResponseContext {
         let nestedResponse = jsValue.objectForKeyedSubscript("response")
         let topLevelStatus = intValue(jsValue.objectForKeyedSubscript("statusCode"))
         let nestedStatus = intValue(nestedResponse?.objectForKeyedSubscript("statusCode"))
-        let topLevelHeaders = stringDictionaryValue(jsValue.objectForKeyedSubscript("responseHeaders"))
-        let nestedHeaders = stringDictionaryValue(nestedResponse?.objectForKeyedSubscript("headers"))
+        let topLevelHeaders = stringDictionaryValue(
+            jsValue.objectForKeyedSubscript("responseHeaders"),
+            original: original.responseHeaders
+        )
+        let topLevelHeaderAlias = stringDictionaryValue(
+            jsValue.objectForKeyedSubscript("headers"),
+            original: original.responseHeaders
+        )
+        let nestedHeaders = stringDictionaryValue(
+            nestedResponse?.objectForKeyedSubscript("headers"),
+            original: original.responseHeaders
+        )
         let topLevelBody = stringValue(jsValue.objectForKeyedSubscript("body"))
         let nestedBody = stringValue(nestedResponse?.objectForKeyedSubscript("body"))
         let topLevelBodyIsBase64 = boolValue(jsValue.objectForKeyedSubscript("__bodyIsBase64"))
@@ -92,9 +96,14 @@ struct ScriptResponseContext {
         }
 
         let headers: [String: String] = if let topLevelHeaders,
-                                           topLevelHeaders != original.responseHeaders || nestedHeaders == nil
+                                           topLevelHeaders != original.responseHeaders
+                                               || topLevelHeaderAlias == nil && nestedHeaders == nil
         {
             topLevelHeaders
+        } else if let topLevelHeaderAlias,
+                  topLevelHeaderAlias != original.responseHeaders || nestedHeaders == nil
+        {
+            topLevelHeaderAlias
         } else if let nestedHeaders {
             nestedHeaders
         } else {
@@ -136,13 +145,26 @@ struct ScriptResponseContext {
         // override a script's top-level mutation on apply-back.
         wrapper?.setObject(method, forKeyedSubscript: "method" as NSString)
         wrapper?.setObject(url, forKeyedSubscript: "url" as NSString)
-        wrapper?.setObject(requestHeaders, forKeyedSubscript: "requestHeaders" as NSString)
+        wrapper?.setObject(
+            ScriptHeaderDictionary.exposed(from: requestHeaders),
+            forKeyedSubscript: "requestHeaders" as NSString
+        )
         wrapper?.setObject(statusCode, forKeyedSubscript: "statusCode" as NSString)
-        wrapper?.setObject(responseHeaders, forKeyedSubscript: "responseHeaders" as NSString)
+        let responseHeadersObject = JSValue(object: ScriptHeaderDictionary.exposed(from: responseHeaders), in: context)
+        wrapper?.setObject(responseHeadersObject, forKeyedSubscript: "responseHeaders" as NSString)
+        wrapper?.setObject(responseHeadersObject, forKeyedSubscript: "headers" as NSString)
         wrapper?.setObject(body as Any, forKeyedSubscript: "body" as NSString)
         if !bodyIsUTF8 {
             wrapper?.setObject(true, forKeyedSubscript: "__bodyIsBase64" as NSString)
         }
+        let requestObject = JSValue(newObjectIn: context)
+        requestObject?.setObject(method, forKeyedSubscript: "method" as NSString)
+        requestObject?.setObject(url, forKeyedSubscript: "url" as NSString)
+        requestObject?.setObject(
+            ScriptHeaderDictionary.exposed(from: requestHeaders),
+            forKeyedSubscript: "headers" as NSString
+        )
+        wrapper?.setObject(requestObject, forKeyedSubscript: "request" as NSString)
 
         let setHeaderFn: @convention(block) (String, String) -> Void = { name, value in
             let topHeaders = wrapper?.objectForKeyedSubscript("responseHeaders")
@@ -196,11 +218,14 @@ struct ScriptResponseContext {
         return Int(value.toInt32())
     }
 
-    private static func stringDictionaryValue(_ value: JSValue?) -> [String: String]? {
+    private static func stringDictionaryValue(_ value: JSValue?, original: [String: String]) -> [String: String]? {
         guard let value, !value.isUndefined, !value.isNull else {
             return nil
         }
-        return value.toDictionary() as? [String: String]
+        guard let dictionary = value.toDictionary() as? [String: String] else {
+            return nil
+        }
+        return ScriptHeaderDictionary.storage(fromJavaScript: dictionary, original: original)
     }
 
     private static func stringValue(_ value: JSValue?) -> String? {

@@ -39,8 +39,14 @@ enum ScriptRuntimeError: Error, LocalizedError {
 actor ScriptRuntime {
     // MARK: Lifecycle
 
-    init(defaults: UserDefaults = .standard) {
+    init(
+        defaults: UserDefaults = .standard,
+        consoleSink: @escaping @Sendable (ScriptConsoleEvent) -> Void = { event in
+            NotificationCenter.default.post(name: .scriptConsoleDidAppend, object: event)
+        }
+    ) {
         self.defaults = defaults
+        self.consoleSink = consoleSink
     }
 
     // MARK: Internal
@@ -67,13 +73,22 @@ actor ScriptRuntime {
         }
 
         let pluginID = info.id
+        let exceptionLock = OSAllocatedUnfairLock<String?>(initialState: nil)
         context.exceptionHandler = { _, exception in
             let message = exception?.toString() ?? "Unknown JS error"
+            exceptionLock.withLock { $0 = message }
             Self.logger.error("JS exception in plugin \(pluginID): \(message)")
         }
 
         let pluginLogger = Logger(subsystem: RockxyIdentity.current.logSubsystem, category: "Plugin.\(info.id)")
-        ScriptBridge.install(in: context, pluginID: info.id, logger: pluginLogger, defaults: defaults)
+        let consoleSink = consoleSink
+        ScriptBridge.install(
+            in: context,
+            pluginID: info.id,
+            logger: pluginLogger,
+            defaults: defaults,
+            consoleSink: consoleSink
+        )
 
         // CommonJS compatibility: prime `module` and `exports` as globals BEFORE
         // evaluating user source so scripts that use `module.exports = { ... }`
@@ -82,9 +97,7 @@ actor ScriptRuntime {
         // so both patterns continue to work.
         context.evaluateScript("var module = { exports: {} }; var exports = module.exports;")
         context.evaluateScript(source)
-        if let exception = context.exception {
-            let message = exception.toString() ?? "Unknown error"
-            context.exception = nil
+        if let message = Self.consumeException(from: context, lock: exceptionLock) {
             throw ScriptRuntimeError.jsException(message)
         }
 
@@ -123,6 +136,7 @@ actor ScriptRuntime {
 
         contexts[info.id] = context
         queues[info.id] = queue
+        exceptionLocks[info.id] = exceptionLock
         onRequestHandlers[info.id] = onRequestFn
         onResponseHandlers[info.id] = onResponseFn
         onRequestArity[info.id] = ScriptMultiArgBridge.functionLength(onRequestFn) ?? 1
@@ -133,6 +147,7 @@ actor ScriptRuntime {
     func unloadPlugin(id: String) {
         contexts.removeValue(forKey: id)
         queues.removeValue(forKey: id)
+        exceptionLocks.removeValue(forKey: id)
         onRequestHandlers.removeValue(forKey: id)
         onResponseHandlers.removeValue(forKey: id)
         onRequestArity.removeValue(forKey: id)
@@ -165,6 +180,7 @@ actor ScriptRuntime {
         guard let jsContext = contexts[pluginID], let queue = queues[pluginID] else {
             throw ScriptRuntimeError.pluginNotLoaded(pluginID)
         }
+        let exceptionLock = exceptionLocks[pluginID]
         guard let onRequest = onRequestHandlers[pluginID] else {
             return .forward(originalRequest)
         }
@@ -176,6 +192,7 @@ actor ScriptRuntime {
             let resumed = OSAllocatedUnfairLock(initialState: false)
 
             let workItem = DispatchWorkItem {
+                Self.clearException(in: jsContext, lock: exceptionLock)
                 // Arity dispatch: 1 => single-arg legacy `onRequest(ctx)`,
                 // 3 => multi-arg `onRequest(context, url, request)`.
                 let initialResult: JSValue?
@@ -212,10 +229,9 @@ actor ScriptRuntime {
                         return
                     }
 
-                    if let exception = jsContext.exception {
-                        jsContext.exception = nil
+                    if let message = Self.consumeException(from: jsContext, lock: exceptionLock) {
                         continuation
-                            .resume(throwing: ScriptRuntimeError.jsException(exception.toString() ?? "Unknown"))
+                            .resume(throwing: ScriptRuntimeError.jsException(message))
                         return
                     }
 
@@ -323,6 +339,7 @@ actor ScriptRuntime {
         guard let jsContext = contexts[pluginID], let queue = queues[pluginID] else {
             throw ScriptRuntimeError.pluginNotLoaded(pluginID)
         }
+        let exceptionLock = exceptionLocks[pluginID]
         guard let onResponse = onResponseHandlers[pluginID] else {
             return originalResponse
         }
@@ -333,6 +350,7 @@ actor ScriptRuntime {
             let resumed = OSAllocatedUnfairLock(initialState: false)
 
             let workItem = DispatchWorkItem {
+                Self.clearException(in: jsContext, lock: exceptionLock)
                 let initialResult: JSValue?
                 let multiArgs: (JSValue, JSValue, JSValue, JSValue)?
                 if arity >= 4,
@@ -366,10 +384,9 @@ actor ScriptRuntime {
                         return
                     }
 
-                    if let exception = jsContext.exception {
-                        jsContext.exception = nil
+                    if let message = Self.consumeException(from: jsContext, lock: exceptionLock) {
                         continuation
-                            .resume(throwing: ScriptRuntimeError.jsException(exception.toString() ?? "Unknown"))
+                            .resume(throwing: ScriptRuntimeError.jsException(message))
                         return
                     }
 
@@ -444,12 +461,32 @@ actor ScriptRuntime {
     private static let timeout: TimeInterval = 5
 
     private let defaults: UserDefaults
+    private let consoleSink: @Sendable (ScriptConsoleEvent) -> Void
     private var contexts: [String: JSContext] = [:]
     private var queues: [String: DispatchQueue] = [:]
+    private var exceptionLocks: [String: OSAllocatedUnfairLock<String?>] = [:]
     private var onRequestHandlers: [String: JSValue] = [:]
     private var onResponseHandlers: [String: JSValue] = [:]
     private var onRequestArity: [String: Int] = [:]
     private var onResponseArity: [String: Int] = [:]
+
+    private static func clearException(in context: JSContext, lock: OSAllocatedUnfairLock<String?>?) {
+        context.exception = nil
+        lock?.withLock { $0 = nil }
+    }
+
+    private static func consumeException(from context: JSContext, lock: OSAllocatedUnfairLock<String?>?) -> String? {
+        if let exception = context.exception {
+            let message = exception.toString() ?? "Unknown"
+            context.exception = nil
+            lock?.withLock { $0 = nil }
+            return message
+        }
+        return lock?.withLock { message in
+            defer { message = nil }
+            return message
+        }
+    }
 
     // MARK: - Mock response parsing
 

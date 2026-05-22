@@ -14,37 +14,46 @@ enum ScriptBridge {
         in context: JSContext,
         pluginID: String,
         logger: Logger,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        consoleSink: (@Sendable (ScriptConsoleEvent) -> Void)? = nil
     ) {
         let rockxy = JSValue(newObjectIn: context)
 
-        installLogging(on: rockxy, context: context, logger: logger)
+        installLogging(on: rockxy, context: context, pluginID: pluginID, logger: logger, consoleSink: consoleSink)
         installCrypto(on: rockxy, context: context)
         installEncoding(on: rockxy, context: context)
         installStorage(on: rockxy, context: context, pluginID: pluginID, defaults: defaults)
         installEnv(on: rockxy, context: context, pluginID: pluginID, defaults: defaults)
 
         context.setObject(rockxy, forKeyedSubscript: "$rockxy" as NSString)
-
-        let consoleObj = JSValue(newObjectIn: context)
-        let logFn: @convention(block) (String) -> Void = { msg in
-            logger.info("[\(pluginID)] \(msg)")
-        }
-        consoleObj?.setObject(logFn, forKeyedSubscript: "log" as NSString)
-        context.setObject(consoleObj, forKeyedSubscript: "console" as NSString)
+        installConsole(in: context, pluginID: pluginID, logger: logger, consoleSink: consoleSink)
     }
 
     // MARK: Private
 
     private static let bridgeLogger = Logger(subsystem: RockxyIdentity.current.logSubsystem, category: "ScriptBridge")
 
-    private static func installLogging(on rockxy: JSValue?, context: JSContext, logger: Logger) {
+    private static func installLogging(
+        on rockxy: JSValue?,
+        context: JSContext,
+        pluginID: String,
+        logger: Logger,
+        consoleSink: (@Sendable (ScriptConsoleEvent) -> Void)?
+    ) {
         let log = JSValue(newObjectIn: context)
 
-        let infoFn: @convention(block) (String) -> Void = { msg in logger.info("\(msg)") }
-        let warnFn: @convention(block) (String) -> Void = { msg in logger.warning("\(msg)") }
-        let errorFn: @convention(block) (String) -> Void = { msg in logger.error("\(msg)") }
-        let debugFn: @convention(block) (String) -> Void = { msg in logger.debug("\(msg)") }
+        let infoFn: @convention(block) (String) -> Void = { msg in
+            emitConsoleEvent(pluginID: pluginID, level: .info, message: msg, logger: logger, consoleSink: consoleSink)
+        }
+        let warnFn: @convention(block) (String) -> Void = { msg in
+            emitConsoleEvent(pluginID: pluginID, level: .warn, message: msg, logger: logger, consoleSink: consoleSink)
+        }
+        let errorFn: @convention(block) (String) -> Void = { msg in
+            emitConsoleEvent(pluginID: pluginID, level: .error, message: msg, logger: logger, consoleSink: consoleSink)
+        }
+        let debugFn: @convention(block) (String) -> Void = { msg in
+            emitConsoleEvent(pluginID: pluginID, level: .debug, message: msg, logger: logger, consoleSink: consoleSink)
+        }
 
         log?.setObject(infoFn, forKeyedSubscript: "info" as NSString)
         log?.setObject(warnFn, forKeyedSubscript: "warn" as NSString)
@@ -52,6 +61,73 @@ enum ScriptBridge {
         log?.setObject(debugFn, forKeyedSubscript: "debug" as NSString)
 
         rockxy?.setObject(log, forKeyedSubscript: "log" as NSString)
+    }
+
+    private static func installConsole(
+        in context: JSContext,
+        pluginID: String,
+        logger: Logger,
+        consoleSink: (@Sendable (ScriptConsoleEvent) -> Void)?
+    ) {
+        let emitFn: @convention(block) (String, String) -> Void = { level, message in
+            let eventLevel = ScriptConsoleEventLevel(rawValue: level) ?? .log
+            emitConsoleEvent(
+                pluginID: pluginID,
+                level: eventLevel,
+                message: message,
+                logger: logger,
+                consoleSink: consoleSink
+            )
+        }
+        context.setObject(emitFn, forKeyedSubscript: "__rockxyNativeConsole" as NSString)
+        context.evaluateScript(
+            """
+            (function () {
+              function formatArg(value) {
+                if (typeof value === "string") { return value; }
+                if (value === null) { return "null"; }
+                if (typeof value === "undefined") { return "undefined"; }
+                try {
+                  var json = JSON.stringify(value);
+                  return typeof json === "undefined" ? String(value) : json;
+                } catch (error) {
+                  return String(value);
+                }
+              }
+              function emit(level, args) {
+                __rockxyNativeConsole(level, Array.prototype.map.call(args, formatArg).join(" "));
+              }
+              console = {
+                log: function () { emit("log", arguments); },
+                info: function () { emit("info", arguments); },
+                warn: function () { emit("warn", arguments); },
+                error: function () { emit("error", arguments); },
+                debug: function () { emit("debug", arguments); }
+              };
+            }());
+            """
+        )
+    }
+
+    private static func emitConsoleEvent(
+        pluginID: String,
+        level: ScriptConsoleEventLevel,
+        message: String,
+        logger: Logger,
+        consoleSink: (@Sendable (ScriptConsoleEvent) -> Void)?
+    ) {
+        switch level {
+        case .log,
+             .info:
+            logger.info("[\(pluginID)] \(message)")
+        case .warn:
+            logger.warning("[\(pluginID)] \(message)")
+        case .error:
+            logger.error("[\(pluginID)] \(message)")
+        case .debug:
+            logger.debug("[\(pluginID)] \(message)")
+        }
+        consoleSink?(ScriptConsoleEvent(pluginID: pluginID, level: level, message: message, timestamp: .now))
     }
 
     private static func installCrypto(on rockxy: JSValue?, context: JSContext) {

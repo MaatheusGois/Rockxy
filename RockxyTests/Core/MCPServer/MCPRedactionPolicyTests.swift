@@ -341,6 +341,30 @@ struct MCPRedactionPolicyTests {
         #expect(!policy.redactBody(xml, contentType: .xml).contains("secret"))
     }
 
+    @Test("Redacts JSON-looking body even when content type is unavailable")
+    func redactJSONLookingBodyWithoutContentType() {
+        let policy = MCPRedactionPolicy(isEnabled: true)
+        let json = #"{"username":"admin","client_secret":"top-secret"}"#
+
+        let redacted = policy.redactBody(json, contentType: nil)
+
+        #expect(redacted.contains("[REDACTED]"))
+        #expect(!redacted.contains("top-secret"))
+        #expect(redacted.contains("admin"))
+    }
+
+    @Test("Redacts JSON-looking body even when content type is text")
+    func redactJSONLookingBodyWithTextContentType() {
+        let policy = MCPRedactionPolicy(isEnabled: true)
+        let json = #"{"username":"admin","access_token":"token-123"}"#
+
+        let redacted = policy.redactBody(json, contentType: .text)
+
+        #expect(redacted.contains("[REDACTED]"))
+        #expect(!redacted.contains("token-123"))
+        #expect(redacted.contains("admin"))
+    }
+
     // MARK: - Live Toggle
 
     @Test("MCPRedactionState updates propagate to policy")

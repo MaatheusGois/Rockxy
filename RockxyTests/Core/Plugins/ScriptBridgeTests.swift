@@ -85,6 +85,20 @@ struct ScriptBridgeTests {
         #expect(context.exception == nil)
     }
 
+    @Test("console.log emits formatted runtime event")
+    func consoleLogEmitsFormattedRuntimeEvent() throws {
+        let recorder = ScriptConsoleEventRecorder()
+        let context = makeContext(consoleSink: { recorder.append($0) })
+
+        context.evaluateScript("console.log('Mutated to treatment for run:', 'case-11', 20, { ok: true })")
+
+        let event = try #require(recorder.events.first)
+        #expect(event.pluginID == testPluginID)
+        #expect(event.level == .log)
+        #expect(event.message == #"Mutated to treatment for run: case-11 20 {"ok":true}"#)
+        #expect(context.exception == nil)
+    }
+
     // MARK: - Isolated Defaults
 
     @Test("$rockxy.storage with isolated defaults writes only to injected suite")
@@ -145,11 +159,37 @@ struct ScriptBridgeTests {
     private let testPluginID = "com.test.bridge-test"
     private let logger = Logger(subsystem: TestIdentity.logSubsystem, category: "ScriptBridgeTests")
 
-    private func makeContext(defaults: UserDefaults = .standard) -> JSContext {
+    private func makeContext(
+        defaults: UserDefaults = .standard,
+        consoleSink: (@Sendable (ScriptConsoleEvent) -> Void)? = nil
+    )
+        -> JSContext
+    {
         guard let context = JSContext() else {
             preconditionFailure("JSContext allocation failed")
         }
-        ScriptBridge.install(in: context, pluginID: testPluginID, logger: logger, defaults: defaults)
+        ScriptBridge.install(
+            in: context,
+            pluginID: testPluginID,
+            logger: logger,
+            defaults: defaults,
+            consoleSink: consoleSink
+        )
         return context
     }
+}
+
+private final class ScriptConsoleEventRecorder: @unchecked Sendable {
+    var events: [ScriptConsoleEvent] {
+        lock.withLock { storage }
+    }
+
+    func append(_ event: ScriptConsoleEvent) {
+        lock.withLock {
+            storage.append(event)
+        }
+    }
+
+    private let lock = NSLock()
+    private var storage: [ScriptConsoleEvent] = []
 }

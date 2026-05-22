@@ -24,6 +24,8 @@ extension Notification.Name {
     static let bypassProxyListDidChange = identity.notificationName("bypassProxyListDidChange")
     static let breakpointHit = identity.notificationName("breakpointHit")
     static let rulesDidChange = identity.notificationName("rulesDidChange")
+    static let scriptsDidChange = identity.notificationName("scriptsDidChange")
+    static let scriptConsoleDidAppend = identity.notificationName("scriptConsoleDidAppend")
     static let openDiffWindow = identity.notificationName("openDiffWindow")
     static let openComposeWindow = identity.notificationName("openComposeWindow")
     static let openBlockListWindow = identity.notificationName("openBlockListWindow")

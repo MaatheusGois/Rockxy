@@ -145,9 +145,11 @@ struct MCPRedactionPolicy {
             return text
         }
 
-        switch contentType {
-        case .json:
+        if contentType == .json || looksLikeJSON(text) {
             return redactJSONBody(text)
+        }
+
+        switch contentType {
         case .form:
             return redactFormBody(text)
         case .xml:
@@ -302,6 +304,17 @@ struct MCPRedactionPolicy {
 
     private var curlHeaderPattern: NSRegularExpression {
         Self.curlHeaderPatternRegex
+    }
+
+    private func looksLikeJSON(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("{") || trimmed.hasPrefix("[") else {
+            return false
+        }
+        guard let data = trimmed.data(using: .utf8) else {
+            return false
+        }
+        return (try? JSONSerialization.jsonObject(with: data)) != nil
     }
 
     private func redactJSONObject(_ object: Any) -> Any {

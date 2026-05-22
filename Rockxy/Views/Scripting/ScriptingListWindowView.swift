@@ -18,6 +18,9 @@ struct ScriptingListWindowView: View {
         .onReceive(NotificationCenter.default.publisher(for: .rulesDidChange)) { _ in
             Task { await viewModel.refresh() }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .scriptsDidChange)) { _ in
+            Task { await viewModel.refresh() }
+        }
     }
 
     // MARK: Private

@@ -44,7 +44,7 @@ struct RuleMatchCondition: Codable, Equatable {
             guard regex.firstMatch(in: urlString, range: range) != nil else {
                 return false
             }
-        } else if let pattern = urlPattern {
+        } else if let pattern = runtimeURLPattern {
             let urlString = String(url.absoluteString.prefix(ProxyLimits.maxURILength))
             guard urlString.range(of: pattern, options: .regularExpression) != nil else {
                 return false
@@ -61,5 +61,19 @@ struct RuleMatchCondition: Codable, Equatable {
             }
         }
         return true
+    }
+
+    private var runtimeURLPattern: String? {
+        guard let urlPattern else {
+            return nil
+        }
+        guard let matchType else {
+            return urlPattern
+        }
+        return RulePatternBuilder.regexSource(
+            rawPattern: urlPattern,
+            matchType: matchType,
+            includeSubpaths: matchType == .wildcard ? includeSubpaths ?? false : false
+        )
     }
 }

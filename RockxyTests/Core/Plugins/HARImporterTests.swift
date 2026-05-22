@@ -153,6 +153,57 @@ struct HARImporterTests {
         #expect(bodyString == "{\"username\":\"test\"}")
     }
 
+    @Test("HAR import sniffs JSON request and response bodies without Content-Type")
+    func harImportSniffsJSONBodiesWithoutContentType() throws {
+        let harJSON: [String: Any] = [
+            "log": [
+                "version": "1.2",
+                "creator": ["name": "test", "version": "1.0"],
+                "entries": [
+                    [
+                        "startedDateTime": "2025-01-15T10:00:00.000Z",
+                        "time": 0,
+                        "request": [
+                            "method": "POST",
+                            "url": "https://api.example.com/session",
+                            "httpVersion": "HTTP/1.1",
+                            "headers": [] as [[String: Any]],
+                            "cookies": [] as [[String: Any]],
+                            "queryString": [] as [[String: Any]],
+                            "headersSize": 0,
+                            "bodySize": 21,
+                            "postData": [
+                                "text": #"{"email":"a@test.dev"}"#
+                            ] as [String: Any]
+                        ] as [String: Any],
+                        "response": [
+                            "status": 200,
+                            "statusText": "OK",
+                            "httpVersion": "HTTP/1.1",
+                            "headers": [] as [[String: Any]],
+                            "cookies": [] as [[String: Any]],
+                            "content": [
+                                "size": 44,
+                                "mimeType": "",
+                                "text": #"{"access_token":"secret","ok":true}"#
+                            ] as [String: Any],
+                            "redirectURL": "",
+                            "headersSize": 0,
+                            "bodySize": 44
+                        ] as [String: Any],
+                        "cache": [String: Any]()
+                    ] as [String: Any]
+                ]
+            ] as [String: Any]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: harJSON)
+        let transactions = try importer.importData(data)
+        let transaction = try #require(transactions.first)
+
+        #expect(transaction.request.contentType == .json)
+        #expect(transaction.response?.contentType == .json)
+    }
+
     // MARK: - Validation
 
     @Test("Rejects unsupported HAR version")
@@ -390,7 +441,75 @@ struct HARImporterTests {
         #expect(abs(timing.contentTransfer - 0.060) < 0.001)
     }
 
+    @MainActor
+    @Test("HAR round-trip preserves raw secrets but MCP redacts imported flow")
+    func harRoundTripPreservesRawSecretsButMCPRedactsImportedFlow() async throws {
+        let request = try HTTPRequestData(
+            method: "POST",
+            url: #require(URL(string: "https://api.example.com/session?token=query-secret&safe=1")),
+            httpVersion: "HTTP/1.1",
+            headers: [
+                HTTPHeader(name: "Authorization", value: "Bearer header-secret"),
+                HTTPHeader(name: "Content-Type", value: "application/json")
+            ],
+            body: Data(#"{"password":"body-password","email":"user@example.com"}"#.utf8),
+            contentType: .json
+        )
+        let transaction = HTTPTransaction(request: request, state: .completed)
+        transaction.response = HTTPResponseData(
+            statusCode: 200,
+            statusMessage: "OK",
+            headers: [
+                HTTPHeader(name: "Content-Type", value: "application/vnd.rockxy.session+json"),
+                HTTPHeader(name: "Set-Cookie", value: "sid=cookie-secret")
+            ],
+            body: Data(#"{"access_token":"body-secret","user":"stephen"}"#.utf8),
+            contentType: .json
+        )
+
+        let exporter = HARExporter()
+        let harData = try exporter.export(transactions: [transaction])
+        let harText = try #require(String(data: harData, encoding: .utf8))
+        #expect(harText.contains("query-secret"))
+        #expect(harText.contains("header-secret"))
+        #expect(harText.contains("body-secret"))
+        #expect(harText.contains("cookie-secret"))
+
+        let imported = try importer.importData(harData)
+        let provider = MockFlowProvider()
+        provider.transactions = imported
+        let service = makeMCPFlowService(provider: provider, redactionEnabled: true)
+        let result = await service.getFlowDetail(flowId: try #require(imported.first).id)
+        let text = try #require(result.content.first?.text)
+
+        #expect(text.contains("[REDACTED]"))
+        #expect(!text.contains("query-secret"))
+        #expect(!text.contains("header-secret"))
+        #expect(!text.contains("body-secret"))
+        #expect(!text.contains("cookie-secret"))
+        #expect(text.contains("user@example.com"))
+        #expect(text.contains("stephen"))
+    }
+
     // MARK: Private
 
     private let importer = HARImporter()
+
+    @MainActor
+    private func makeMCPFlowService(
+        provider: MockFlowProvider,
+        redactionEnabled: Bool
+    )
+        -> MCPFlowQueryService
+    {
+        let coordinator = MCPServerCoordinator()
+        coordinator.attachProviders(
+            flow: provider,
+            state: MockProxyStateProvider()
+        )
+        return MCPFlowQueryService(
+            serverCoordinator: coordinator,
+            redactionPolicy: MCPRedactionPolicy(isEnabled: redactionEnabled)
+        )
+    }
 }

@@ -52,11 +52,8 @@ enum ScriptMultiArgBridge {
         }
         req.setObject(request.url.path.isEmpty ? "/" : request.url.path, forKeyedSubscript: "path" as NSString)
 
-        let headersDict = Dictionary(
-            request.headers.map { ($0.name, $0.value) },
-            uniquingKeysWith: { _, last in last }
-        )
-        req.setObject(headersDict, forKeyedSubscript: "headers" as NSString)
+        let headersDict = ScriptHeaderDictionary.storage(from: request.headers)
+        req.setObject(ScriptHeaderDictionary.exposed(from: headersDict), forKeyedSubscript: "headers" as NSString)
 
         let queriesDict = parseQueries(request.url.query ?? "")
         req.setObject(queriesDict, forKeyedSubscript: "queries" as NSString)
@@ -96,7 +93,11 @@ enum ScriptMultiArgBridge {
         let method = (source.objectForKeyedSubscript("method")?.toString() ?? original.method)
         let path = source.objectForKeyedSubscript("path")?.toString() ?? original.url.path
         let queriesDict = parseQueryDictionary(source.objectForKeyedSubscript("queries"))
-        let headersDict = (source.objectForKeyedSubscript("headers")?.toDictionary() as? [String: String]) ?? [:]
+        let exposedHeaders = (source.objectForKeyedSubscript("headers")?.toDictionary() as? [String: String]) ?? [:]
+        let headersDict = ScriptHeaderDictionary.storage(
+            fromJavaScript: exposedHeaders,
+            original: ScriptHeaderDictionary.storage(from: original.headers)
+        )
         let bodyVal = source.objectForKeyedSubscript("body")
         let bodyIsBase64Val = source.objectForKeyedSubscript("__bodyIsBase64")
         let bodyIsBase64 = bodyIsBase64Val?.toBool() ?? false
@@ -167,11 +168,8 @@ enum ScriptMultiArgBridge {
             return nil
         }
         resp.setObject(response.statusCode, forKeyedSubscript: "statusCode" as NSString)
-        let headersDict = Dictionary(
-            response.headers.map { ($0.name, $0.value) },
-            uniquingKeysWith: { _, last in last }
-        )
-        resp.setObject(headersDict, forKeyedSubscript: "headers" as NSString)
+        let headersDict = ScriptHeaderDictionary.storage(from: response.headers)
+        resp.setObject(ScriptHeaderDictionary.exposed(from: headersDict), forKeyedSubscript: "headers" as NSString)
         if let body = response.body {
             if let s = String(data: body, encoding: .utf8) {
                 resp.setObject(s, forKeyedSubscript: "body" as NSString)
@@ -212,7 +210,11 @@ enum ScriptMultiArgBridge {
             original.statusCode
         }
 
-        let headersDict = (source.objectForKeyedSubscript("headers")?.toDictionary() as? [String: String]) ?? [:]
+        let exposedHeaders = (source.objectForKeyedSubscript("headers")?.toDictionary() as? [String: String]) ?? [:]
+        let headersDict = ScriptHeaderDictionary.storage(
+            fromJavaScript: exposedHeaders,
+            original: ScriptHeaderDictionary.storage(from: original.headers)
+        )
         let newHeaders = headersDict.map { HTTPHeader(name: $0.key, value: $0.value) }
 
         let newBody: Data? = resolveResponseBody(source: source, original: original, pluginID: pluginID)

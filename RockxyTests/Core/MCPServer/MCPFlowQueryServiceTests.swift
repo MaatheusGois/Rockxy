@@ -80,6 +80,31 @@ struct MCPFlowQueryServiceTests {
         #expect(text.contains("total_count"))
     }
 
+    @Test("Get recent flows redacts sensitive URL query values when enabled")
+    func getRecentFlowsRedactsSensitiveURLQueryValues() async throws {
+        let provider = MockFlowProvider()
+        provider.transactions = [
+            TestFixtures.makeTransaction(
+                method: "GET",
+                url: "https://api.example.com/session?access_token=query-secret&safe=1",
+                statusCode: 200
+            )
+        ]
+
+        let service = makeService(provider: provider, redactionEnabled: true)
+        let result = await service.getRecentFlows(
+            limit: 50,
+            filterHost: nil,
+            filterMethod: nil,
+            filterStatusCode: nil
+        )
+        let text = try #require(result.content.first?.text)
+
+        #expect(text.contains("REDACTED"))
+        #expect(!text.contains("query-secret"))
+        #expect(text.contains("safe=1"))
+    }
+
     @Test("Get recent flows falls back to SessionStore when live provider is unavailable")
     func getRecentFlowsFallsBackToSessionStore() async throws {
         let directory = FileManager.default.temporaryDirectory
@@ -226,6 +251,33 @@ struct MCPFlowQueryServiceTests {
         #expect(text.contains("request"))
         #expect(text.contains("response"))
         #expect(text.contains("201"))
+    }
+
+    @Test("Get flow detail redacts JSON body without content type")
+    func getFlowDetailRedactsJSONBodyWithoutContentType() async throws {
+        let provider = MockFlowProvider()
+        let transaction = TestFixtures.makeTransaction(
+            method: "POST",
+            url: "https://api.example.com/session",
+            statusCode: 200
+        )
+        transaction.response = HTTPResponseData(
+            statusCode: 200,
+            statusMessage: "OK",
+            headers: [],
+            body: Data(#"{"user":"stephen","access_token":"secret-token"}"#.utf8)
+        )
+        provider.transactions = [transaction]
+
+        let service = makeService(provider: provider, redactionEnabled: true)
+        let result = await service.getFlowDetail(flowId: transaction.id)
+        let json = try decodeJSONObject(from: result)
+        let response = try #require(json["response"] as? [String: Any])
+        let bodyPreview = try #require(response["body_preview"] as? String)
+
+        #expect(bodyPreview.contains("[REDACTED]"))
+        #expect(!bodyPreview.contains("secret-token"))
+        #expect(bodyPreview.contains("stephen"))
     }
 
     @Test("Get flow detail falls back to SessionStore lookup")

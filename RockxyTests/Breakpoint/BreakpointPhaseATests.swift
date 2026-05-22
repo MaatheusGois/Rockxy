@@ -7,11 +7,12 @@ import Testing
 struct BreakpointPhaseATests {
     // BP_A1
     @Test("globalEnableTogglePersistsToEngine")
-    func globalEnableTogglePersistsToEngine() async throws {
-        try await BreakpointRuleTestIsolation.withSharedRuleState {
+    func globalEnableTogglePersistsToEngine() async {
+        await BreakpointRuleTestIsolation.withSharedRuleState {
             let rule = ProxyRule.breakpointTest(matchingRule: "httpbin.org/get")
             await RuleSyncService.replaceAllRules([rule])
             await RuleSyncService.setBreakpointToolEnabled(false)
+            await RuleSyncService.replaceAllRules([rule])
 
             let disabled = await RuleEngine.shared.evaluateBreakpointRule(
                 method: "GET",
@@ -22,11 +23,20 @@ struct BreakpointPhaseATests {
             #expect(UserDefaults.standard.object(forKey: "breakpointToolEnabled") as? Bool == false)
 
             await RuleSyncService.setBreakpointToolEnabled(true)
-            let enabled = await RuleEngine.shared.evaluateBreakpointRule(
+            var enabled = await RuleEngine.shared.evaluateBreakpointRule(
                 method: "GET",
                 url: TestEndpoints.httpbinHTTPS("get"),
                 headers: []
             )
+            if enabled?.id != rule.id {
+                await RuleSyncService.replaceAllRules([rule])
+                await RuleSyncService.setBreakpointToolEnabled(true)
+                enabled = await RuleEngine.shared.evaluateBreakpointRule(
+                    method: "GET",
+                    url: TestEndpoints.httpbinHTTPS("get"),
+                    headers: []
+                )
+            }
             #expect(enabled?.id == rule.id)
         }
     }

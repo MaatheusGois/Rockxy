@@ -108,8 +108,7 @@ struct HARImporter {
         let httpVersion = dict["httpVersion"] as? String ?? "HTTP/1.1"
         let headers = parseHeaders(dict["headers"] as? [[String: Any]])
         let body = parseRequestBody(dict["postData"] as? [String: Any])
-        let contentTypeHeader = headers.first { $0.name.lowercased() == "content-type" }?.value
-        let contentType = ContentType.detect(from: contentTypeHeader)
+        let contentType = ContentTypeDetector.detect(headers: headers, body: body)
 
         return HTTPRequestData(
             method: method,
@@ -131,8 +130,7 @@ struct HARImporter {
         let statusMessage = dict["statusText"] as? String ?? ""
         let headers = parseHeaders(dict["headers"] as? [[String: Any]])
         let body = parseResponseBody(dict["content"] as? [String: Any])
-        let contentTypeHeader = headers.first { $0.name.lowercased() == "content-type" }?.value
-        let contentType = ContentType.detect(from: contentTypeHeader)
+        let contentType = ContentTypeDetector.detect(headers: headers, body: body)
 
         return HTTPResponseData(
             statusCode: statusCode,

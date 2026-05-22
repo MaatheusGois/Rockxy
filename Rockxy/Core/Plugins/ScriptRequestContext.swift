@@ -21,10 +21,7 @@ struct ScriptRequestContext {
         self.originalHost = request.url.host
         self.originalScheme = request.url.scheme
         self.originalPort = request.url.port
-        self.headers = Dictionary(
-            request.headers.map { ($0.name, $0.value) },
-            uniquingKeysWith: { _, last in last }
-        )
+        self.headers = ScriptHeaderDictionary.storage(from: request.headers)
         self.body = request.body?.base64EncodedString()
         self.originalBodyBase64 = request.body?.base64EncodedString()
     }
@@ -61,22 +58,62 @@ struct ScriptRequestContext {
     let originalBodyBase64: String?
 
     static func from(jsValue: JSValue, original: ScriptRequestContext) -> ScriptRequestContext {
-        let request = jsValue.objectForKeyedSubscript("request")
+        let nestedRequest = jsValue.objectForKeyedSubscript("request")
 
-        let method = request?.objectForKeyedSubscript("method")?.toString() ?? original.method
-        let url = request?.objectForKeyedSubscript("url")?.toString() ?? original.url
+        let topLevelMethod = stringValue(jsValue.objectForKeyedSubscript("method"))
+        let nestedMethod = stringValue(nestedRequest?.objectForKeyedSubscript("method"))
+        let topLevelURL = stringValue(jsValue.objectForKeyedSubscript("url"))
+        let nestedURL = stringValue(nestedRequest?.objectForKeyedSubscript("url"))
 
-        var headers = original.headers
-        if let headersObj = request?.objectForKeyedSubscript("headers"),
-           let headersDict = headersObj.toDictionary() as? [String: String]
+        // Single-arg `onRequest(request)` reads + mutates fields directly on the
+        // top-level wrapper, while older `onRequest(ctx)` scripts may mutate
+        // `ctx.request`. Prefer a changed top-level value, otherwise honor nested
+        // mutations without letting an untouched mirror overwrite them.
+        let method: String = if let topLevelMethod,
+                                topLevelMethod != original.method || nestedMethod == nil
         {
-            headers = headersDict
+            topLevelMethod
+        } else if let nestedMethod {
+            nestedMethod
+        } else {
+            original.method
         }
 
-        let body: String? = if let bodyVal = request?.objectForKeyedSubscript("body"), !bodyVal.isUndefined,
-                               !bodyVal.isNull
+        let url: String = if let topLevelURL,
+                             topLevelURL != original.url || nestedURL == nil
         {
-            bodyVal.toString()
+            topLevelURL
+        } else if let nestedURL {
+            nestedURL
+        } else {
+            original.url
+        }
+
+        var headers = original.headers
+        let topLevelHeaders = stringDictionaryValue(
+            jsValue.objectForKeyedSubscript("headers"),
+            original: original.headers
+        )
+        let nestedHeaders = stringDictionaryValue(
+            nestedRequest?.objectForKeyedSubscript("headers"),
+            original: original.headers
+        )
+        if let topLevelHeaders,
+           topLevelHeaders != original.headers || nestedHeaders == nil
+        {
+            headers = topLevelHeaders
+        } else if let nestedHeaders {
+            headers = nestedHeaders
+        }
+
+        let topLevelBody = stringValue(jsValue.objectForKeyedSubscript("body"))
+        let nestedBody = stringValue(nestedRequest?.objectForKeyedSubscript("body"))
+        let body: String? = if let topLevelBody,
+                               topLevelBody != original.body || nestedBody == nil
+        {
+            topLevelBody
+        } else if let nestedBody {
+            nestedBody
         } else {
             original.body
         }
@@ -96,22 +133,33 @@ struct ScriptRequestContext {
     func toJSValue(in context: JSContext) -> JSValue {
         let wrapper = JSValue(newObjectIn: context)
         let request = JSValue(newObjectIn: context)
+        let headersObject = JSValue(object: ScriptHeaderDictionary.exposed(from: headers), in: context)
+
+        // Single-arg `onRequest(request)` API: expose request fields directly on
+        // the argument. We also keep `request.request` for existing `ctx.request`
+        // scripts so old snippets and new intuitive snippets both mutate through
+        // the same runtime path.
+        wrapper?.setObject(method, forKeyedSubscript: "method" as NSString)
+        wrapper?.setObject(url, forKeyedSubscript: "url" as NSString)
+        wrapper?.setObject(headersObject, forKeyedSubscript: "headers" as NSString)
+        wrapper?.setObject(body as Any, forKeyedSubscript: "body" as NSString)
 
         request?.setObject(method, forKeyedSubscript: "method" as NSString)
         request?.setObject(url, forKeyedSubscript: "url" as NSString)
-        request?.setObject(headers, forKeyedSubscript: "headers" as NSString)
+        request?.setObject(headersObject, forKeyedSubscript: "headers" as NSString)
         request?.setObject(body as Any, forKeyedSubscript: "body" as NSString)
 
         wrapper?.setObject(request, forKeyedSubscript: "request" as NSString)
 
         let setHeaderFn: @convention(block) (String, String) -> Void = { name, value in
-            let headersObj = request?.objectForKeyedSubscript("headers")
-            headersObj?.setObject(value, forKeyedSubscript: name as NSString)
+            headersObject?.setObject(value, forKeyedSubscript: name as NSString)
         }
         let setBodyFn: @convention(block) (String) -> Void = { newBody in
+            wrapper?.setObject(newBody, forKeyedSubscript: "body" as NSString)
             request?.setObject(newBody, forKeyedSubscript: "body" as NSString)
         }
         let setURLFn: @convention(block) (String) -> Void = { newURL in
+            wrapper?.setObject(newURL, forKeyedSubscript: "url" as NSString)
             request?.setObject(newURL, forKeyedSubscript: "url" as NSString)
         }
 
@@ -208,6 +256,28 @@ struct ScriptRequestContext {
             return false
         }
         return candidate == originalBase64
+    }
+
+    private static func stringValue(_ value: JSValue?) -> String? {
+        guard let value, !value.isUndefined, !value.isNull else {
+            return nil
+        }
+        return value.toString()
+    }
+
+    private static func stringDictionaryValue(
+        _ value: JSValue?,
+        original: [String: String]
+    )
+        -> [String: String]?
+    {
+        guard let value, !value.isUndefined, !value.isNull else {
+            return nil
+        }
+        guard let dictionary = value.toDictionary() as? [String: String] else {
+            return nil
+        }
+        return ScriptHeaderDictionary.storage(fromJavaScript: dictionary, original: original)
     }
 
     private static func warnOnce(pluginID: String, mutationKind: String) {

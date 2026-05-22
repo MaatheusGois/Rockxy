@@ -163,7 +163,7 @@ struct ScriptEditorWindowView: View {
             Spacer()
             HStack(spacing: 6) {
                 Circle()
-                    .fill(viewModel.savedAndActive ? Color.green : Color.secondary)
+                    .fill(statusDotColor)
                     .frame(width: 10, height: 10)
                 Text(viewModel.statusMessage.isEmpty ? " " : viewModel.statusMessage)
                     .font(.caption)
@@ -349,5 +349,19 @@ struct ScriptEditorWindowView: View {
         viewModel.testRulePreview = viewModel.testRule(against: effectiveSample)
             ? "Matches: \(effectiveSample)"
             : "No match for: \(effectiveSample)"
+        viewModel.validateScript()
+    }
+
+    private var statusDotColor: Color {
+        switch viewModel.statusTone {
+        case .neutral:
+            Color.secondary
+        case .success:
+            Color.green
+        case .warning:
+            Color.orange
+        case .error:
+            Color.red
+        }
     }
 }

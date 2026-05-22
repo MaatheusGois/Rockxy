@@ -173,12 +173,29 @@ actor ScriptPluginManager {
             return
         }
         await runtime.unloadPlugin(id: id)
-        guard let index = plugins.firstIndex(where: { $0.id == id }) else {
+
+        let refreshedPlugins = await discovery.discoverPlugins()
+        guard let refreshed = refreshedPlugins.first(where: { $0.id == id }),
+              let index = plugins.firstIndex(where: { $0.id == id }) else
+        {
             return
         }
-        try await runtime.loadPlugin(plugins[index])
-        if let j = plugins.firstIndex(where: { $0.id == id }) {
-            plugins[j].status = .active
+
+        plugins[index] = refreshed
+        if refreshed.isEnabled {
+            do {
+                try await runtime.loadPlugin(refreshed)
+                if let j = plugins.firstIndex(where: { $0.id == id }) {
+                    plugins[j].status = .active
+                }
+            } catch {
+                if let j = plugins.firstIndex(where: { $0.id == id }) {
+                    plugins[j].status = .error(error.localizedDescription)
+                    plugins[j].lastError = error.localizedDescription
+                }
+                publishSnapshot()
+                throw error
+            }
         }
         publishSnapshot()
         Self.logger.info("Reloaded plugin: \(id)")
@@ -252,6 +269,7 @@ actor ScriptPluginManager {
                 )
             } catch {
                 Self.logger.error("Plugin \(plugin.id) onRequest failed: \(error.localizedDescription)")
+                markPluginErrored(id: plugin.id, reason: error.localizedDescription)
                 continue
             }
             switch outcome {
@@ -279,9 +297,12 @@ actor ScriptPluginManager {
     )
         async -> HTTPResponseData
     {
-        guard currentSettings().scriptingToolEnabled else {
+        let settings = currentSettings()
+        guard settings.scriptingToolEnabled else {
             return response
         }
+        let chain = settings.allowMultipleScriptsPerRequest
+        var current = response
         for plugin in plugins where plugin.isEnabled && plugin.status == .active {
             guard plugin.manifest.entryPoints["script"] != nil else {
                 continue
@@ -290,23 +311,32 @@ actor ScriptPluginManager {
             guard behavior.runOnResponse else {
                 continue
             }
+            guard !behavior.runAsMock else {
+                continue
+            }
             guard Self.matches(behavior: behavior, request: request) else {
                 continue
             }
-            let context = ScriptResponseContext(request: request, response: response)
+            let context = ScriptResponseContext(request: request, response: current)
             do {
-                return try await runtime.callOnResponse(
+                let mutated = try await runtime.callOnResponse(
                     pluginID: plugin.id,
                     context: context,
                     originalRequest: request,
-                    originalResponse: response
+                    originalResponse: current
                 )
+                if chain {
+                    current = mutated
+                    continue
+                }
+                return mutated
             } catch {
                 Self.logger.error("Plugin \(plugin.id) onResponse failed: \(error.localizedDescription)")
+                markPluginErrored(id: plugin.id, reason: error.localizedDescription)
                 continue
             }
         }
-        return response
+        return current
     }
 
     /// Nonisolated snapshot used by proxy handlers (NIO event-loop threads) to
@@ -325,6 +355,9 @@ actor ScriptPluginManager {
             }
             let behavior = plugin.manifest.scriptBehavior ?? ScriptBehavior.defaults()
             guard behavior.runOnResponse else {
+                continue
+            }
+            guard !behavior.runAsMock else {
                 continue
             }
             if Self.matches(behavior: behavior, request: request) {
@@ -402,5 +435,15 @@ actor ScriptPluginManager {
     private func publishSnapshot() {
         let current = plugins
         Self.pluginSnapshot.withLock { $0 = current }
+        NotificationCenter.default.post(name: .scriptsDidChange, object: current)
+    }
+
+    private func markPluginErrored(id: String, reason: String) {
+        guard let index = plugins.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        plugins[index].status = .error(reason)
+        plugins[index].lastError = reason
+        publishSnapshot()
     }
 }

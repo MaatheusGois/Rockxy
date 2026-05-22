@@ -128,6 +128,20 @@ struct DetectionTests {
         #expect(result == .json)
     }
 
+    @Test("ContentTypeDetector detects vendor JSON media types")
+    func detectVendorJSON() {
+        let headers = [HTTPHeader(name: "Content-Type", value: "application/problem+json; charset=utf-8")]
+        let result = ContentTypeDetector.detect(headers: headers, body: nil)
+        #expect(result == .json)
+    }
+
+    @Test("ContentTypeDetector sniffs JSON body when header is missing")
+    func sniffJSONBodyWithoutHeader() {
+        let body = Data(#"{"token":"secret","ok":true}"#.utf8)
+        let result = ContentTypeDetector.detect(headers: [], body: body)
+        #expect(result == .json)
+    }
+
     @Test("ContentTypeDetector detects XML")
     func detectXML() {
         let headers = [HTTPHeader(name: "Content-Type", value: "application/xml")]

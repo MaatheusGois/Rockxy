@@ -26,6 +26,15 @@ enum ScriptConsoleLogLevel: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - ScriptEditorStatusTone
+
+enum ScriptEditorStatusTone: Equatable {
+    case neutral
+    case success
+    case warning
+    case error
+}
+
 // MARK: - ScriptMatchPatternMode
 
 /// Pattern-mode for matching rule URL (popover in the Matching Rule header row).
@@ -118,6 +127,7 @@ final class ScriptEditorViewModel {
         self.pluginManager = pluginManager
         self.policyGate = policyGate
         self.pluginsDirectoryOverride = pluginsDirectory
+        installRuntimeConsoleObserver()
     }
 
     // MARK: Internal
@@ -138,6 +148,7 @@ final class ScriptEditorViewModel {
     var runAsMock: Bool = false
     private(set) var savedAndActive: Bool = false
     private(set) var statusMessage: String = .init(localized: "Saved and Active!")
+    private(set) var statusTone: ScriptEditorStatusTone = .neutral
 
     /// Editor
     var code: String = ScriptTemplates.defaultSource
@@ -154,30 +165,32 @@ final class ScriptEditorViewModel {
     // MARK: - Wildcard → regex
 
     static func wildcardToRegex(_ pattern: String, includeSubpaths: Bool = false) -> String {
-        var escaped = ""
-        for ch in pattern {
-            switch ch {
-            case "*": escaped += ".*"
-            case "?": escaped += "."
-            case ".",
-                 "+",
-                 "(",
-                 ")",
-                 "[",
-                 "]",
-                 "{",
-                 "}",
-                 "^",
-                 "$",
-                 "|",
-                 "\\":
-                escaped += "\\"
-                escaped.append(ch)
-            default:
-                escaped.append(ch)
-            }
+        RulePatternBuilder.regexSource(
+            rawPattern: pattern,
+            matchType: .wildcard,
+            includeSubpaths: includeSubpaths
+        )
+    }
+
+    static func editorPattern(for condition: RuleMatchCondition?) -> (
+        pattern: String,
+        mode: ScriptMatchPatternMode,
+        includeSubpaths: Bool
+    ) {
+        guard let condition, let pattern = condition.urlPattern else {
+            return ("", .wildcard, false)
         }
-        return includeSubpaths ? escaped : "^\(escaped)$"
+        if let matchType = condition.matchType {
+            return (
+                pattern,
+                matchType == .wildcard ? .wildcard : .regex,
+                matchType == .wildcard ? condition.includeSubpaths ?? false : false
+            )
+        }
+        if let legacy = legacyGeneratedWildcardDisplayPattern(pattern) {
+            return legacy
+        }
+        return (pattern, .regex, false)
     }
 
     // MARK: - Beautifier
@@ -301,6 +314,7 @@ final class ScriptEditorViewModel {
 
             savedAndActive = isLiveActive
             if isLiveActive {
+                statusTone = .success
                 statusMessage = String(localized: "Saved and Active!")
                 appendConsole(.init(
                     timestamp: .now,
@@ -308,6 +322,7 @@ final class ScriptEditorViewModel {
                     message: String(localized: "Script saved and active.")
                 ))
             } else if quotaReached {
+                statusTone = .warning
                 statusMessage = String(localized: "Saved (script quota reached — not active)")
                 appendConsole(.init(
                     timestamp: .now,
@@ -317,8 +332,10 @@ final class ScriptEditorViewModel {
                     )
                 ))
             } else if !enableSucceeded {
+                statusTone = .neutral
                 statusMessage = String(localized: "Saved (not active)")
             } else if let afterSnapshot, case let .error(reason) = afterSnapshot.status {
+                statusTone = .error
                 statusMessage = String(localized: "Saved, but script failed to load")
                 appendConsole(.init(
                     timestamp: .now,
@@ -326,10 +343,12 @@ final class ScriptEditorViewModel {
                     message: reason
                 ))
             } else {
+                statusTone = .neutral
                 statusMessage = String(localized: "Saved (not active)")
             }
         } catch {
             savedAndActive = false
+            statusTone = .error
             statusMessage = String(localized: "Save failed")
             appendConsole(.init(
                 timestamp: .now,
@@ -358,13 +377,41 @@ final class ScriptEditorViewModel {
         code += "\n" + snippet
     }
 
+    func validateScript() {
+        let result = ScriptSourceValidator.validate(
+            source: code,
+            runOnRequest: runOnRequest,
+            runOnResponse: runOnResponse,
+            runAsMock: runAsMock
+        )
+        switch result {
+        case .valid:
+            statusTone = .success
+            statusMessage = String(localized: "Script is valid")
+            appendConsole(.init(
+                timestamp: .now,
+                level: .system,
+                message: String(localized: "Validation passed.")
+            ))
+        case let .invalid(reason):
+            savedAndActive = false
+            statusTone = .error
+            statusMessage = String(localized: "Validation failed")
+            appendConsole(.init(
+                timestamp: .now,
+                level: .errors,
+                message: String(localized: "Validation failed: \(reason)")
+            ))
+        }
+    }
+
     func testRule(against sampleURL: String) -> Bool {
         guard !urlPattern.isEmpty else {
             return true
         }
         let pattern: String = switch patternMode {
         case .wildcard:
-            Self.wildcardToRegex(urlPattern)
+            Self.wildcardToRegex(urlPattern, includeSubpaths: includeSubpaths)
         case .regex:
             urlPattern
         case .advanced:
@@ -407,6 +454,7 @@ final class ScriptEditorViewModel {
     private let pluginManager: ScriptPluginManager
     private let policyGate: ScriptPolicyGate?
     private let pluginsDirectoryOverride: URL?
+    private var runtimeConsoleObserver: NSObjectProtocol?
 
     private var effectivePolicyGate: ScriptPolicyGate {
         policyGate ?? ScriptPolicyGate.shared
@@ -435,6 +483,7 @@ final class ScriptEditorViewModel {
         runAsMock = false
         code = ScriptTemplates.defaultSource
         savedAndActive = false
+        statusTone = .neutral
         statusMessage = ""
         sampleURL = "https://api.example.com/path"
         consoleEntries.removeAll()
@@ -449,7 +498,10 @@ final class ScriptEditorViewModel {
             let behavior = manifest.scriptBehavior ?? ScriptBehavior.defaults()
             self.pluginID = manifest.id
             name = manifest.name
-            urlPattern = behavior.matchCondition?.urlPattern ?? ""
+            let editorPattern = Self.editorPattern(for: behavior.matchCondition)
+            urlPattern = editorPattern.pattern
+            patternMode = editorPattern.mode
+            includeSubpaths = editorPattern.includeSubpaths
             method = ScriptMatchMethod(persisted: behavior.matchCondition?.method)
             runOnRequest = behavior.runOnRequest
             runOnResponse = behavior.runOnResponse
@@ -457,8 +509,10 @@ final class ScriptEditorViewModel {
             code = (try? String(contentsOf: scriptURL, encoding: .utf8)) ?? ScriptTemplates.defaultSource
             let info = await pluginManager.plugins.first(where: { $0.id == pluginID })
             savedAndActive = info?.isEnabled == true && info?.status == .active
+            statusTone = savedAndActive ? .success : .neutral
             statusMessage = savedAndActive ? String(localized: "Saved and Active!") : String(localized: "Saved")
         } catch {
+            statusTone = .error
             statusMessage = String(localized: "Load failed: \(error.localizedDescription)")
             appendConsole(.init(timestamp: .now, level: .errors, message: statusMessage))
         }
@@ -470,15 +524,106 @@ final class ScriptEditorViewModel {
         if trimmedPattern.isEmpty, methodValue == nil {
             return nil
         }
-        var pattern: String? = trimmedPattern.isEmpty ? nil : trimmedPattern
-        if let p = pattern, patternMode == .wildcard {
-            pattern = Self.wildcardToRegex(p, includeSubpaths: includeSubpaths)
+        let pattern = trimmedPattern.isEmpty ? nil : trimmedPattern
+        let matchType: RuleMatchType? = if pattern == nil {
+            nil
+        } else {
+            switch patternMode {
+            case .wildcard:
+                .wildcard
+            case .regex,
+                 .advanced:
+                .regex
+            }
         }
-        return RuleMatchCondition(urlPattern: pattern, method: methodValue)
+        return RuleMatchCondition(
+            urlPattern: pattern,
+            method: methodValue,
+            matchType: matchType,
+            includeSubpaths: matchType == .wildcard ? includeSubpaths : nil
+        )
     }
 
     private func appendConsole(_ entry: ScriptConsoleEntry) {
         consoleEntries.append(entry)
+    }
+
+    private func installRuntimeConsoleObserver() {
+        runtimeConsoleObserver = NotificationCenter.default.addObserver(
+            forName: .scriptConsoleDidAppend,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let event = notification.object as? ScriptConsoleEvent else {
+                return
+            }
+            Task { @MainActor [weak self] in
+                self?.appendRuntimeConsoleEvent(event)
+            }
+        }
+    }
+
+    private func appendRuntimeConsoleEvent(_ event: ScriptConsoleEvent) {
+        guard event.pluginID == pluginID else {
+            return
+        }
+        appendConsole(.init(timestamp: event.timestamp, level: Self.consoleLogLevel(for: event.level), message: event.message))
+    }
+
+    private static func consoleLogLevel(for runtimeLevel: ScriptConsoleEventLevel) -> ScriptConsoleLogLevel {
+        switch runtimeLevel {
+        case .error:
+            .errors
+        case .warn:
+            .warnings
+        case .debug,
+             .info,
+             .log:
+            .userLogs
+        }
+    }
+
+    private static func legacyGeneratedWildcardDisplayPattern(_ pattern: String) -> (
+        pattern: String,
+        mode: ScriptMatchPatternMode,
+        includeSubpaths: Bool
+    )? {
+        let exactSuffix = "($|[?#])"
+        if pattern.hasSuffix(exactSuffix) {
+            let body = String(pattern.dropLast(exactSuffix.count))
+            return (decodeLegacyGeneratedWildcardBody(body), .wildcard, false)
+        }
+        guard pattern.hasSuffix(".*") else {
+            return nil
+        }
+        let body = String(pattern.dropLast(2))
+        return (decodeLegacyGeneratedWildcardBody(body), .wildcard, true)
+    }
+
+    private static func decodeLegacyGeneratedWildcardBody(_ body: String) -> String {
+        var output = ""
+        var index = body.startIndex
+        while index < body.endIndex {
+            let next = body.index(after: index)
+            if body[index] == ".",
+               next < body.endIndex,
+               body[next] == "*"
+            {
+                output.append("*")
+                index = body.index(after: next)
+                continue
+            }
+            if body[index] == "\\",
+               next < body.endIndex
+            {
+                output.append(body[next])
+                index = body.index(after: next)
+                continue
+            }
+            output.append(body[index] == "." ? "?" : body[index])
+            index = next
+        }
+        return output
     }
 }
 

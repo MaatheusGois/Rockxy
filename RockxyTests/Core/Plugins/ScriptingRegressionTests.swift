@@ -135,6 +135,48 @@ struct ScriptingRegressionTests {
         #expect(String(data: mutated.body ?? Data(), encoding: .utf8) == "nested")
     }
 
+    @Test("Single-arg onResponse supports response request and headers aliases")
+    func singleArgResponseAliasesMutation() async throws {
+        let runtime = ScriptRuntime()
+        let script = """
+        function onResponse(response) {
+          if (response.request.headers["X-Rockxy-Scenario-Id"] !== "scripted-mock") {
+            return response;
+          }
+
+          var body = JSON.parse(response.body);
+          body.experiment.bucket = "treatment";
+          body.experiment.paywall = "discount";
+          body.experiment.discountPercent = 20;
+
+          response.headers["Content-Type"] = "application/json";
+          response.body = JSON.stringify(body);
+
+          return response;
+        }
+        """
+        let plugin = try makeTempPlugin(id: "test.legacy.response-aliases", script: script)
+        try await runtime.loadPlugin(plugin)
+        let req = makeRequest(headers: [
+            HTTPHeader(name: "X-Rockxy-Scenario-Id", value: "scripted-mock")
+        ])
+        let resp = makeResponse(
+            headers: [HTTPHeader(name: "Content-Type", value: "text/plain")],
+            body: Data(#"{"experiment":{}}"#.utf8)
+        )
+        let mutated = try await runtime.callOnResponse(
+            pluginID: plugin.id,
+            context: ScriptResponseContext(request: req, response: resp),
+            originalRequest: req,
+            originalResponse: resp
+        )
+        let body = try #require(mutated.body.flatMap { String(data: $0, encoding: .utf8) })
+
+        #expect(mutated.headers.contains { $0.name == "Content-Type" && $0.value == "application/json" })
+        #expect(body.contains(#""bucket":"treatment""#))
+        #expect(body.contains(#""discountPercent":20"#))
+    }
+
     @Test("Single-arg onResponse(ctx) preserves binary body payloads")
     func legacyBinaryBodyPreserved() async throws {
         let runtime = ScriptRuntime()

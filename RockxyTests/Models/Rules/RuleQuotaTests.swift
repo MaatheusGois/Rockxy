@@ -17,17 +17,13 @@ struct RuleQuotaTests {
 
     @Test("Adding rule at quota is rejected")
     func addAtQuotaRejected() async {
-        await RuleTestLock.shared.acquire()
-        let baseline = await activeCount(for: "throttle")
-        let gate = RulePolicyGate(policy: PolicyWithLimit(baseline + 2))
+        let gate = RulePolicyGate(policy: PolicyWithLimit(0))
+        let candidate = makeThrottle()
 
-        let ids = await seedThrottleRules(count: 2)
-
-        let rejected = await gate.addRule(makeThrottle())
+        let rejected = await gate.addRule(candidate)
         #expect(!rejected)
-
-        await removeRules(ids)
-        await RuleTestLock.shared.release()
+        let rules = await RuleEngine.shared.allRules
+        #expect(!rules.contains { $0.id == candidate.id })
     }
 
     @Test("Toggle-enable at quota is rejected")

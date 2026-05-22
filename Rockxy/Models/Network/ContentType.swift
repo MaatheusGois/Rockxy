@@ -18,31 +18,38 @@ enum ContentType: String, Sendable {
     // MARK: Internal
 
     static func detect(from header: String?) -> ContentType {
-        guard let header = header?.lowercased() else {
+        guard let header else {
             return .unknown
         }
-        if header.contains("application/json") {
+
+        let mediaType = header
+            .split(separator: ";", maxSplits: 1)
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? header.lowercased()
+
+        if mediaType == "application/json" || mediaType.hasSuffix("+json") {
             return .json
         }
-        if header.contains("text/xml") || header.contains("application/xml") {
+        if mediaType == "text/xml" || mediaType == "application/xml" || mediaType.hasSuffix("+xml") {
             return .xml
         }
-        if header.contains("text/html") {
+        if mediaType == "text/html" {
             return .html
         }
-        if header.hasPrefix("image/") {
+        if mediaType.hasPrefix("image/") {
             return .image
         }
-        if header.contains("application/x-www-form-urlencoded") {
+        if mediaType == "application/x-www-form-urlencoded" {
             return .form
         }
-        if header.contains("multipart/form-data") {
+        if mediaType == "multipart/form-data" {
             return .multipartForm
         }
-        if header.contains("application/grpc") || header.contains("application/protobuf") {
+        if mediaType == "application/grpc" || mediaType == "application/protobuf" {
             return .protobuf
         }
-        if header.hasPrefix("text/") {
+        if mediaType.hasPrefix("text/") {
             return .text
         }
         return .unknown
