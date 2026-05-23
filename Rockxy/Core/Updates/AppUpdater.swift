@@ -42,6 +42,8 @@ private final class AppcastVersionParser: NSObject, XMLParserDelegate {
     }
 
     private var versions: [String] = []
+    private var currentItemVersion: String?
+    private var isParsingItem = false
 
     func parser(
         _ parser: XMLParser,
@@ -50,13 +52,51 @@ private final class AppcastVersionParser: NSObject, XMLParserDelegate {
         qualifiedName qName: String?,
         attributes attributeDict: [String: String] = [:]
     ) {
-        guard elementName == "enclosure" else {
+        switch elementName {
+        case "item":
+            isParsingItem = true
+            currentItemVersion = versionString(in: attributeDict)
+
+        case "enclosure":
+            guard let version = versionString(in: attributeDict) else {
+                return
+            }
+            if isParsingItem {
+                currentItemVersion = currentItemVersion ?? version
+            } else {
+                versions.append(version)
+            }
+
+        default:
+            break
+        }
+    }
+
+    func parser(
+        _ parser: XMLParser,
+        didEndElement elementName: String,
+        namespaceURI: String?,
+        qualifiedName qName: String?
+    ) {
+        guard elementName == "item" else {
             return
         }
-        let version = attributeDict["sparkle:shortVersionString"] ?? attributeDict["shortVersionString"]
-        if let version, !version.isEmpty {
-            versions.append(version)
+
+        if let currentItemVersion {
+            versions.append(currentItemVersion)
         }
+        currentItemVersion = nil
+        isParsingItem = false
+    }
+
+    private func versionString(in attributes: [String: String]) -> String? {
+        let version = attributes["sparkle:shortVersionString"]
+            ?? attributes["shortVersionString"]
+            ?? attributes["http://www.andymatuschak.org/xml-namespaces/sparkle:shortVersionString"]
+        if let version, !version.isEmpty {
+            return version
+        }
+        return nil
     }
 }
 

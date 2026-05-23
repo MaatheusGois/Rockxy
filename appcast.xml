@@ -26,5 +26,460 @@
 </ul>
       ]]></description>
     </item>
+    <item>
+      <title>Version 0.21.0 (build 33)</title>
+      <pubDate>Thu, 21 May 2026 00:00:00 +0000</pubDate>
+      <enclosure
+        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.21.0/Rockxy-0.21.0-33.dmg"
+        sparkle:version="33"
+        sparkle:shortVersionString="0.21.0"
+        sparkle:edSignature="mO8bFTt7QRoUTbDDoBTctTRgb3RjVdjhqAfretCoUyHQXJZlBa8zyK5fik6Pxwp88QaFyVWm1h2mrwbJ9M+8Aw=="
+        length="22675325"
+        type="application/octet-stream" />
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/RockxyApp/Rockxy/releases/tag/v0.21.0</sparkle:releaseNotesLink>
+      <description><![CDATA[
+<h3>Added</h3>
+<ul>
+  <li>Improved Compose history so repeated request work is easier to resume and reuse.</li>
+  <li>Added a cleaner fresh-request flow in Compose for quickly starting over without carrying old request state forward.</li>
+  <li>Standardized keyboard shortcuts across capture, rules, breakpoints, Compose, scripting, and settings, with a searchable Help reference.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+  <li>Fixed breakpoint rule persistence so saved interception rules remain available after restarting Rockxy.</li>
+</ul>
+      ]]></description>
+    </item>
+    <item>
+      <title>Version 0.20.1 (build 32)</title>
+      <pubDate>Wed, 20 May 2026 00:00:00 +0000</pubDate>
+      <enclosure
+        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.20.1/Rockxy-0.20.1-32.dmg"
+        sparkle:version="32"
+        sparkle:shortVersionString="0.20.1"
+        sparkle:edSignature="d5MlhfOEDTiIdoKFUl7HG4mtS+IIJRoZUgUB3c0lsWWrgX7nf9YxaOPsO9snosnxqdHPkDtInt2y89rhU/gdBw=="
+        length="22466189"
+        type="application/octet-stream" />
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/RockxyApp/Rockxy/releases/tag/v0.20.1</sparkle:releaseNotesLink>
+      <description><![CDATA[
+<h3>Fixed</h3>
+<ul>
+  <li>Fixed Map Remote edge cases so rewritten requests preserve expected paths, queries, and upstream routing more reliably.</li>
+  <li>Preserved request table scroll position when selection changes, reducing jumpiness during review.</li>
+  <li>Improved Modify Headers editor contrast and persistence for clearer, more reliable rule editing.</li>
+  <li>Hardened Breakpoints queue handling, persistence, and table layout for smoother interception workflows.</li>
+</ul>
+      ]]></description>
+    </item>
+    <item>
+      <title>Version 0.20.0 (build 31)</title>
+      <pubDate>Tue, 19 May 2026 00:00:00 +0000</pubDate>
+      <enclosure
+        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.20.0/Rockxy-0.20.0-31.dmg"
+        sparkle:version="31"
+        sparkle:shortVersionString="0.20.0"
+        sparkle:edSignature="ifKN/OUxIXgRnOKrt2yY0CPQZUt+nLtl8zLidngT0Ce1Dn9LoBF7d0C4n0tw4cwPUA6G9//EwfHJlJZS3Y3pCQ=="
+        length="23283626"
+        type="application/octet-stream" />
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/RockxyApp/Rockxy/releases/tag/v0.20.0</sparkle:releaseNotesLink>
+      <description><![CDATA[
+<h3>Added</h3>
+<ul>
+  <li>Added a more capable rules workspace with smoother creation, editing, and management for Allow List, Block List, Map Local, Map Remote, Breakpoints, and Network Conditions.</li>
+  <li>Added breakpoint templates so repeated interception workflows can be reused faster.</li>
+  <li>Added stronger scripting workspace polish, including better script navigation, editor controls, and console handling for day-to-day automation.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+  <li>Fixed inspector and script editor ruler clipping while scrolling.</li>
+  <li>Polished rule window controls and menus to reduce layout friction.</li>
+  <li>Tightened release validation around DMG layout, Settings License activation visibility, and the production license backend path.</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+  <li>Refined Map Local editing with a clearer message editor, better pattern formatting, and more predictable controls.</li>
+  <li>Improved Map Remote and Network Conditions workflows so rule setup, review, and activation feel more consistent across tools.</li>
+  <li>Improved rule persistence and validation for Allow List and Block List settings, making saved rule configurations more reliable across sessions.</li>
+</ul>
+      ]]></description>
+    </item>
+    <item>
+      <title>Version 0.19.2 (build 30)</title>
+      <pubDate>Mon, 18 May 2026 00:00:00 +0000</pubDate>
+      <enclosure
+        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.19.2/Rockxy-0.19.2-30.dmg"
+        sparkle:version="30"
+        sparkle:shortVersionString="0.19.2"
+        sparkle:edSignature="LX2ivCKOEhEB7HZtyCLSfGFYKKE8Bq3T9LoedMtCoETbF4WHBmoSbwfGCQA8uJIfmFSxYQRRR5vmndLv9BVKDg=="
+        length="21790138"
+        type="application/octet-stream" />
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/RockxyApp/Rockxy/releases/tag/v0.19.2</sparkle:releaseNotesLink>
+      <description><![CDATA[
+<h3>Fixed</h3>
+<ul>
+  <li>Fixed License activation in the macOS app.</li>
+</ul>
+      ]]></description>
+    </item>
+    <item>
+      <title>Version 0.19.1 (build 29)</title>
+      <pubDate>Sun, 17 May 2026 00:00:00 +0000</pubDate>
+      <enclosure
+        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.19.1/Rockxy-0.19.1-29.dmg"
+        sparkle:version="29"
+        sparkle:shortVersionString="0.19.1"
+        sparkle:edSignature="ckjchtg5Wj0DJXkDuHZxN0TdKazrAQQW6mulwY5Vo6Sum79//p38dp3esMp7uDih841nZmRIlZ38UcGGLpM2DA=="
+        length="21789452"
+        type="application/octet-stream" />
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/RockxyApp/Rockxy/releases/tag/v0.19.1</sparkle:releaseNotesLink>
+      <description><![CDATA[
+<h3>Fixed</h3>
+<ul>
+  <li>Restored access to the License settings pane for activating, restoring, and managing Rockxy Pro.</li>
+</ul>
+      ]]></description>
+    </item>
+    <item>
+      <title>Version 0.19.0 (build 28)</title>
+      <pubDate>Sun, 17 May 2026 00:00:00 +0000</pubDate>
+      <enclosure
+        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.19.0/Rockxy-0.19.0-28.dmg"
+        sparkle:version="28"
+        sparkle:shortVersionString="0.19.0"
+        sparkle:edSignature="I6YriHYkKmOJ4+V0/cH/kgkwBK6Mf/4gVRfsoRP2+9QZjRamGEO6oUoPSTWAvLXFpBY47ukJn/LN2rM/O+z6BA=="
+        length="20821998"
+        type="application/octet-stream" />
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/RockxyApp/Rockxy/releases/tag/v0.19.0</sparkle:releaseNotesLink>
+      <description><![CDATA[
+<h3>Added</h3>
+<ul>
+  <li>Certificate setup now includes a clearer Mac guide, export flow, and custom certificate management path for smoother trusted capture setup.</li>
+  <li>Node.js Developer Setup now includes selected-client validation and a fuller localhost sample guide for axios, Node core, and got.</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+  <li>Clarified Flutter and Dart Developer Setup Hub validation as a manual hybrid flow with clearer certificate guidance.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+  <li>Helper and certificate recovery paths now give clearer remediation when trust setup needs attention.</li>
+  <li>Inspector body and response previews now behave more consistently during transaction review.</li>
+</ul>
+      ]]></description>
+    </item>
+    <item>
+      <title>Version 0.18.0 (build 27)</title>
+      <pubDate>Fri, 08 May 2026 00:00:00 +0000</pubDate>
+      <enclosure
+        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.18.0/Rockxy-0.18.0-27.dmg"
+        sparkle:version="27"
+        sparkle:shortVersionString="0.18.0"
+        sparkle:edSignature="pm7tm5FAIGUU0aWXSctOr04+KWBQXW0FywC2LiJ7Shz8cqZsDFC3a/DWT4Q6syWHK94bQVFYO0O5tnLQHCaiAA=="
+        length="22353479"
+        type="application/octet-stream" />
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/RockxyApp/Rockxy/releases/tag/v0.18.0</sparkle:releaseNotesLink>
+      <description><![CDATA[
+<h3>Added</h3>
+<ul>
+  <li>Native proxy status and footer controls now expose richer run-state, update-state, and action summaries directly in the main window chrome.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+  <li>The toolbar update badge now routes to the Software Update window instead of behaving like a passive status indicator.</li>
+  <li>Sidebar and favorite transaction persistence now survive migration and reload paths more reliably.</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+  <li>Main-window status and footer bars now use a more native macOS presentation with clearer proxy, capture, and update affordances.</li>
+</ul>
+      ]]></description>
+    </item>
+    <item>
+      <title>Version 0.17.0 (build 26)</title>
+      <pubDate>Fri, 08 May 2026 00:00:00 +0000</pubDate>
+      <enclosure
+        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.17.0/Rockxy-0.17.0-26.dmg"
+        sparkle:version="26"
+        sparkle:shortVersionString="0.17.0"
+        sparkle:edSignature="SXw9HHvzdIvCiGgkIrL7Zj+g2LM7dASrKGh0v13UaMvYQD+mk7FXyXLg3B4QIj3x2AcSu63SAS3yIUysJRo/Dg=="
+        length="22303725"
+        type="application/octet-stream" />
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/RockxyApp/Rockxy/releases/tag/v0.17.0</sparkle:releaseNotesLink>
+      <description><![CDATA[
+<h3>Added</h3>
+<ul>
+  <li>Python Developer Setup now includes debugger-friendly guidance for `requests`, `httpx`, `aiohttp`, and `urllib3`, with localhost demo validation using the selected Python client.</li>
+  <li>Node.js Developer Setup now includes selected-client validation and a fuller localhost sample guide for `axios`, Node core, and `got`.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+  <li>Python setup snippets now use clearer proxy and certificate wiring for local validation.</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+  <li>Clarified Flutter/Dart Developer Setup Hub validation as a manual hybrid flow that checks capture through Rockxy without claiming device, emulator, simulator, or runtime attribution.</li>
+</ul>
+      ]]></description>
+    </item>
+    <item>
+      <title>Version 0.16.0 (build 25)</title>
+      <pubDate>Thu, 07 May 2026 00:00:00 +0000</pubDate>
+      <enclosure
+        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.16.0/Rockxy-0.16.0-25.dmg"
+        sparkle:version="25"
+        sparkle:shortVersionString="0.16.0"
+        sparkle:edSignature="CO4+dfMh8gfKDO+19H30mccVSX214vPQGCA+M+DvdtvPiKlYS8PWrEJS0qIPdeXHDKVkrY6EE4pOhE4G8rBQDg=="
+        length="22298500"
+        type="application/octet-stream" />
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/RockxyApp/Rockxy/releases/tag/v0.16.0</sparkle:releaseNotesLink>
+      <description><![CDATA[
+<h3>Added</h3>
+<ul>
+  <li>Developer Setup Hub now presents Manual Setup and Automatic Setup as setup modes, with manual setup kept available for every target.</li>
+  <li>Python Developer Setup now includes stronger `requests`, `httpx`, `aiohttp`, and `urllib3` guidance, a localhost demo path, and a validation flow that uses the selected Python client.</li>
+  <li>Rockxy Pro now unlocks repeatable Dev Hub workflows such as more saved setup profiles, more pinned targets, multi-target validation, reusable launchers, and profile/template reuse while keeping one-shot manual and automatic setup available.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+  <li>Python setup snippets now use clearer proxy and certificate wiring for local validation.</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+  <li>Developer Setup Hub copy now explains validation honestly: local probes confirm traffic was captured through Rockxy without claiming process, device, simulator, emulator, or runtime attribution.</li>
+</ul>
+      ]]></description>
+    </item>
+    <item>
+      <title>Version 0.15.1 (build 24)</title>
+      <pubDate>Tue, 05 May 2026 00:00:00 +0000</pubDate>
+      <enclosure
+        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.15.1/Rockxy-0.15.1-24.dmg"
+        sparkle:version="24"
+        sparkle:shortVersionString="0.15.1"
+        sparkle:edSignature="xHPjeYAvqcCxh/hncJsRy8zal1WsCI3OK60DU5IYXKaRtPdj2uVzELO3TPIVarsTMROHHg/i4bIspOYR9PEQDA=="
+        length="21254588"
+        type="application/octet-stream" />
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/RockxyApp/Rockxy/releases/tag/v0.15.1</sparkle:releaseNotesLink>
+      <description><![CDATA[
+<h3>Fixed</h3>
+<ul>
+  <li>Validate Dev Hub with local probe</li>
+  <li>Correct Ruby Faraday setup snippet</li>
+</ul>
+      ]]></description>
+    </item>
+    <item>
+      <title>Version 0.15.0 (build 23)</title>
+      <pubDate>Thu, 30 Apr 2026 00:00:00 +0000</pubDate>
+      <enclosure
+        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.15.0/Rockxy-0.15.0-23.dmg"
+        sparkle:version="23"
+        sparkle:shortVersionString="0.15.0"
+        sparkle:edSignature="92f8+lgYSDcFudOZ9UVz1ZnrtTWz8O+Gz/tHvoGS+DsaudIQ8nPRvlUQ854ZEU57vLPyXfvwh6kPdbhD7DO3Cw=="
+        length="21224234"
+        type="application/octet-stream" />
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/RockxyApp/Rockxy/releases/tag/v0.15.0</sparkle:releaseNotesLink>
+      <description><![CDATA[
+<h3>Added</h3>
+<ul>
+  <li>Developer Setup Hub now includes Flutter and React Native mobile setup flows, with licensed Android automation for supported workflows.</li>
+  <li>Favorite request context menus now include richer actions, including opening favorites in new tabs.</li>
+  <li>Developer Setup Hub can now be opened directly from the toolbar.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+  <li>Inspector split panes now resize and animate more smoothly with safer proportions.</li>
+</ul>
+      ]]></description>
+    </item>
+    <item>
+      <title>Version 0.14.0 (build 22)</title>
+      <pubDate>Wed, 29 Apr 2026 00:00:00 +0000</pubDate>
+      <enclosure
+        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.14.0/Rockxy-0.14.0-22.dmg"
+        sparkle:version="22"
+        sparkle:shortVersionString="0.14.0"
+        sparkle:edSignature="wkz3PZ1lheHdjPZnrFH0BYcjYa2QLV0ShzM6B++RTbwxXiOcOs7jme2KyeX0PEJhp8Lg4ocInfhr/H9QSONVDw=="
+        length="20798679"
+        type="application/octet-stream" />
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/RockxyApp/Rockxy/releases/tag/v0.14.0</sparkle:releaseNotesLink>
+      <description><![CDATA[
+<h3>Added</h3>
+<ul>
+  <li>Native macOS workspace tabs for a more familiar multi-workspace workflow.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+  <li>Workspace tab creation, inline rename, reorder, and drag interactions are more reliable.</li>
+  <li>Software Update now opens centered when checking for updates.</li>
+</ul>
+      ]]></description>
+    </item>
+    <item>
+      <title>Version 0.13.0 (build 21)</title>
+      <pubDate>Wed, 29 Apr 2026 00:00:00 +0000</pubDate>
+      <enclosure
+        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.13.0/Rockxy-0.13.0-21.dmg"
+        sparkle:version="21"
+        sparkle:shortVersionString="0.13.0"
+        sparkle:edSignature="L2OMu0QZmvs7YM5QtPMPLj+8sJMmlwUNxkbfDtGxpZH0zJMul2bzuxffnZ3h/dLI356i4a7z5D/judo8n04tBg=="
+        length="20718117"
+        type="application/octet-stream" />
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/RockxyApp/Rockxy/releases/tag/v0.13.0</sparkle:releaseNotesLink>
+      <description><![CDATA[
+<h3>Added</h3>
+<ul>
+  <li>Improve domain grouping and helper recovery</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+  <li>Improve modify headers editor</li>
+  <li>Allow helper across dev and release signing</li>
+</ul>
+      ]]></description>
+    </item>
+    <item>
+      <title>Version 0.12.2 (build 19)</title>
+      <pubDate>Tue, 28 Apr 2026 00:00:00 +0000</pubDate>
+      <enclosure
+        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.12.2/Rockxy-0.12.2-19.dmg"
+        sparkle:version="19"
+        sparkle:shortVersionString="0.12.2"
+        sparkle:edSignature="w7w8DeZKeO4erqjfSsozsZP20EEYz976HnoEJYBIYRr+0ODuB05jwewMZt8scPCAyy6hFbPwD/UpK9Mv96VmAQ=="
+        length="20619704"
+        type="application/octet-stream" />
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/RockxyApp/Rockxy/releases/tag/v0.12.2</sparkle:releaseNotesLink>
+      <description><![CDATA[
+<h3>Fixed</h3>
+<ul>
+  <li>Add helper registration reset to onboarding</li>
+</ul>
+      ]]></description>
+    </item>
+    <item>
+      <title>Version 0.12.1 (build 18)</title>
+      <pubDate>Tue, 28 Apr 2026 00:00:00 +0000</pubDate>
+      <enclosure
+        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.12.1/Rockxy-0.12.1-18.dmg"
+        sparkle:version="18"
+        sparkle:shortVersionString="0.12.1"
+        sparkle:edSignature="Feikl4ujgP/IdDLNkn+7Th2Irw+14Qr6EMYhoIuvqIwpTBhiVcBTyJprRDZd8tFEHsoP/015ChfEM51YgCc9Dg=="
+        length="20640898"
+        type="application/octet-stream" />
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/RockxyApp/Rockxy/releases/tag/v0.12.1</sparkle:releaseNotesLink>
+      <description><![CDATA[
+<h3>Fixed</h3>
+<ul>
+  <li>Polish software update flow and helper validation</li>
+  <li>Align debug runtime contract for CI</li>
+</ul>
+      ]]></description>
+    </item>
+    <item>
+      <title>Version 0.12.0 (build 15)</title>
+      <pubDate>Tue, 28 Apr 2026 00:00:00 +0000</pubDate>
+      <enclosure
+        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.12.0/Rockxy-0.12.0-15.dmg"
+        sparkle:version="15"
+        sparkle:shortVersionString="0.12.0"
+        sparkle:edSignature="tqTDeLFjU+b0j3/hKD5km3aMQQdHTFoxTRa5oidaRH0wW2tWNd6iLFIE/vu4nQUkyctLL8/laDw+hqi38TJaDQ=="
+        length="20505062"
+        type="application/octet-stream" />
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/RockxyApp/Rockxy/releases/tag/v0.12.0</sparkle:releaseNotesLink>
+      <description><![CDATA[
+<h3>Fixed</h3>
+<ul>
+  <li>Fixed Homebrew/public app bundles that could fail helper installation with &quot;unable to read plist&quot; by validating and packaging the bundled helper launchd plist correctly (issue #53).</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+  <li>Added a Star History chart to all README translations.</li>
+</ul>
+      ]]></description>
+    </item>
+    <item>
+      <title>Version 0.11.0 (build 14)</title>
+      <pubDate>Sat, 25 Apr 2026 00:00:00 +0000</pubDate>
+      <enclosure
+        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.11.0/Rockxy-0.11.0-14.dmg"
+        sparkle:version="14"
+        sparkle:shortVersionString="0.11.0"
+        sparkle:edSignature="QmJqw0jq/HV+5G8dlz9M7hrFIivdWC2e+/dbDy9COEr/gW+Gx0n3wRXQpRSkq6UEHr6W0TGUnAncfT3oPutcBA=="
+        length="20180143"
+        type="application/octet-stream" />
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/RockxyApp/Rockxy/releases/tag/v0.11.0</sparkle:releaseNotesLink>
+      <description><![CDATA[
+<h3>Added</h3>
+<ul>
+  <li>Sparkle-powered automatic updates for signed public releases.</li>
+  <li>Bundled Rockxy MCP support for local developer-tool integrations.</li>
+  <li>Rockxy Pro activation and entitlement-aware upgrade foundations.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+  <li>Improved paid-license activation recovery and product validation reliability.</li>
+  <li>Closed release-readiness gaps around production licensing configuration and update metadata.</li>
+  <li>Fixed release signing settings required for Apple notarization and Gatekeeper acceptance.</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+  <li>Hardened the release pipeline with production signing, notarization, stapling, checksum, and update-feed validation.</li>
+  <li>Refreshed public documentation, localized README content, and release metadata for the 0.11.0 release.</li>
+  <li>Improved Xcode project and build configuration reproducibility for fresh checkouts.</li>
+</ul>
+      ]]></description>
+    </item>
+    <item>
+      <title>Version 0.10.0 (build 13)</title>
+      <pubDate>Tue, 21 Apr 2026 00:00:00 +0000</pubDate>
+      <enclosure
+        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.10.0/Rockxy-0.10.0-13.dmg"
+        sparkle:version="13"
+        sparkle:shortVersionString="0.10.0"
+        sparkle:edSignature="odrg386XWeommsAHNM40Q5l53hno2xvhVl98rT4Wi5cPCW2LQXOiJWWxE5B2KsIzkxFshVILViL9FYkLEUvfCQ=="
+        length="18718519"
+        type="application/octet-stream" />
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/RockxyApp/Rockxy/releases/tag/v0.10.0</sparkle:releaseNotesLink>
+      <description><![CDATA[
+<h3>Added</h3>
+<ul>
+  <li>Developer Setup Hub: dedicated rows for `Postman`, `Insomnia`, and `Paw` under **Browsers &amp; Clients**, each with its own proxy + certificate workflow.</li>
+  <li>Developer Setup Hub: `tvOS / watchOS` and `Vision Pro` rows under **Devices**, documented as iOS-class guide-only targets with honest limitations.</li>
+  <li>Developer Setup Hub: guide content for `iOS Device`, `iOS Simulator`, `Android Device`, `Android Emulator`, `Flutter`, and `React Native` — bind/listen, certificate trust, and platform-specific caveats (Android network-security-config, iOS simulator trust, Metro restarts).</li>
+  <li>Developer Setup Hub: validated manual snippets + httpbin validation watcher for eight additional targets — `Java VMs` (keytool import + HttpClient sample), `Firefox` (Network Settings + authority-store import + cURL verification), `Postman`, `Insomnia`, and `Paw` (proxy + CA settings snippet + cURL verification), `Docker` (throwaway `docker run` probe mounting the CA via `host.docker.internal`), `ElectronJS` (`--proxy-server` CLI flag and `session.setProxy` main-process snippet, both with `NODE_EXTRA_CA_CERTS`), and `Next.js` (App Router route handler with `NODE_EXTRA_CA_CERTS` + `HTTPS_PROXY` for `next dev`).</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+  <li>MCP Settings: config JSON no longer shows escaped forward slashes (`\/`) in the `command` path — output now matches standard local JSON configuration files.</li>
+  <li>SSL Proxying controls: the encrypted HTTPS response prompt, sidebar actions, and the main request table now stay in sync when enabling or disabling interception by domain or app.</li>
+  <li>Request table: CONNECT tunnel rows no longer show placeholder request/response byte counts, and duration now falls back to measured tunnel timing when detailed timing data is unavailable.</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+  <li>Developer Setup Hub: removed the combined `HTTP Clients` row in favor of individual client targets; the neutrality test now allows `Vision Pro` as a proper noun while still rejecting standalone packaging terms.</li>
+  <li>Developer Setup Hub: promoted `Java VMs`, `Firefox`, `Postman`, `Insomnia`, `Paw`, `Docker`, `ElectronJS`, and `Next.js` from `guideOnly` to `availableNow` — each now ships a real snippet path with the in-app validation watcher instead of just guide tips.</li>
+  <li>Inspector: request and response tabs now use a single-line scrolling tab strip, and short tabs such as Query stay top-aligned in both right and bottom inspector layouts.</li>
+  <li>Request table: added `Status`, `Request`, `Response`, and `SSL` columns, restored the `ID` header, and made the SSL icon reflect effective interception state instead of URL scheme alone.</li>
+</ul>
+      ]]></description>
+    </item>
   </channel>
 </rss>

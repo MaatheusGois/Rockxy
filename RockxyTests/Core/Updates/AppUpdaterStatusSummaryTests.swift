@@ -90,6 +90,88 @@ struct AppUpdaterStatusSummaryTests {
         #expect(summary?.countLine == "4 versions behind")
     }
 
+    @Test("Appcast summary tolerates top-level Sparkle version attributes")
+    func appcastSummaryReadsTopLevelSparkleVersionAttributes() {
+        let data = Data(
+            """
+            <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+              <channel>
+                <item sparkle:shortVersionString="0.21.1" sparkle:version="34">
+                  <enclosure url="https://example.com/Rockxy-0.21.1.dmg" />
+                </item>
+                <item sparkle:shortVersionString="0.21.0" sparkle:version="33">
+                  <enclosure url="https://example.com/Rockxy-0.21.0.dmg" />
+                </item>
+                <item sparkle:shortVersionString="0.20.1" sparkle:version="32">
+                  <enclosure url="https://example.com/Rockxy-0.20.1.dmg" />
+                </item>
+              </channel>
+            </rss>
+            """.utf8
+        )
+
+        let summary = AppUpdater.makeUpdateStatusSummary(
+            currentVersion: "0.20.0",
+            appcastData: data
+        )
+
+        #expect(summary?.latestVersion == "0.21.1")
+        #expect(summary?.versionsBehind == 3)
+        #expect(summary?.badgeTitle == "3 New Updates")
+    }
+
+    @Test("Appcast count deduplicates repeated item and enclosure versions")
+    func appcastCountDeduplicatesRepeatedVersionMetadata() {
+        let data = Data(
+            """
+            <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+              <channel>
+                <item sparkle:shortVersionString="0.21.1" sparkle:version="34">
+                  <enclosure sparkle:shortVersionString="0.21.1" sparkle:version="34" />
+                </item>
+                <item><enclosure sparkle:shortVersionString="0.21.0" sparkle:version="33" /></item>
+                <item><enclosure sparkle:shortVersionString="0.21.0" sparkle:version="33" /></item>
+                <item><enclosure sparkle:shortVersionString="0.20.1" sparkle:version="32" /></item>
+                <item><enclosure sparkle:shortVersionString="0.20.0" sparkle:version="31" /></item>
+              </channel>
+            </rss>
+            """.utf8
+        )
+
+        let count = AppUpdater.versionsBehind(
+            currentVersion: "0.20.0",
+            latestVersion: "0.21.1",
+            appcastData: data
+        )
+
+        #expect(count == 3)
+    }
+
+    @Test("Appcast count only includes versions newer than the current app")
+    func appcastCountStopsAtCurrentVersion() {
+        let data = Data(
+            """
+            <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+              <channel>
+                <item><enclosure sparkle:shortVersionString="0.21.1" sparkle:version="34" /></item>
+                <item><enclosure sparkle:shortVersionString="0.21.0" sparkle:version="33" /></item>
+                <item><enclosure sparkle:shortVersionString="0.20.1" sparkle:version="32" /></item>
+                <item><enclosure sparkle:shortVersionString="0.20.0" sparkle:version="31" /></item>
+                <item><enclosure sparkle:shortVersionString="0.19.2" sparkle:version="30" /></item>
+              </channel>
+            </rss>
+            """.utf8
+        )
+
+        let count = AppUpdater.versionsBehind(
+            currentVersion: "0.20.0",
+            latestVersion: "0.21.1",
+            appcastData: data
+        )
+
+        #expect(count == 3)
+    }
+
     @Test("Single appcast update badge uses clean singular copy")
     func singleAppcastUpdateBadgeUsesCleanSingularCopy() {
         let data = Data(
