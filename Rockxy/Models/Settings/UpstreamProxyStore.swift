@@ -132,9 +132,13 @@ final class UpstreamProxyStore {
     }
 
     func disable() throws {
-        var disabled = configuration
-        disabled.isEnabled = false
-        try saveConfiguration(disabled)
+        try setEnabled(false)
+    }
+
+    func setEnabled(_ isEnabled: Bool) throws {
+        var updated = configuration
+        updated.isEnabled = isEnabled
+        try saveConfiguration(updated)
     }
 
     nonisolated func resolvedSnapshot() -> UpstreamProxyResolvedConfiguration? {

@@ -408,6 +408,7 @@ struct RockxyMenuCommands: Commands {
     @ObservedObject private var updater = AppUpdater.shared
 
     @AppStorage(NoCacheHeaderMutator.userDefaultsKey) private var isNoCachingEnabled = false
+    @State private var upstreamProxyStore = UpstreamProxyStore.shared
 
     private let certificateRouter = CertificateMenuActionRouter()
 
@@ -705,10 +706,8 @@ struct RockxyMenuCommands: Commands {
             .keyboardShortcut("b", modifiers: [.command, .option])
 
             Menu(String(localized: "Proxy Settings")) {
-                Button(String(localized: "Use External Proxy")) {
-                    toggleExternalProxy()
-                }
-                .keyboardShortcut("e", modifiers: [.command, .option])
+                Toggle(String(localized: "Use External Proxy"), isOn: externalProxyEnabledBinding)
+                    .keyboardShortcut("e", modifiers: [.command, .option])
 
                 Button(String(localized: "External Proxy Settings…")) {
                     openWindow(id: "externalProxySettings")
@@ -967,15 +966,22 @@ struct RockxyMenuCommands: Commands {
         }
     }
 
-    private func toggleExternalProxy() {
-        Task { @MainActor in
-            var configuration = UpstreamProxyStore.shared.configuration
-            configuration.isEnabled.toggle()
-            do {
-                try UpstreamProxyStore.shared.saveConfiguration(configuration)
-            } catch {
-                Self.logger.error("Failed to toggle External Proxy: \(error.localizedDescription)")
+    private var externalProxyEnabledBinding: Binding<Bool> {
+        Binding(
+            get: {
+                upstreamProxyStore.configuration.isEnabled
+            },
+            set: { isEnabled in
+                setExternalProxyEnabled(isEnabled)
             }
+        )
+    }
+
+    private func setExternalProxyEnabled(_ isEnabled: Bool) {
+        do {
+            try upstreamProxyStore.setEnabled(isEnabled)
+        } catch {
+            Self.logger.error("Failed to toggle External Proxy: \(error.localizedDescription)")
         }
     }
 

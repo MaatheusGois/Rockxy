@@ -47,6 +47,43 @@ struct UpstreamProxyStoreTests {
         }
     }
 
+    @Test("setEnabled persists toggle state and posts notification")
+    func setEnabledPersistsToggleState() throws {
+        let store = makeStore()
+        try store.saveConfiguration(UpstreamProxyConfiguration(
+            isEnabled: false,
+            type: .http,
+            host: "proxy.example.com"
+        ))
+
+        var notificationCount = 0
+        let observer = NotificationCenter.default.addObserver(
+            forName: .upstreamProxyConfigurationDidChange,
+            object: nil,
+            queue: nil
+        ) { _ in
+            notificationCount += 1
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        try store.setEnabled(true)
+        #expect(store.configuration.isEnabled)
+
+        try store.setEnabled(false)
+        #expect(!store.configuration.isEnabled)
+        #expect(notificationCount == 2)
+    }
+
+    @Test("setEnabled validates configuration before turning on")
+    func setEnabledValidatesBeforeTurningOn() {
+        let store = makeStore()
+
+        #expect(throws: UpstreamProxyConfigurationError.hostInvalid) {
+            try store.setEnabled(true)
+        }
+        #expect(!store.configuration.isEnabled)
+    }
+
     @Test("round-trips persistence and posts notification")
     func persistenceAndNotification() throws {
         let defaults = makeDefaults()
