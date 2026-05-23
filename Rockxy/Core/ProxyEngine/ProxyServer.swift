@@ -91,6 +91,7 @@ actor ProxyServer {
         certificateManager: CertificateManager = .shared,
         ruleEngine: RuleEngine = RuleEngine(),
         scriptPluginManager: ScriptPluginManager? = nil,
+        upstreamProxySnapshotProvider: @escaping @Sendable () -> UpstreamProxyResolvedConfiguration? = { nil },
         onTransactionComplete: @escaping @Sendable (HTTPTransaction) -> Void = { _ in },
         onBreakpointHit: (@Sendable (BreakpointRequestData) async -> (BreakpointDecision, BreakpointRequestData))? = nil
     ) {
@@ -98,6 +99,7 @@ actor ProxyServer {
         self.certificateManager = certificateManager
         self.ruleEngine = ruleEngine
         self.scriptPluginManager = scriptPluginManager
+        self.upstreamProxySnapshotProvider = upstreamProxySnapshotProvider
         self.onTransactionComplete = onTransactionComplete
         self.onBreakpointHit = onBreakpointHit
     }
@@ -123,6 +125,23 @@ actor ProxyServer {
         let limiter = connectionLimiter
         let callback = onTransactionComplete
         let breakpointHit = onBreakpointHit
+        refreshUpstreamProxySnapshot()
+        let upstreamProxyProvider: @Sendable () -> UpstreamProxyResolvedConfiguration? = {
+            self.currentUpstreamProxyConfiguration()
+        }
+
+        upstreamProxyObserver = NotificationCenter.default.addObserver(
+            forName: .upstreamProxyConfigurationDidChange,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            guard let self else {
+                return
+            }
+            Task {
+                await self.refreshUpstreamProxySnapshot()
+            }
+        }
 
         let bootstrap = ServerBootstrap(group: group)
             // Backlog of 256 pending connections before the OS starts rejecting
@@ -139,6 +158,7 @@ actor ProxyServer {
                         ruleEngine: ruleEng,
                         scriptPluginManager: scriptMgr,
                         connectionLimiter: limiter,
+                        upstreamProxySnapshotProvider: upstreamProxyProvider,
                         onTransactionComplete: callback,
                         onBreakpointHit: breakpointHit
                     )
@@ -174,6 +194,10 @@ actor ProxyServer {
             return
         }
         serverChannel = nil
+        if let upstreamProxyObserver {
+            NotificationCenter.default.removeObserver(upstreamProxyObserver)
+            self.upstreamProxyObserver = nil
+        }
 
         do {
             try await channel.close().get()
@@ -201,6 +225,7 @@ actor ProxyServer {
     private let certificateManager: CertificateManager
     private let ruleEngine: RuleEngine
     private let scriptPluginManager: ScriptPluginManager?
+    private let upstreamProxySnapshotProvider: @Sendable () -> UpstreamProxyResolvedConfiguration?
     private let connectionLimiter = ConnectionLimiter()
     private let onTransactionComplete: @Sendable (HTTPTransaction) -> Void
     private let onBreakpointHit: (@Sendable (BreakpointRequestData) async -> (
@@ -210,6 +235,23 @@ actor ProxyServer {
 
     private var eventLoopGroup: MultiThreadedEventLoopGroup?
     private var serverChannel: Channel?
+    private var upstreamProxyObserver: NSObjectProtocol?
+    private let upstreamProxySnapshotLock = NSLock()
+    nonisolated(unsafe) private var upstreamProxyConfiguration: UpstreamProxyResolvedConfiguration?
+
+    private func refreshUpstreamProxySnapshot() {
+        let snapshot = upstreamProxySnapshotProvider()
+        upstreamProxySnapshotLock.lock()
+        upstreamProxyConfiguration = snapshot
+        upstreamProxySnapshotLock.unlock()
+    }
+
+    nonisolated private func currentUpstreamProxyConfiguration() -> UpstreamProxyResolvedConfiguration? {
+        upstreamProxySnapshotLock.lock()
+        let snapshot = upstreamProxyConfiguration
+        upstreamProxySnapshotLock.unlock()
+        return snapshot
+    }
 }
 
 // MARK: - ProxyServerError

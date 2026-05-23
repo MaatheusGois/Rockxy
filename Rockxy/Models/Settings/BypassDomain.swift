@@ -23,14 +23,6 @@ struct BypassDomain: Identifiable, Codable, Hashable {
     /// - Wildcard: `*.local` matches `myhost.local`, `sub.myhost.local`
     /// - Exact: `localhost` matches only `localhost`
     func matches(_ host: String) -> Bool {
-        let lowerDomain = domain.lowercased()
-        let lowerHost = host.lowercased()
-
-        if lowerDomain.hasPrefix("*.") {
-            let suffix = String(lowerDomain.dropFirst(1))
-            return lowerHost.hasSuffix(suffix) && lowerHost.count > suffix.count
-        }
-
-        return lowerHost == lowerDomain
+        HostPatternMatcher.matches(host: host, pattern: domain, extendedWildcards: false)
     }
 }

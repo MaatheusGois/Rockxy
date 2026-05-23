@@ -22,6 +22,7 @@ extension Notification.Name {
     static let tlsMitmRejected = identity.notificationName("tlsMitmRejected")
     static let sslProxyingStateDidChange = identity.notificationName("sslProxyingStateDidChange")
     static let bypassProxyListDidChange = identity.notificationName("bypassProxyListDidChange")
+    static let upstreamProxyConfigurationDidChange = identity.notificationName("upstreamProxyConfigurationDidChange")
     static let breakpointHit = identity.notificationName("breakpointHit")
     static let rulesDidChange = identity.notificationName("rulesDidChange")
     static let scriptsDidChange = identity.notificationName("scriptsDidChange")

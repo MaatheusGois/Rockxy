@@ -180,7 +180,8 @@ extension MainContentCoordinator {
             let overridden = switch owner {
             case .none:
                 false
-            case .direct, .helper:
+            case .direct,
+                 .helper:
                 true
             }
             isProxyOverridden = overridden
@@ -311,11 +312,13 @@ extension MainContentCoordinator {
         // so the first captured request sees the same script state as every later one.
         // After the first call this is a fast no-op.
         await PluginManager.shared.ensureLoadedOnce()
+        let upstreamProxySnapshotProvider = UpstreamProxyStore.shared.resolvedSnapshot
         proxyServer = ProxyServer(
             configuration: configuration,
             certificateManager: certificateManager,
             ruleEngine: RuleEngine.shared,
             scriptPluginManager: PluginManager.shared.scriptManager,
+            upstreamProxySnapshotProvider: upstreamProxySnapshotProvider,
             onTransactionComplete: { transaction in
                 Task {
                     await manager.addTransaction(transaction)
