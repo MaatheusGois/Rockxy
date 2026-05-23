@@ -278,30 +278,6 @@ final class CustomCertificateManager: @unchecked Sendable {
     }
 }
 
-// MARK: - HostPatternMatcher
-
-enum HostPatternMatcher {
-    static func matches(pattern: String, host: String) -> Bool {
-        let normalizedPattern = pattern.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let normalizedHost = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-
-        guard !normalizedPattern.isEmpty, !normalizedHost.isEmpty else {
-            return false
-        }
-
-        if normalizedPattern == normalizedHost {
-            return true
-        }
-
-        if normalizedPattern.hasPrefix("*.") {
-            let suffix = String(normalizedPattern.dropFirst(2))
-            return normalizedHost.hasSuffix(".\(suffix)") && normalizedHost != suffix
-        }
-
-        return false
-    }
-}
-
 // MARK: - CustomCertificateError
 
 enum CustomCertificateError: LocalizedError, Equatable {

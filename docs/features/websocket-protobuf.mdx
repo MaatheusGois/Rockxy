@@ -1,0 +1,60 @@
+---
+title: "WebSocket Protobuf Decoding"
+description: "Decode likely Protobuf binary WebSocket frames using a bounded wire-format heuristic."
+---
+
+# WebSocket Protobuf Decoding
+
+WebSocket Protobuf Decoding adds an on-demand decoder for binary WebSocket frames whose payloads look like Protobuf wire-format data. It helps inspect real-time APIs that send compact binary messages instead of JSON.
+
+## Entry Points
+
+| Action | How to Access |
+|--------|---------------|
+| Capture WebSocket frames | Response inspector > WebSocket tab |
+| Inspect a binary frame | Select a WebSocket binary frame |
+| Decode as Protobuf | Select Protobuf in the frame detail view |
+| Manage mapping rules | Tools > Protobuf... |
+| Review schema list | Tools > Protobuf... > Protobuf Schema... |
+
+The decoder runs on demand when the inspector requests it. WebSocket capture itself stays on the existing hot path, so Rockxy does not decode every frame while proxying traffic.
+
+## Heuristic Mode
+
+Community decoding uses Protobuf wire-format heuristics. No schema file is needed.
+
+The decoder can identify:
+
+- field numbers and wire types
+- varints
+- fixed32 and fixed64 values
+- length-delimited strings
+- length-delimited raw bytes
+- nested length-delimited messages when the nested payload also parses as Protobuf
+
+Heuristic mode cannot know original field names, enum labels, message names, or application-specific types because those require schema descriptors.
+
+## Safety Limits
+
+Malformed input fails closed and returns no decoded tree. The decoder also applies bounded recursion and node-count limits so large or adversarial frame bodies cannot consume unbounded memory or CPU.
+
+## Schema-Based Decoding
+
+The public API has a stable schema-decoding surface so the inspector can later resolve field names from uploaded `.proto` files. The schema parser and full schema-based decoder body are intentionally not included yet; that follow-up will decide whether to bring in a Protobuf dependency.
+
+In the Community policy, schema uploads are capped at zero.
+
+## Protobuf Settings
+
+Tools > Protobuf... opens a mapping-rule window for future schema-aware decoding. Rules can be prepared with URL matching, method selection, payload encoding, message type, and schema association. Schema upload controls are visible for the stable workflow, but uploads are rejected by the default app policy until a later private policy implementation enables them.
+
+## Related Features
+
+<CardGroup cols={2}>
+  <Card title="WebSocket Inspection" icon="bolt" href="/features/websocket">
+    Capture text, binary, ping, pong, and close frames.
+  </Card>
+  <Card title="Traffic Capture" icon="satellite-dish" href="/features/traffic-capture">
+    Capture and inspect HTTP, HTTPS, and WebSocket traffic.
+  </Card>
+</CardGroup>

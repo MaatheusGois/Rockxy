@@ -33,6 +33,7 @@ final class HTTPProxyHandler: ChannelInboundHandler, RemovableChannelHandler, @u
         scriptPluginManager: ScriptPluginManager? = nil,
         connectionLimiter: ConnectionLimiter,
         customCertificateManager: CustomCertificateManager = .shared,
+        upstreamProxySnapshotProvider: @escaping @Sendable () -> UpstreamProxyResolvedConfiguration? = { nil },
         onTransactionComplete: @escaping @Sendable (HTTPTransaction) -> Void,
         onBreakpointHit: (@Sendable (BreakpointRequestData) async -> (BreakpointDecision, BreakpointRequestData))? = nil
     ) {
@@ -41,6 +42,7 @@ final class HTTPProxyHandler: ChannelInboundHandler, RemovableChannelHandler, @u
         self.scriptPluginManager = scriptPluginManager
         self.connectionLimiter = connectionLimiter
         self.customCertificateManager = customCertificateManager
+        self.upstreamProxySnapshotProvider = upstreamProxySnapshotProvider
         self.onTransactionComplete = onTransactionComplete
         self.onBreakpointHit = onBreakpointHit
     }
@@ -102,6 +104,7 @@ final class HTTPProxyHandler: ChannelInboundHandler, RemovableChannelHandler, @u
     private let scriptPluginManager: ScriptPluginManager?
     private let connectionLimiter: ConnectionLimiter
     private let customCertificateManager: CustomCertificateManager
+    private let upstreamProxySnapshotProvider: @Sendable () -> UpstreamProxyResolvedConfiguration?
     private let onTransactionComplete: @Sendable (HTTPTransaction) -> Void
     private let onBreakpointHit: (@Sendable (BreakpointRequestData) async -> (
         BreakpointDecision,
@@ -607,6 +610,7 @@ extension HTTPProxyHandler {
                 scriptPluginManager: self.scriptPluginManager,
                 connectionLimiter: self.connectionLimiter,
                 customCertificateManager: self.customCertificateManager,
+                upstreamProxySnapshotProvider: self.upstreamProxySnapshotProvider,
                 clientSourcePort: self.clientSourcePort,
                 onTransactionComplete: self.onTransactionComplete,
                 onBreakpointHit: self.onBreakpointHit
@@ -673,60 +677,62 @@ extension HTTPProxyHandler {
 
         let limiter = connectionLimiter
         let useTLS = requestData.url.scheme == "https"
-        ClientBootstrap(group: context.eventLoop)
-            .connectTimeout(.seconds(5))
-            .channelInitializer { channel in
-                if useTLS {
-                    do {
-                        let tlsConfig = try HTTPSProxyRelayHandler.makeClientTLSConfiguration(
-                            clientIdentity: self.customCertificateManager.clientIdentity(for: host)
-                        )
-                        let sslContext = try NIOSSLContext(configuration: tlsConfig)
-                        let sslHandler = try NIOSSLClientHandler(
-                            context: sslContext,
-                            serverHostname: host
-                        )
-                        return channel.pipeline.addHandler(sslHandler).flatMap {
-                            channel.pipeline.addHTTPClientHandlers()
-                        }
-                    } catch {
-                        return channel.eventLoop.makeFailedFuture(error)
-                    }
-                }
-                return channel.pipeline.addHTTPClientHandlers()
-            }
-            .connect(host: host, port: port)
-            .whenComplete { [weak self] result in
-                guard let self else {
-                    if case let .success(channel) = result {
-                        channel.close(promise: nil)
-                    }
-                    limiter.release(host: host, port: port)
-                    return
-                }
-                switch result {
-                case let .success(clientChannel):
-                    let tcpTime = DispatchTime.now()
-                    self.relayRequest(
-                        context: context,
-                        clientChannel: clientChannel,
-                        head: head,
-                        requestData: requestData,
-                        graphQLInfo: graphQLInfo,
-                        startTime: startTime,
-                        connectTime: connectTime,
-                        tcpTime: tcpTime,
-                        responseHeaderOperations: responseHeaderOperations,
-                        networkConditionProfile: networkConditionProfile,
-                        onUpstreamClosed: { limiter.release(host: host, port: port) },
-                        callback: callback
+        UpstreamProxyConnector.connect(
+            eventLoop: context.eventLoop,
+            targetHost: host,
+            targetPort: port,
+            configuration: upstreamProxySnapshotProvider()
+        ) { channel in
+            if useTLS {
+                do {
+                    let tlsConfig = try HTTPSProxyRelayHandler.makeClientTLSConfiguration(
+                        clientIdentity: self.customCertificateManager.clientIdentity(for: host)
                     )
-                case let .failure(error):
-                    proxyHandlerLogger.error("Connection failed: \(error.localizedDescription)")
-                    limiter.release(host: host, port: port)
-                    self.sendErrorResponse(context: context, status: 502, requestData: requestData, callback: callback)
+                    let sslContext = try NIOSSLContext(configuration: tlsConfig)
+                    let sslHandler = try NIOSSLClientHandler(
+                        context: sslContext,
+                        serverHostname: host
+                    )
+                    return channel.pipeline.addHandler(sslHandler).flatMap {
+                        channel.pipeline.addHTTPClientHandlers()
+                    }
+                } catch {
+                    return channel.eventLoop.makeFailedFuture(error)
                 }
             }
+            return channel.pipeline.addHTTPClientHandlers()
+        }
+        .whenComplete { [weak self] result in
+            guard let self else {
+                if case let .success(channel) = result {
+                    channel.close(promise: nil)
+                }
+                limiter.release(host: host, port: port)
+                return
+            }
+            switch result {
+            case let .success(clientChannel):
+                let tcpTime = DispatchTime.now()
+                self.relayRequest(
+                    context: context,
+                    clientChannel: clientChannel,
+                    head: head,
+                    requestData: requestData,
+                    graphQLInfo: graphQLInfo,
+                    startTime: startTime,
+                    connectTime: connectTime,
+                    tcpTime: tcpTime,
+                    responseHeaderOperations: responseHeaderOperations,
+                    networkConditionProfile: networkConditionProfile,
+                    onUpstreamClosed: { limiter.release(host: host, port: port) },
+                    callback: callback
+                )
+            case let .failure(error):
+                proxyHandlerLogger.error("Connection failed: \(error.localizedDescription)")
+                limiter.release(host: host, port: port)
+                self.sendErrorResponse(context: context, status: 502, requestData: requestData, callback: callback)
+            }
+        }
     }
 
     nonisolated private func relayRequest(

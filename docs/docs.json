@@ -35,6 +35,7 @@
           "core-features/filters-and-search",
           "features/https-interception",
           "features/websocket",
+          "features/websocket-protobuf",
           "features/graphql",
           "core-features/logs-and-timeline",
           "features/request-replay",
@@ -67,6 +68,7 @@
         "pages": [
           "features/diff",
           "features/scripting",
+          "features/upstream-proxy",
           "features/mcp"
         ]
       },

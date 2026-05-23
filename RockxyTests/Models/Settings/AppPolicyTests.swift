@@ -12,6 +12,11 @@ struct AppPolicyTests {
         #expect(policy.maxActiveRulesPerTool == 10)
         #expect(policy.maxEnabledScripts == 10)
         #expect(policy.maxLiveHistoryEntries == 1_000)
+        #expect(policy.upstreamProxyAllowsSOCKS5 == false)
+        #expect(policy.upstreamProxyAllowsAuthentication == false)
+        #expect(policy.maxUpstreamProxyBypassEntries == 3)
+        #expect(policy.protobufDecodingAllowsSchemaUpload == false)
+        #expect(policy.maxProtobufSchemas == 0)
     }
 
     @Test("MainContentCoordinator uses DefaultAppPolicy by default")

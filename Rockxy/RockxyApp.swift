@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import os
 import SwiftUI
 import UniformTypeIdentifiers
@@ -151,6 +152,20 @@ struct RockxyApp: App {
         .windowResizability(.contentSize)
         .defaultPosition(.center)
 
+        Window(String(localized: "External Proxy Settings"), id: "externalProxySettings") {
+            ExternalProxySettingsView()
+        }
+        .commandsRemoved()
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+
+        Window(String(localized: "SOCKS Proxy Settings"), id: "socksProxySettings") {
+            SOCKSProxySettingsView()
+        }
+        .commandsRemoved()
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+
         Window(String(localized: "Allow List"), id: "allowList") {
             AllowListWindowView()
         }
@@ -194,6 +209,22 @@ struct RockxyApp: App {
         .commandsRemoved()
         .windowResizability(.contentSize)
         .defaultPosition(.center)
+
+        Window(String(localized: "Protobuf Settings"), id: "protobufSettings") {
+            ProtobufSettingsWindowView()
+        }
+        .commandsRemoved()
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+        .windowToolbarStyle(.unifiedCompact)
+
+        Window(String(localized: "Protobuf Schema List"), id: "protobufSchemaList") {
+            ProtobufSchemaListWindowView()
+        }
+        .commandsRemoved()
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+        .windowToolbarStyle(.unifiedCompact)
 
         Window(String(localized: "Breakpoint Rules"), id: "breakpointRules") {
             BreakpointRulesWindowView()
@@ -334,7 +365,7 @@ private struct MainWindowContent: View {
     @State private var setupChecked = false
 }
 
-// MARK: - RockxyMenuCommands
+// MARK: - ProjectLinks
 
 private enum ProjectLinks {
     static let homepage = "https://rockxy.io"
@@ -346,6 +377,48 @@ private enum ProjectLinks {
         URL(string: repository)
     }
 }
+
+// MARK: - ExternalProxyMenuState
+
+@MainActor
+private final class ExternalProxyMenuState: ObservableObject {
+    // MARK: Lifecycle
+
+    init(notificationCenter: NotificationCenter = .default) {
+        self.notificationCenter = notificationCenter
+        self.isEnabled = UpstreamProxyStore.shared.configuration.isEnabled
+        observer = notificationCenter.addObserver(
+            forName: .upstreamProxyConfigurationDidChange,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { @MainActor [weak self] in
+                self?.refresh()
+            }
+        }
+    }
+
+    deinit {
+        if let observer {
+            notificationCenter.removeObserver(observer)
+        }
+    }
+
+    // MARK: Internal
+
+    @Published private(set) var isEnabled: Bool
+
+    func refresh() {
+        isEnabled = UpstreamProxyStore.shared.configuration.isEnabled
+    }
+
+    // MARK: Private
+
+    private let notificationCenter: NotificationCenter
+    private var observer: NSObjectProtocol?
+}
+
+// MARK: - RockxyMenuCommands
 
 /// Defines Rockxy's full menu bar structure: File (session/export), Edit (copy as cURL),
 /// View (layout/tabs), Flow (replay/clear), Tools (proxy control), Diff, Scripting,
@@ -369,16 +442,18 @@ struct RockxyMenuCommands: Commands {
 
     // MARK: Private
 
+    private static let logger = Logger(subsystem: RockxyIdentity.current.logSubsystem, category: "MenuCommands")
+
     @Environment(\.openWindow) private var openWindow
     @FocusedValue(\.commandActions) private var actions: MainContentCommandActions?
     @ObservedObject private var updater = AppUpdater.shared
 
     @AppStorage(NoCacheHeaderMutator.userDefaultsKey) private var isNoCachingEnabled = false
+    @StateObject private var externalProxyMenuState = ExternalProxyMenuState()
 
     private let certificateRouter = CertificateMenuActionRouter()
 
-    @CommandsBuilder
-    private var appMenu: some Commands {
+    @CommandsBuilder private var appMenu: some Commands {
         CommandGroup(replacing: .appInfo) {
             Button(String(localized: "About Rockxy")) {
                 showAboutPanel()
@@ -671,6 +746,24 @@ struct RockxyMenuCommands: Commands {
             }
             .keyboardShortcut("b", modifiers: [.command, .option])
 
+            Menu(String(localized: "Proxy Settings")) {
+                Toggle(String(localized: "Use External Proxy"), isOn: externalProxyEnabledBinding)
+                    .help(externalProxyMenuState.isEnabled
+                        ? String(localized: "External Proxy is on")
+                        : String(localized: "External Proxy is off"))
+                    .keyboardShortcut("e", modifiers: [.command, .option])
+
+                Button(String(localized: "External Proxy Settings…")) {
+                    openWindow(id: "externalProxySettings")
+                }
+
+                Divider()
+
+                Button(String(localized: "SOCKS Proxy Settings…")) {
+                    openWindow(id: "socksProxySettings")
+                }
+            }
+
             Divider()
 
             Button(String(localized: "Breakpoint Rules…")) {
@@ -722,6 +815,11 @@ struct RockxyMenuCommands: Commands {
 
             Divider()
 
+            Button(String(localized: "Protobuf…")) {
+                openWindow(id: "protobufSettings")
+            }
+            .keyboardShortcut("u", modifiers: [.command, .option])
+
             Button(String(localized: "Network Conditions…")) {
                 openWindow(id: "networkConditions")
             }
@@ -764,8 +862,7 @@ struct RockxyMenuCommands: Commands {
         }
     }
 
-    @CommandsBuilder
-    private var secondaryMenus: some Commands {
+    @CommandsBuilder private var secondaryMenus: some Commands {
         diffMenu
         scriptingMenu
         certificateMenu
@@ -847,59 +944,6 @@ struct RockxyMenuCommands: Commands {
         }
     }
 
-    private func dispatchCertificateAction(_ action: CertificateMenuAction) {
-        switch certificateRouter.route(for: action) {
-        case .openCertificateSetupGuide:
-            openWindow(id: "certificateSetup")
-        case .openDeveloperSetup(let targetID, let tab):
-            DeveloperSetupRouteStore.shared.request(targetID: targetID, tab: tab)
-            openWindow(id: "developerSetupHub")
-        case .openCustomCertificates:
-            openWindow(id: "customCertificates")
-        case .export(let format):
-            CertificateExportPanelPresenter().export(format: format)
-        case .resetAll:
-            confirmAndResetCertificates()
-        }
-    }
-
-    private func confirmAndResetCertificates() {
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = String(localized: "Reset all Rockxy Certificates?")
-        alert.informativeText = String(
-            localized: "This removes Rockxy's generated root CA, trust settings, cached host certificates, and custom certificate records."
-        )
-        alert.addButton(withTitle: String(localized: "Reset"))
-        alert.addButton(withTitle: String(localized: "Cancel"))
-        guard alert.runModal() == .alertFirstButtonReturn else {
-            return
-        }
-
-        Task {
-            do {
-                try await CertificateManager.shared.reset()
-                try CustomCertificateManager.shared.deleteAll()
-                await MainActor.run {
-                    AppSettingsManager.shared.updateLastExportedRootCAPath(nil)
-                }
-            } catch {
-                await MainActor.run {
-                    showCertificateError(error.localizedDescription)
-                }
-            }
-        }
-    }
-
-    private func showCertificateError(_ message: String) {
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = String(localized: "Certificate Action Failed")
-        alert.informativeText = message
-        alert.addButton(withTitle: String(localized: "OK"))
-        alert.runModal()
-    }
-
     private var setupMenu: some Commands {
         CommandMenu(String(localized: "Setup")) {
             Button(String(localized: "Automatic Setup...")) {
@@ -964,6 +1008,83 @@ struct RockxyMenuCommands: Commands {
                 copyDebugInfo()
             }
         }
+    }
+
+    private var externalProxyEnabledBinding: Binding<Bool> {
+        Binding(
+            get: {
+                externalProxyMenuState.isEnabled
+            },
+            set: { isEnabled in
+                setExternalProxyEnabled(isEnabled)
+            }
+        )
+    }
+
+    private func setExternalProxyEnabled(_ isEnabled: Bool) {
+        do {
+            try UpstreamProxyStore.shared.setEnabled(isEnabled)
+            externalProxyMenuState.refresh()
+        } catch {
+            externalProxyMenuState.refresh()
+            if isEnabled {
+                openWindow(id: "externalProxySettings")
+            }
+            Self.logger.error("Failed to toggle External Proxy: \(error.localizedDescription)")
+        }
+    }
+
+    private func dispatchCertificateAction(_ action: CertificateMenuAction) {
+        switch certificateRouter.route(for: action) {
+        case .openCertificateSetupGuide:
+            openWindow(id: "certificateSetup")
+        case let .openDeveloperSetup(targetID, tab):
+            DeveloperSetupRouteStore.shared.request(targetID: targetID, tab: tab)
+            openWindow(id: "developerSetupHub")
+        case .openCustomCertificates:
+            openWindow(id: "customCertificates")
+        case let .export(format):
+            CertificateExportPanelPresenter().export(format: format)
+        case .resetAll:
+            confirmAndResetCertificates()
+        }
+    }
+
+    private func confirmAndResetCertificates() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = String(localized: "Reset all Rockxy Certificates?")
+        alert.informativeText = String(
+            localized: "This removes Rockxy's generated root CA, trust settings, cached host certificates, and custom certificate records."
+        )
+        alert.addButton(withTitle: String(localized: "Reset"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            return
+        }
+
+        Task {
+            do {
+                try await CertificateManager.shared.reset()
+                try CustomCertificateManager.shared.deleteAll()
+                await MainActor.run {
+                    AppSettingsManager.shared.updateLastExportedRootCAPath(nil)
+                }
+            } catch {
+                await MainActor.run {
+                    showCertificateError(error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func showCertificateError(_ message: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = String(localized: "Certificate Action Failed")
+        alert.informativeText = message
+        alert.addButton(withTitle: String(localized: "OK"))
+        alert.runModal()
     }
 
     private func openURL(_ string: String) {

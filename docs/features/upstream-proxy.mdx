@@ -1,0 +1,76 @@
+---
+title: "Upstream Proxy"
+description: "Route captured outbound traffic through an upstream HTTP or HTTPS proxy with a small Community bypass list."
+---
+
+# Upstream Proxy
+
+Upstream Proxy lets Rockxy chain outbound requests through another proxy server after Rockxy has captured, decrypted, and applied rules to the traffic. This is useful when a team network, test lab, VPN-adjacent workflow, or debugging setup requires all outbound traffic to leave through a fixed proxy endpoint.
+
+## Entry Points
+
+| Action | How to Access |
+|--------|---------------|
+| Toggle Upstream Proxy | Tools > Proxy Settings > Use External Proxy |
+| Configure Upstream Proxy | Tools > Proxy Settings > External Proxy Settings... |
+| Review SOCKS5 settings | Tools > Proxy Settings > SOCKS Proxy Settings... |
+| Test connection | External Proxy Settings > Test Connection |
+
+## Supported Modes
+
+| Mode | Community Support | Notes |
+|------|-------------------|-------|
+| HTTP proxy | Supported | Uses HTTP `CONNECT` for tunneled targets. |
+| HTTPS proxy | Supported | Connects to the proxy over TLS and verifies the proxy hostname certificate. |
+| SOCKS5 proxy | Capped by app policy | The core connector supports SOCKS5, but the Community policy keeps it unavailable. |
+| Proxy authentication | Capped by app policy | Credentials are held in memory and passwords are stored only in Keychain when the policy allows authentication. |
+
+When Upstream Proxy is disabled, Rockxy uses the same direct outbound connection path as before. The connector is designed so disabled and bypassed traffic remains byte-for-byte equivalent to direct forwarding.
+
+## Bypass Rules
+
+The Community policy allows up to 3 upstream bypass entries. Bypassed hosts connect directly from Rockxy to the target server instead of going through the upstream proxy.
+
+| Pattern | Matches |
+|---------|---------|
+| `api.example.com` | Only that exact host |
+| `*.example.com` | Subdomains such as `staging.example.com` |
+| `?ost.local` | Single-character wildcard matches such as `host.local` |
+| `127.0.0.1`, `localhost`, `::1` | Localhost targets |
+
+Localhost bypass is enabled by default so local development servers, device setup probes, and loopback validation flows do not accidentally leave the machine.
+
+## Test Connection
+
+The test action opens a short-lived outbound connection through the current upstream configuration and reports:
+
+- whether the proxy handshake succeeded
+- which proxy type was negotiated
+- how long the connection and handshake took
+- the categorized failure when the proxy rejects or times out
+
+The default test target is `example.com:80`.
+
+## Community UI Behavior
+
+The External Proxy Settings window shows the same protocol choices as the underlying connector, but locked controls remain backed by app policy:
+
+- HTTP and HTTPS proxy configuration can be saved.
+- SOCKS5 is visible but unavailable under the default policy.
+- Authentication is visible but unavailable under the default policy.
+- The bypass list displays the 3-entry Community cap.
+
+The UI only reflects store predicates. Store and service boundaries still enforce every policy decision.
+
+## Security Notes
+
+- HTTPS upstream proxy connections use normal certificate-chain validation against the proxy hostname.
+- Upstream proxy passwords are not stored in UserDefaults.
+- Credentials are never included in surfaced error text.
+- Proxy handshake reads are bounded to avoid untrusted oversized responses.
+
+## Limitations
+
+- PAC and proxy auto-config URLs are not supported.
+- Per-host upstream routing is not supported; configuration is global.
+- SOCKS5 and authentication are present in the reusable connector but unavailable under the Community app policy.

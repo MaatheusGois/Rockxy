@@ -18,4 +18,16 @@ enum ProxyLimits {
 
     /// Maximum URI length accepted from clients (8 KB).
     static let maxURILength = 8_192
+
+    /// Maximum upstream proxy handshake response head (16 KB).
+    static let maxUpstreamHandshakeResponseSize = 16_384
+
+    /// Maximum nested Protobuf heuristic decode depth.
+    static let maxProtobufDecodeDepth = 32
+
+    /// Maximum total Protobuf heuristic decode nodes.
+    static let maxProtobufDecodeNodes = 10_000
+
+    /// Maximum uploaded .proto schema file size (1 MB).
+    static let maxProtobufSchemaFileSize = 1 * 1_024 * 1_024
 }
