@@ -11,9 +11,10 @@ Upstream Proxy lets Rockxy chain outbound requests through another proxy server 
 
 | Action | How to Access |
 |--------|---------------|
-| Configure Upstream Proxy | Settings > Upstream Proxy |
-| Check current route | Main window proxy status |
-| Test connection | Upstream Proxy settings > Test Connection |
+| Toggle Upstream Proxy | Tools > Proxy Settings > Use External Proxy |
+| Configure Upstream Proxy | Tools > Proxy Settings > External Proxy Settings... |
+| Review SOCKS5 settings | Tools > Proxy Settings > SOCKS Proxy Settings... |
+| Test connection | External Proxy Settings > Test Connection |
 
 ## Supported Modes
 
@@ -49,6 +50,17 @@ The test action opens a short-lived outbound connection through the current upst
 - the categorized failure when the proxy rejects or times out
 
 The default test target is `example.com:80`.
+
+## Community UI Behavior
+
+The External Proxy Settings window shows the same protocol choices as the underlying connector, but locked controls remain backed by app policy:
+
+- HTTP and HTTPS proxy configuration can be saved.
+- SOCKS5 is visible but unavailable under the default policy.
+- Authentication is visible but unavailable under the default policy.
+- The bypass list displays the 3-entry Community cap.
+
+The UI only reflects store predicates. Store and service boundaries still enforce every policy decision.
 
 ## Security Notes
 

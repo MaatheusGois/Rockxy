@@ -1,5 +1,7 @@
 import SwiftUI
 
+// MARK: - WebSocketInspectorView
+
 /// WebSocket inspector tab content showing connection summary, frame list with
 /// direction filtering, and selected-frame detail panel. Reads `webSocketFrameVersion`
 /// to trigger live repaint as frames arrive from the NIO pipeline.
@@ -35,13 +37,20 @@ struct WebSocketInspectorView: View {
         .task(id: transaction.id) {
             selectedFrameID = nil
         }
+        .onChange(of: selectedFrameID) { _, _ in
+            payloadMode = selectedFrame
+                .map { ProtobufDetector.isLikelyProtobuf($0.payload) } == true ? .protobuf : .payload
+        }
     }
 
     // MARK: Private
 
+    private static let maxPayloadPreviewBytes = 512
+
     @State private var selectedFrameID: UUID?
     @State private var directionFilterValue: FrameDirection?
     @State private var showDetail = true
+    @State private var payloadMode: WebSocketPayloadInspectorMode = .payload
 
     private var selectedFrame: WebSocketFrameData? {
         guard let id = selectedFrameID,
@@ -192,7 +201,9 @@ struct WebSocketInspectorView: View {
                 InspectorEmptyStateView(
                     String(localized: "Waiting for Frames"),
                     systemImage: "arrow.left.arrow.right",
-                    description: String(localized: "WebSocket connection established. Frames will appear here as they arrive.")
+                    description: String(
+                        localized: "WebSocket connection established. Frames will appear here as they arrive."
+                    )
                 )
             } else {
                 List(frames, selection: $selectedFrameID) { frame in
@@ -253,8 +264,44 @@ struct WebSocketInspectorView: View {
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.tertiary)
                 .padding(12)
-        } else if frame.opcode == .text || frame.opcode == .connectionClose,
-                  frame.payload.isProbablyUTF8Text
+        } else {
+            VStack(spacing: 0) {
+                HStack {
+                    Picker(String(localized: "Payload View"), selection: $payloadMode) {
+                        Text(String(localized: "Payload")).tag(WebSocketPayloadInspectorMode.payload)
+                        Text(String(localized: "Protobuf")).tag(WebSocketPayloadInspectorMode.protobuf)
+                    }
+                    .pickerStyle(.segmented)
+                    .controlSize(.small)
+                    .frame(width: 190)
+
+                    if ProtobufDetector.isLikelyProtobuf(frame.payload) {
+                        Label(String(localized: "Likely Protobuf"), systemImage: "sparkles")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+
+                Divider()
+
+                switch payloadMode {
+                case .payload:
+                    rawPayloadView(frame)
+                case .protobuf:
+                    protobufPayloadView(frame)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func rawPayloadView(_ frame: WebSocketFrameData) -> some View {
+        if frame.opcode == .text || frame.opcode == .connectionClose,
+           frame.payload.isProbablyUTF8Text
         {
             let payload = frame.payload
             AsyncInspectorTextEditor(
@@ -276,7 +323,22 @@ struct WebSocketInspectorView: View {
                 data: frame.payload,
                 renderID: "\(frame.id.uuidString)-payload-hex-\(frame.payload.count)"
             )
-                .frame(maxHeight: 200)
+            .frame(maxHeight: 200)
+        }
+    }
+
+    @ViewBuilder
+    private func protobufPayloadView(_ frame: WebSocketFrameData) -> some View {
+        if let tree = frame.protobufHeuristicTree(), !tree.fields.isEmpty {
+            ProtobufTreeView(tree: tree)
+                .frame(maxHeight: 220)
+        } else {
+            InspectorEmptyStateView(
+                String(localized: "No Protobuf Fields"),
+                systemImage: "curlybraces",
+                description: String(localized: "This frame does not look like a valid Protobuf wire-format payload.")
+            )
+            .frame(maxHeight: 160)
         }
     }
 
@@ -335,7 +397,9 @@ struct WebSocketInspectorView: View {
             if frame.payload.count >= 2 {
                 let code = UInt16(frame.payload[0]) << 8 | UInt16(frame.payload[1])
                 let reason = frame.payload.count > 2
-                    ? String(data: frame.payload.dropFirst(2).prefix(Self.maxPayloadPreviewBytes), encoding: .utf8) ?? ""
+                    ? String(data: frame.payload.dropFirst(2).prefix(
+                        Self.maxPayloadPreviewBytes
+                    ), encoding: .utf8) ?? ""
                     : ""
                 return "\(code) \(reason)".trimmingCharacters(in: .whitespaces)
             }
@@ -352,8 +416,13 @@ struct WebSocketInspectorView: View {
         formatter.dateFormat = "HH:mm:ss.SSS"
         return formatter.string(from: date)
     }
+}
 
-    private static let maxPayloadPreviewBytes = 512
+// MARK: - WebSocketPayloadInspectorMode
+
+private enum WebSocketPayloadInspectorMode {
+    case payload
+    case protobuf
 }
 
 private extension Data {

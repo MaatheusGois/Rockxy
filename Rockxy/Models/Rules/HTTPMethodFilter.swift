@@ -3,7 +3,7 @@ import Foundation
 // MARK: - HTTPMethodFilter
 
 /// Shared HTTP method filter for rule editors. `.any` matches all methods.
-enum HTTPMethodFilter: String, CaseIterable {
+enum HTTPMethodFilter: String, Codable, CaseIterable, Identifiable {
     case any = "ANY"
     case get = "GET"
     case post = "POST"
@@ -15,6 +15,14 @@ enum HTTPMethodFilter: String, CaseIterable {
     case trace = "TRACE"
 
     // MARK: Internal
+
+    var id: String {
+        rawValue
+    }
+
+    var displayName: String {
+        rawValue
+    }
 
     /// Returns the method string for rule matching, or `nil` for `.any`.
     var methodValue: String? {

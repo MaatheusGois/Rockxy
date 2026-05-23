@@ -13,7 +13,9 @@ WebSocket Protobuf Decoding adds an on-demand decoder for binary WebSocket frame
 |--------|---------------|
 | Capture WebSocket frames | Response inspector > WebSocket tab |
 | Inspect a binary frame | Select a WebSocket binary frame |
-| Decode as Protobuf | Protobuf view in the frame inspector |
+| Decode as Protobuf | Select Protobuf in the frame detail view |
+| Manage mapping rules | Tools > Protobuf... |
+| Review schema list | Tools > Protobuf... > Protobuf Schema... |
 
 The decoder runs on demand when the inspector requests it. WebSocket capture itself stays on the existing hot path, so Rockxy does not decode every frame while proxying traffic.
 
@@ -41,6 +43,10 @@ Malformed input fails closed and returns no decoded tree. The decoder also appli
 The public API has a stable schema-decoding surface so the inspector can later resolve field names from uploaded `.proto` files. The schema parser and full schema-based decoder body are intentionally not included yet; that follow-up will decide whether to bring in a Protobuf dependency.
 
 In the Community policy, schema uploads are capped at zero.
+
+## Protobuf Settings
+
+Tools > Protobuf... opens a mapping-rule window for future schema-aware decoding. Rules can be prepared with URL matching, method selection, payload encoding, message type, and schema association. Schema upload controls are visible for the stable workflow, but uploads are rejected by the default app policy until a later private policy implementation enables them.
 
 ## Related Features
 
