@@ -679,6 +679,7 @@ extension HTTPProxyHandler {
         let useTLS = requestData.url.scheme == "https"
         UpstreamProxyConnector.connect(
             eventLoop: context.eventLoop,
+            targetScheme: requestData.url.scheme ?? "http",
             targetHost: host,
             targetPort: port,
             configuration: upstreamProxySnapshotProvider()

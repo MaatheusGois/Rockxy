@@ -4,29 +4,45 @@ import SwiftUI
 
 // MARK: - JSONTreeView
 
-/// Collapsible JSON tree with syntax highlighting. Parses raw `Data` via `JSONSerialization`,
-/// converts it to a recursive `JSONTreeValue` enum, and renders each node with
-/// theme-aware colors for keys, strings, numbers, booleans, nulls, and brackets.
+/// Collapsible JSON tree with JSONPath/key/value filtering. Parsing and query evaluation
+/// happen off-main and are keyed to the current body/query so stale results are ignored.
 struct JSONTreeView: View {
     // MARK: Internal
 
     let data: Data
 
     var body: some View {
-        GeometryReader { proxy in
-            ScrollView([.horizontal, .vertical]) {
-                content
-                    .padding(Self.contentPadding)
-                    .frame(
-                        minWidth: max(0, proxy.size.width - Self.contentPadding * 2),
-                        minHeight: max(0, proxy.size.height - Self.contentPadding * 2),
-                        alignment: .topLeading
-                    )
+        VStack(spacing: 0) {
+            GeometryReader { proxy in
+                ScrollViewReader { reader in
+                    ScrollView([.horizontal, .vertical]) {
+                        content
+                            .padding(Self.contentPadding)
+                            .frame(
+                                minWidth: max(0, proxy.size.width - Self.contentPadding * 2),
+                                minHeight: max(0, proxy.size.height - Self.contentPadding * 2),
+                                alignment: .topLeading
+                            )
+                    }
+                    .onChange(of: selectedMatchPath) { _, path in
+                        guard let path else {
+                            return
+                        }
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            reader.scrollTo(path, anchor: .center)
+                        }
+                    }
+                }
             }
+            Divider()
+            filterBar
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task(id: data) {
             await parseCurrentData()
+        }
+        .task(id: queryTaskID) {
+            await evaluateCurrentQuery()
         }
     }
 
@@ -35,6 +51,22 @@ struct JSONTreeView: View {
     private static let contentPadding: CGFloat = 12
 
     @State private var state: JSONTreeLoadState = .loading
+    @State private var filterMode: JSONTreeFilterMode = .jsonPath
+    @State private var query = ""
+    @State private var queryResult: JSONPathQueryResult = .empty
+    @State private var queryError: String?
+    @State private var selectedMatchPath: String?
+
+    @FocusState private var isSearchFocused: Bool
+
+    private var queryTaskID: String {
+        switch state {
+        case let .parsed(document):
+            "\(document.root.path)-\(data.count)-\(filterMode.rawValue)-\(query)"
+        default:
+            "no-document-\(data.count)-\(filterMode.rawValue)-\(query)"
+        }
+    }
 
     @ViewBuilder private var content: some View {
         switch state {
@@ -48,8 +80,13 @@ struct JSONTreeView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-        case let .parsed(parsed):
-            JSONTreeNodeView(value: parsed, key: nil, depth: 0, isLast: true)
+        case let .parsed(document):
+            JSONTreeNodeView(
+                node: document.root,
+                depth: 0,
+                isLast: true,
+                filter: activeFilter
+            )
 
         case let .text(text):
             Text(text)
@@ -62,9 +99,104 @@ struct JSONTreeView: View {
         }
     }
 
+    private var activeFilter: JSONTreeRenderFilter? {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, queryError == nil else {
+            return nil
+        }
+        return JSONTreeRenderFilter(
+            includedPaths: queryResult.includedPaths,
+            matchedPaths: Set(queryResult.matches.map(\.path)),
+            selectedPath: selectedMatchPath
+        )
+    }
+
+    private var filterBar: some View {
+        HStack(spacing: 8) {
+            Picker("", selection: $filterMode) {
+                ForEach(JSONTreeFilterMode.allCases) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 118)
+
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+
+            TextField(filterMode.placeholder, text: $query)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12, design: .monospaced))
+                .focused($isSearchFocused)
+                .onSubmit {
+                    advanceSelection()
+                }
+
+            if !query.isEmpty {
+                Button {
+                    clearQuery()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help(String(localized: "Clear"))
+            }
+
+            Divider()
+                .frame(height: 14)
+
+            Text(statusText)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(queryError == nil ? Color.secondary : Color.red)
+                .frame(minWidth: 86, alignment: .trailing)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .background(keyboardShortcuts)
+    }
+
+    private var keyboardShortcuts: some View {
+        VStack {
+            Button("") {
+                isSearchFocused = true
+            }
+            .keyboardShortcut("f", modifiers: .command)
+
+            Button("") {
+                advanceSelection(previous: true)
+            }
+            .keyboardShortcut(.return, modifiers: .shift)
+
+            Button("") {
+                clearQuery()
+            }
+            .keyboardShortcut(.cancelAction)
+        }
+        .frame(width: 0, height: 0)
+        .opacity(0)
+    }
+
+    private var statusText: String {
+        if let queryError {
+            return queryError
+        }
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return ""
+        }
+        let suffix = queryResult.isTruncated ? "+" : ""
+        return "\(queryResult.matches.count)\(suffix) selected"
+    }
+
     @MainActor
     private func parseCurrentData() async {
         state = .loading
+        queryResult = .empty
+        queryError = nil
+        selectedMatchPath = nil
 
         let result = try? await Task.detached(priority: .userInitiated) {
             try Task.checkCancellation()
@@ -79,17 +211,86 @@ struct JSONTreeView: View {
         state = result
     }
 
+    @MainActor
+    private func evaluateCurrentQuery() async {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard case let .parsed(document) = state, !trimmed.isEmpty else {
+            queryResult = .empty
+            queryError = nil
+            return
+        }
+
+        try? await Task.sleep(for: .milliseconds(250))
+        guard !Task.isCancelled else {
+            return
+        }
+
+        let mode = filterMode
+        let result = await Task.detached(priority: .userInitiated) {
+            do {
+                try Task.checkCancellation()
+                let evaluator = JSONPathEvaluator(document: document)
+                let result = try evaluator.search(trimmed, mode: mode)
+                try Task.checkCancellation()
+                return Result<JSONPathQueryResult, Error>.success(result)
+            } catch {
+                return .failure(error)
+            }
+        }.value
+
+        guard !Task.isCancelled else {
+            return
+        }
+        switch result {
+        case let .success(value):
+            queryResult = value
+            queryError = nil
+            if let selectedMatchPath,
+               value.matches.contains(where: { $0.path == selectedMatchPath })
+            {
+                self.selectedMatchPath = selectedMatchPath
+            } else {
+                selectedMatchPath = value.matches.first?.path
+            }
+        case let .failure(error):
+            queryResult = .empty
+            queryError = error.localizedDescription
+            selectedMatchPath = nil
+        }
+    }
+
+    private func advanceSelection(previous: Bool = false) {
+        guard !queryResult.matches.isEmpty else {
+            isSearchFocused = true
+            return
+        }
+
+        let paths = queryResult.matches.map(\.path)
+        let current = selectedMatchPath.flatMap { paths.firstIndex(of: $0) } ?? (previous ? 0 : paths.count - 1)
+        let next = previous
+            ? (current - 1 + paths.count) % paths.count
+            : (current + 1) % paths.count
+        selectedMatchPath = paths[next]
+        isSearchFocused = true
+    }
+
+    private func clearQuery() {
+        query = ""
+        queryError = nil
+        queryResult = .empty
+        selectedMatchPath = nil
+        isSearchFocused = true
+    }
+
     nonisolated private static func parse(_ data: Data) -> JSONTreeLoadState {
-        guard let object = try? JSONSerialization.jsonObject(with: data) else {
+        do {
+            return .parsed(try JSONPathDocument(data: data))
+        } catch {
             if let text = String(data: data, encoding: .utf8) {
                 return .text(text)
             }
             return .unavailable
         }
-        guard let parsed = JSONTreeValue(from: object) else {
-            return .unavailable
-        }
-        return .parsed(parsed)
     }
 }
 
@@ -97,140 +298,93 @@ struct JSONTreeView: View {
 
 private enum JSONTreeLoadState: Sendable {
     case loading
-    case parsed(JSONTreeValue)
+    case parsed(JSONPathDocument)
     case text(String)
     case unavailable
 }
 
-// MARK: - JSONTreeValue
+// MARK: - JSONTreeRenderFilter
 
-/// Recursive enum representing a parsed JSON value. Object keys are sorted alphabetically
-/// for stable display order. Uses `CFBooleanGetTypeID` to distinguish booleans from numbers,
-/// since `NSJSONSerialization` represents both as `NSNumber`.
-private enum JSONTreeValue: Sendable {
-    case string(String)
-    case number(String)
-    case bool(Bool)
-    case null
-    case array([JSONTreeValue])
-    case object([(key: String, value: JSONTreeValue)])
+private struct JSONTreeRenderFilter {
+    let includedPaths: Set<String>
+    let matchedPaths: Set<String>
+    let selectedPath: String?
 
-    // MARK: Lifecycle
-
-    init?(from object: Any) {
-        switch object {
-        case let dict as [String: Any]:
-            let pairs = dict.keys.sorted().compactMap { key -> (key: String, value: JSONTreeValue)? in
-                guard let val = JSONTreeValue(from: dict[key] as Any) else {
-                    return nil
-                }
-                return (key: key, value: val)
-            }
-            self = .object(pairs)
-        case let array as [Any]:
-            self = .array(array.compactMap { JSONTreeValue(from: $0) })
-        case let string as String:
-            self = .string(string)
-        case let number as NSNumber:
-            if CFBooleanGetTypeID() == CFGetTypeID(number) {
-                self = .bool(number.boolValue)
-            } else {
-                self = .number(number.stringValue)
-            }
-        case is NSNull:
-            self = .null
-        default:
-            return nil
-        }
+    func includes(_ node: JSONPathNode) -> Bool {
+        includedPaths.contains(node.path)
     }
 
-    // MARK: Internal
-
-    var isContainer: Bool {
-        switch self {
-        case .object,
-             .array: true
-        default: false
-        }
+    func isMatch(_ node: JSONPathNode) -> Bool {
+        matchedPaths.contains(node.path)
     }
 
-    var childCount: Int {
-        switch self {
-        case let .object(pairs): pairs.count
-        case let .array(items): items.count
-        default: 0
-        }
+    func isSelected(_ node: JSONPathNode) -> Bool {
+        selectedPath == node.path
     }
 }
 
 // MARK: - JSONTreeNodeView
 
-/// Recursive view that renders a single JSON node. Container nodes (objects/arrays) show a
-/// disclosure triangle and can be collapsed; leaf nodes render inline with the key label.
 private struct JSONTreeNodeView: View {
     // MARK: Internal
 
-    let value: JSONTreeValue
-    let key: String?
+    let node: JSONPathNode
     let depth: Int
     let isLast: Bool
+    let filter: JSONTreeRenderFilter?
 
     var body: some View {
-        switch value {
-        case let .object(pairs):
-            containerView(
-                openBracket: "{",
-                closeBracket: "}",
-                count: pairs.count
-            ) {
-                ForEach(Array(pairs.enumerated()), id: \.offset) { index, pair in
-                    JSONTreeNodeView(
-                        value: pair.value,
-                        key: pair.key,
-                        depth: depth + 1,
-                        isLast: index == pairs.count - 1
-                    )
+        if filter?.includes(node) ?? true {
+            switch node.value {
+            case let .object(pairs):
+                containerView(openBracket: "{", closeBracket: "}", count: pairs.count) {
+                    let visible = visibleObjectPairs(pairs)
+                    ForEach(Array(visible.enumerated()), id: \.element.value.path) { index, pair in
+                        JSONTreeNodeView(
+                            node: pair.value,
+                            depth: depth + 1,
+                            isLast: index == visible.count - 1,
+                            filter: filter
+                        )
+                    }
                 }
-            }
 
-        case let .array(items):
-            containerView(
-                openBracket: "[",
-                closeBracket: "]",
-                count: items.count
-            ) {
-                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                    JSONTreeNodeView(
-                        value: item,
-                        key: nil,
-                        depth: depth + 1,
-                        isLast: index == items.count - 1
-                    )
+            case let .array(items):
+                containerView(openBracket: "[", closeBracket: "]", count: items.count) {
+                    let visible = visibleArrayItems(items)
+                    ForEach(Array(visible.enumerated()), id: \.element.path) { index, item in
+                        JSONTreeNodeView(
+                            node: item,
+                            depth: depth + 1,
+                            isLast: index == visible.count - 1,
+                            filter: filter
+                        )
+                    }
                 }
-            }
 
-        case let .string(str):
-            leafView {
-                Text("\"\(str)\"")
-                    .foregroundStyle(Theme.JSON.string)
-            }
+            case let .string(str):
+                leafView {
+                    Text("\"\(str)\"")
+                        .foregroundStyle(Theme.JSON.string)
+                }
 
-        case let .number(num):
-            leafView {
-                Text(num)
-                    .foregroundStyle(Theme.JSON.number)
-            }
+            case let .number(num):
+                leafView {
+                    Text(num)
+                        .foregroundStyle(Theme.JSON.number)
+                }
 
-        case let .bool(val):
-            leafView {
-                Text(val ? "true" : "false")
-                    .foregroundStyle(Theme.JSON.bool)
-            }
+            case let .bool(val):
+                leafView {
+                    Text(val ? "true" : "false")
+                        .foregroundStyle(Theme.JSON.bool)
+                }
 
-        case .null:
-            leafView {
-                Text("null")
-                    .foregroundStyle(Theme.JSON.null)
+            case .null:
+                leafView {
+                    Text("null")
+                        .foregroundStyle(Theme.JSON.null)
+                }
             }
         }
     }
@@ -241,12 +395,16 @@ private struct JSONTreeNodeView: View {
 
     @State private var isExpanded = true
 
+    private var effectiveExpanded: Bool {
+        filter == nil ? isExpanded : true
+    }
+
     private var comma: String {
         isLast ? "" : ","
     }
 
     @ViewBuilder private var keyLabel: some View {
-        if let key {
+        if let key = node.key {
             Text("\"\(key)\"")
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
                 .foregroundStyle(Theme.JSON.key)
@@ -262,12 +420,26 @@ private struct JSONTreeNodeView: View {
                 isExpanded.toggle()
             }
         } label: {
-            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+            Image(systemName: effectiveExpanded ? "chevron.down" : "chevron.right")
                 .font(.system(size: 9))
                 .foregroundStyle(.secondary)
                 .frame(width: 16, height: 16)
         }
         .buttonStyle(.borderless)
+    }
+
+    private func visibleObjectPairs(_ pairs: [(key: String, value: JSONPathNode)]) -> [(key: String, value: JSONPathNode)] {
+        guard let filter else {
+            return pairs
+        }
+        return pairs.filter { filter.includes($0.value) }
+    }
+
+    private func visibleArrayItems(_ items: [JSONPathNode]) -> [JSONPathNode] {
+        guard let filter else {
+            return items
+        }
+        return items.filter(filter.includes)
     }
 
     private func containerView(
@@ -279,26 +451,25 @@ private struct JSONTreeNodeView: View {
         -> some View
     {
         VStack(alignment: .leading, spacing: 0) {
-            // Header: key: { or [
             HStack(spacing: 0) {
                 disclosureButton
                 keyLabel
-                Text(isExpanded ? openBracket : "\(openBracket)...\(closeBracket)\(comma)")
+                Text(effectiveExpanded ? openBracket : "\(openBracket)...\(closeBracket)\(comma)")
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(Theme.JSON.bracket)
-                if !isExpanded {
+                if !effectiveExpanded {
                     Text(" // \(count) items")
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                 }
             }
             .padding(.leading, CGFloat(depth) * Self.indentWidth)
+            .background(matchBackground)
+            .id(node.path)
 
-            // Children
-            if isExpanded {
+            if effectiveExpanded {
                 children()
 
-                // Closing bracket
                 HStack(spacing: 0) {
                     Text("\(closeBracket)\(comma)")
                         .font(.system(size: 12, design: .monospaced))
@@ -316,7 +487,7 @@ private struct JSONTreeNodeView: View {
     {
         HStack(spacing: 0) {
             Spacer()
-                .frame(width: 16) // alignment with disclosure triangle
+                .frame(width: 16)
             keyLabel
             valueContent()
                 .font(.system(size: 12, design: .monospaced))
@@ -326,5 +497,17 @@ private struct JSONTreeNodeView: View {
                 .foregroundStyle(Theme.JSON.bracket)
         }
         .padding(.leading, CGFloat(depth) * Self.indentWidth)
+        .background(matchBackground)
+        .id(node.path)
+    }
+
+    @ViewBuilder private var matchBackground: some View {
+        if filter?.isSelected(node) == true {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.accentColor.opacity(0.32))
+        } else if filter?.isMatch(node) == true {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.accentColor.opacity(0.18))
+        }
     }
 }

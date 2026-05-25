@@ -119,10 +119,19 @@ struct ContentView: View {
             if let context = coordinator.exportScopeContext {
                 ExportScopeSheet(
                     context: context,
-                    onExport: { scope in coordinator.executeHARExport(scope: scope) },
+                    onExport: { scope in coordinator.executeExport(format: context.format, scope: scope) },
                     onCancel: { coordinator.showExportScope = false }
                 )
             }
+        }
+        .sheet(item: $coordinator.gistPublishContext) { context in
+            GistPublishConfirmationSheet(
+                context: context,
+                onPublish: { options in
+                    try await coordinator.publishTransactionsToGist(context.transactions, options: options)
+                },
+                onCancel: { coordinator.gistPublishContext = nil }
+            )
         }
         .overlay(alignment: .bottom) {
             if let toast = coordinator.activeToast {

@@ -6,18 +6,20 @@ import Testing
 
 @Suite("ExternalProxySettingsDraft")
 struct ExternalProxySettingsDraftTests {
-    @Test("Automatic proxy configuration is selectable but not persisted")
-    func automaticProxyConfigurationIsUnsupported() {
+    @Test("Automatic proxy configuration creates a PAC upstream proxy configuration")
+    func automaticProxyConfiguration() throws {
         let draft = ExternalProxySettingsDraft(
             isEnabled: true,
             selectedProtocol: .automatic,
             pacURL: "http://my-server.com/proxy.pac"
         )
 
-        #expect(throws: ExternalProxySettingsDraftError.automaticProxyConfigurationUnsupported) {
-            try draft.configuration()
-        }
-        #expect(!ExternalProxyProtocolSelection.automatic.canPersist(using: DefaultAppPolicy()))
+        let configuration = try draft.configuration()
+
+        #expect(configuration.isEnabled)
+        #expect(configuration.type == .automatic)
+        #expect(configuration.pacURL == "http://my-server.com/proxy.pac")
+        #expect(ExternalProxyProtocolSelection.automatic.canPersist(using: DefaultAppPolicy()))
     }
 
     @Test("HTTP draft creates an HTTP upstream proxy configuration")
@@ -121,6 +123,7 @@ struct ExternalProxySettingsDraftTests {
         #expect(ExternalProxyProtocolSelection(.http) == .http)
         #expect(ExternalProxyProtocolSelection(.https) == .https)
         #expect(ExternalProxyProtocolSelection(.socks5) == .socks5)
+        #expect(ExternalProxyProtocolSelection(.automatic) == .automatic)
     }
 }
 

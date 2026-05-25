@@ -9,11 +9,11 @@ struct SOCKSProxySettingsView: View {
         VStack(alignment: .leading, spacing: 18) {
             Toggle(String(localized: "Enable SOCKS Proxy"), isOn: $isEnabled)
                 .toggleStyle(.checkbox)
-                .font(.system(size: 15, weight: .medium))
+                .font(.system(size: 13, weight: .medium))
                 .disabled(!store.canSelectSOCKS5)
 
             Text(String(localized: "Compatible with SOCKS 5"))
-                .font(.system(size: 15))
+                .font(.system(size: 13))
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 18) {
@@ -44,12 +44,13 @@ struct SOCKSProxySettingsView: View {
                 } else {
                     PolicyLockNotice(
                         title: String(localized: "SOCKS5 unavailable"),
-                        message: String(localized: "SOCKS5 upstream proxy is disabled by the current app policy.")
+                        message: String(localized: "SOCKS5 upstream proxy is unavailable in this build.")
                     )
                 }
             }
             .padding(28)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .font(.system(size: 13))
             .background(Color(nsColor: .controlBackgroundColor))
             .clipShape(RoundedRectangle(cornerRadius: 16))
 
@@ -64,7 +65,7 @@ struct SOCKSProxySettingsView: View {
                     showHelp = true
                 } label: {
                     Image(systemName: "questionmark.circle.fill")
-                        .font(.title2)
+                        .font(.system(size: 22))
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -91,7 +92,7 @@ struct SOCKSProxySettingsView: View {
         } message: {
             Text(
                 String(
-                    localized: "This window configures the SOCKS5 variant of Upstream Proxy. The same store and policy gates are used by External Proxy Settings."
+                    localized: "This window configures the SOCKS5 variant of Upstream Proxy. External Proxy Settings uses the same saved configuration."
                 )
             )
         }

@@ -660,6 +660,21 @@ extension RequestTableView {
         }
 
         @objc
+        func handleExportOpenAPIYAML(_ sender: NSMenuItem) {
+            withCoordinator(sender) { $0.exportOpenAPIContextSelection(clicked: $1, format: .openAPIYAML) }
+        }
+
+        @objc
+        func handleExportOpenAPIHTML(_ sender: NSMenuItem) {
+            withCoordinator(sender) { $0.exportOpenAPIContextSelection(clicked: $1, format: .openAPIHTML) }
+        }
+
+        @objc
+        func handlePublishToGist(_ sender: NSMenuItem) {
+            withCoordinator(sender) { $0.publishGistContextSelection(clicked: $1) }
+        }
+
+        @objc
         func handleExportRequestBody(_ sender: NSMenuItem) {
             withCoordinator(sender) { $0.exportRequestBody(for: $1) }
         }
@@ -1122,6 +1137,32 @@ extension RequestTableView {
                 String(localized: "Export as HAR…"), action: #selector(handleExportHAR(_:)),
                 transaction: transaction
             ))
+
+            let openAPITitle = openAPIExportTitle(for: transaction)
+            let openAPIYAMLItem = menuItem(
+                String(localized: "\(openAPITitle) YAML…"),
+                action: #selector(handleExportOpenAPIYAML(_:)),
+                transaction: transaction
+            )
+            let openAPIHTMLItem = menuItem(
+                String(localized: "\(openAPITitle) HTML…"),
+                action: #selector(handleExportOpenAPIHTML(_:)),
+                transaction: transaction
+            )
+            let hasEligibleOpenAPI = openAPIContextTransactions(for: transaction)
+                .contains(where: OpenAPIExporter.isEligible)
+            openAPIYAMLItem.isEnabled = hasEligibleOpenAPI
+            openAPIHTMLItem.isEnabled = hasEligibleOpenAPI
+            exportSubmenu.addItem(openAPIYAMLItem)
+            exportSubmenu.addItem(openAPIHTMLItem)
+
+            exportSubmenu.addItem(.separator())
+            exportSubmenu.addItem(menuItem(
+                gistPublishTitle(for: transaction),
+                action: #selector(handlePublishToGist(_:)),
+                transaction: transaction
+            ))
+
             let reqBodyItem = menuItem(
                 String(localized: "Export Request Body…"), action: #selector(handleExportRequestBody(_:)),
                 transaction: transaction
@@ -1145,6 +1186,39 @@ extension RequestTableView {
                 String(localized: "Enable SSL Proxying"), action: #selector(handleSSLProxying(_:)),
                 transaction: transaction
             ))
+        }
+
+        private func openAPIExportTitle(for transaction: HTTPTransaction) -> String {
+            MainActor.assumeIsolated {
+                guard let coordinator = mainCoordinator,
+                      coordinator.selectedTransactionIDs.contains(transaction.id),
+                      coordinator.selectedTransactionIDs.count > 1 else {
+                    return String(localized: "Export as OpenAPI")
+                }
+                return String(localized: "Export Selected as OpenAPI")
+            }
+        }
+
+        private func openAPIContextTransactions(for transaction: HTTPTransaction) -> [HTTPTransaction] {
+            MainActor.assumeIsolated {
+                guard let coordinator = mainCoordinator,
+                      coordinator.selectedTransactionIDs.contains(transaction.id),
+                      coordinator.selectedTransactionIDs.count > 1 else {
+                    return [transaction]
+                }
+                return coordinator.resolveSelectedTransactions()
+            }
+        }
+
+        private func gistPublishTitle(for transaction: HTTPTransaction) -> String {
+            MainActor.assumeIsolated {
+                guard let coordinator = mainCoordinator,
+                      coordinator.selectedTransactionIDs.contains(transaction.id),
+                      coordinator.selectedTransactionIDs.count > 1 else {
+                    return String(localized: "Publish to Gist…")
+                }
+                return String(localized: "Publish Selected to Gist…")
+            }
         }
 
         private func buildCompareGroup(_ menu: NSMenu) {

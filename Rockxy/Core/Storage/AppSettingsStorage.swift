@@ -35,6 +35,17 @@ enum AppSettingsStorage {
         }
         settings.mcpRedactSensitiveData = defaults.object(forKey: mcpRedactSensitiveDataKey) != nil
             ? defaults.bool(forKey: mcpRedactSensitiveDataKey) : true
+        if let visibility = defaults.string(forKey: githubGistVisibilityKey)
+            .flatMap(GitHubGistVisibility.init(rawValue:)) {
+            settings.githubGistVisibility = visibility
+        }
+        settings.githubGistRedactSensitiveData = defaults.object(forKey: githubGistRedactSensitiveDataKey) != nil
+            ? defaults.bool(forKey: githubGistRedactSensitiveDataKey) : true
+        settings.githubGistAskBeforePublishing = defaults.object(forKey: githubGistAskBeforePublishingKey) != nil
+            ? defaults.bool(forKey: githubGistAskBeforePublishingKey) : true
+        settings.githubGistOpenInBrowser = defaults.object(forKey: githubGistOpenInBrowserKey) != nil
+            ? defaults.bool(forKey: githubGistOpenInBrowserKey) : true
+        settings.githubGistCopyURLToClipboard = defaults.bool(forKey: githubGistCopyURLToClipboardKey)
         settings.lastExportedRootCAPath = defaults.string(forKey: lastExportedRootCAPathKey)
         return settings
     }
@@ -53,6 +64,11 @@ enum AppSettingsStorage {
         defaults.set(settings.mcpServerEnabled, forKey: mcpServerEnabledKey)
         defaults.set(settings.mcpServerPort, forKey: mcpServerPortKey)
         defaults.set(settings.mcpRedactSensitiveData, forKey: mcpRedactSensitiveDataKey)
+        defaults.set(settings.githubGistVisibility.rawValue, forKey: githubGistVisibilityKey)
+        defaults.set(settings.githubGistRedactSensitiveData, forKey: githubGistRedactSensitiveDataKey)
+        defaults.set(settings.githubGistAskBeforePublishing, forKey: githubGistAskBeforePublishingKey)
+        defaults.set(settings.githubGistOpenInBrowser, forKey: githubGistOpenInBrowserKey)
+        defaults.set(settings.githubGistCopyURLToClipboard, forKey: githubGistCopyURLToClipboardKey)
         defaults.set(settings.lastExportedRootCAPath, forKey: lastExportedRootCAPathKey)
         logger.info("Settings saved")
     }
@@ -74,5 +90,13 @@ enum AppSettingsStorage {
     private static let mcpServerEnabledKey = RockxyIdentity.current.defaultsKey("mcp.serverEnabled")
     private static let mcpServerPortKey = RockxyIdentity.current.defaultsKey("mcp.serverPort")
     private static let mcpRedactSensitiveDataKey = RockxyIdentity.current.defaultsKey("mcp.redactSensitiveData")
+    private static let githubGistVisibilityKey = RockxyIdentity.current.defaultsKey("github.gist.visibility")
+    private static let githubGistRedactSensitiveDataKey = RockxyIdentity.current
+        .defaultsKey("github.gist.redactSensitiveData")
+    private static let githubGistAskBeforePublishingKey = RockxyIdentity.current
+        .defaultsKey("github.gist.askBeforePublishing")
+    private static let githubGistOpenInBrowserKey = RockxyIdentity.current.defaultsKey("github.gist.openInBrowser")
+    private static let githubGistCopyURLToClipboardKey = RockxyIdentity.current
+        .defaultsKey("github.gist.copyURLToClipboard")
     private static let lastExportedRootCAPathKey = RockxyIdentity.current.defaultsKey("certificate.lastExportedRootCAPath")
 }

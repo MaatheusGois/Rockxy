@@ -1,11 +1,11 @@
 ---
 title: "Upstream Proxy"
-description: "Route captured outbound traffic through an upstream HTTP or HTTPS proxy with a small Community bypass list."
+description: "Route captured outbound traffic through static upstream proxies or automatic PAC routing with a small Community bypass list."
 ---
 
 # Upstream Proxy
 
-Upstream Proxy lets Rockxy chain outbound requests through another proxy server after Rockxy has captured, decrypted, and applied rules to the traffic. This is useful when a team network, test lab, VPN-adjacent workflow, or debugging setup requires all outbound traffic to leave through a fixed proxy endpoint.
+Upstream Proxy lets Rockxy chain outbound requests through another proxy server after Rockxy has captured, decrypted, and applied rules to the traffic. This is useful when a team network, test lab, VPN-adjacent workflow, or debugging setup requires outbound traffic to leave through a fixed proxy endpoint or a network-provided PAC file.
 
 ## Entry Points
 
@@ -20,12 +20,26 @@ Upstream Proxy lets Rockxy chain outbound requests through another proxy server 
 
 | Mode | Community Support | Notes |
 |------|-------------------|-------|
+| Automatic Proxy Configuration (PAC) | Supported | Evaluates an HTTP/HTTPS PAC URL per target and follows the first supported route. |
 | HTTP proxy | Supported | Uses HTTP `CONNECT` for tunneled targets. |
 | HTTPS proxy | Supported | Connects to the proxy over TLS and verifies the proxy hostname certificate. |
 | SOCKS5 proxy | Capped by app policy | The core connector supports SOCKS5, but the Community policy keeps it unavailable. |
 | Proxy authentication | Capped by app policy | Credentials are held in memory and passwords are stored only in Keychain when the policy allows authentication. |
 
 When Upstream Proxy is disabled, Rockxy uses the same direct outbound connection path as before. The connector is designed so disabled and bypassed traffic remains byte-for-byte equivalent to direct forwarding.
+
+## Automatic Proxy Configuration
+
+Automatic Proxy Configuration is a core Rockxy workflow for environments that publish a `.pac` file. Rockxy uses the PAC URL you enter in External Proxy Settings, evaluates it for each target host, and then routes the request through the selected path.
+
+| PAC Result | Behavior |
+|------------|----------|
+| `DIRECT` | Connects directly from Rockxy to the target server. |
+| `PROXY host:port` | Uses the existing HTTP upstream proxy path. |
+| `HTTPS host:port` | Uses the existing HTTPS upstream proxy path. |
+| `SOCKS host:port` or `SOCKS5 host:port` | Uses SOCKS5 only when the current app policy allows SOCKS5. |
+
+PAC support is free/core because it is standard network compatibility, especially for corporate, school, and VPN-adjacent environments. It does not bypass other policy gates: if a PAC file selects SOCKS5 or a proxy requires credentials, those capabilities still follow Rockxy's existing app policy.
 
 ## Bypass Rules
 
@@ -46,6 +60,7 @@ The test action opens a short-lived outbound connection through the current upst
 
 - whether the proxy handshake succeeded
 - which proxy type was negotiated
+- which PAC route was selected when Automatic Proxy Configuration is active
 - how long the connection and handshake took
 - the categorized failure when the proxy rejects or times out
 
@@ -56,6 +71,7 @@ The default test target is `example.com:80`.
 The External Proxy Settings window shows the same protocol choices as the underlying connector, but locked controls remain backed by app policy:
 
 - HTTP and HTTPS proxy configuration can be saved.
+- Automatic Proxy Configuration can be saved with an HTTP or HTTPS PAC URL.
 - SOCKS5 is visible but unavailable under the default policy.
 - Authentication is visible but unavailable under the default policy.
 - The bypass list displays the 3-entry Community cap.
@@ -65,12 +81,13 @@ The UI only reflects store predicates. Store and service boundaries still enforc
 ## Security Notes
 
 - HTTPS upstream proxy connections use normal certificate-chain validation against the proxy hostname.
+- PAC URLs must use `http` or `https`.
 - Upstream proxy passwords are not stored in UserDefaults.
 - Credentials are never included in surfaced error text.
 - Proxy handshake reads are bounded to avoid untrusted oversized responses.
 
 ## Limitations
 
-- PAC and proxy auto-config URLs are not supported.
+- WPAD auto-discovery is not supported; enter the PAC URL manually.
 - Per-host upstream routing is not supported; configuration is global.
 - SOCKS5 and authentication are present in the reusable connector but unavailable under the Community app policy.

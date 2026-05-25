@@ -18,6 +18,7 @@ ROCKXY_UPDATES_ENABLED = NO
 ROCKXY_SPARKLE_PUBLIC_ED_KEY = OhLtaWdjixrruIOymzcROteZVpMNtv7fLQVSxbn+1ok=
 ROCKXY_URL_SLASH = /
 ROCKXY_PUBLIC_APPCAST_FEED_URL = https:$(ROCKXY_URL_SLASH)$(ROCKXY_URL_SLASH)raw.githubusercontent.com/RockxyApp/Rockxy/main/appcast.xml
+ROCKXY_GITHUB_OAUTH_CLIENT_ID =
 
 // Family namespace and shared identity
 ROCKXY_FAMILY_NAMESPACE = com.amunx.rockxy

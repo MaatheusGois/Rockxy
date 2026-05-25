@@ -13,7 +13,7 @@ struct InspectorBodyTextEditor: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSTextView.scrollableTextView()
+        let scrollView = makeScrollView(context: context)
         configure(scrollView)
         apply(text, to: scrollView, coordinator: context.coordinator)
         return scrollView
@@ -34,9 +34,21 @@ struct InspectorBodyTextEditor: NSViewRepresentable {
 
     final class Coordinator {
         var highlightTask: Task<Void, Never>?
+        private var previewPopover: NSPopover?
 
         deinit {
             highlightTask?.cancel()
+        }
+
+        @MainActor
+        func showPreview(action: QuickPreviewAction, selection: String, relativeTo view: NSView) {
+            let result = QuickPreviewDetector.preview(selection: selection, action: action)
+            let popover = NSPopover()
+            popover.behavior = .transient
+            popover.contentSize = NSSize(width: 520, height: 360)
+            popover.contentViewController = NSHostingController(rootView: QuickPreviewPopoverView(result: result))
+            previewPopover = popover
+            popover.show(relativeTo: view.bounds, of: view, preferredEdge: .maxY)
         }
 
         @MainActor
@@ -174,6 +186,29 @@ struct InspectorBodyTextEditor: NSViewRepresentable {
         scrollView.rulersVisible = true
     }
 
+    private func makeScrollView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        let contentSize = scrollView.contentSize
+        let textStorage = NSTextStorage()
+        let layoutManager = NSLayoutManager()
+        let textContainer = NSTextContainer(containerSize: NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        ))
+        textContainer.widthTracksTextView = false
+        textStorage.addLayoutManager(layoutManager)
+        layoutManager.addTextContainer(textContainer)
+
+        let textView = InspectorSelectableTextView(frame: NSRect(origin: .zero, size: contentSize), textContainer: textContainer)
+        textView.previewHandler = { [weak coordinator = context.coordinator] action, selection, view in
+            Task { @MainActor in
+                coordinator?.showPreview(action: action, selection: selection, relativeTo: view)
+            }
+        }
+        scrollView.documentView = textView
+        return scrollView
+    }
+
     private func apply(_ text: String, to scrollView: NSScrollView, coordinator: Coordinator?) {
         guard let textView = scrollView.documentView as? NSTextView else {
             return
@@ -230,6 +265,62 @@ struct InspectorBodyTextEditor: NSViewRepresentable {
         let location = min(range.location, length)
         let upperBound = min(range.location + range.length, length)
         return NSRange(location: location, length: max(0, upperBound - location))
+    }
+}
+
+// MARK: - InspectorSelectableTextView
+
+final class InspectorSelectableTextView: NSTextView {
+    var previewHandler: ((QuickPreviewAction, String, NSView) -> Void)?
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = super.menu(for: event) ?? NSMenu()
+        let selected = selectedText
+        let actions = QuickPreviewDetector.availableActions(for: selected)
+        guard !actions.isEmpty else {
+            return menu
+        }
+
+        if menu.items.last?.isSeparatorItem == false {
+            menu.addItem(.separator())
+        }
+
+        let submenu = NSMenu()
+        for action in actions {
+            let item = NSMenuItem(title: action.displayName, action: #selector(handleQuickPreview(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = action.rawValue
+            submenu.addItem(item)
+        }
+
+        let parent = NSMenuItem(
+            title: String(localized: "Text Selection: View as"),
+            action: nil,
+            keyEquivalent: ""
+        )
+        parent.submenu = submenu
+        menu.addItem(parent)
+        return menu
+    }
+
+    private var selectedText: String {
+        let range = selectedRange()
+        guard range.location != NSNotFound,
+              range.length > 0,
+              NSMaxRange(range) <= (string as NSString).length else
+        {
+            return ""
+        }
+        return (string as NSString).substring(with: range)
+    }
+
+    @objc private func handleQuickPreview(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let action = QuickPreviewAction(rawValue: rawValue) else
+        {
+            return
+        }
+        previewHandler?(action, selectedText, self)
     }
 }
 

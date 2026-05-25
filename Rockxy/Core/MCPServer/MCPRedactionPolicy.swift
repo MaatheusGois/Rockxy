@@ -52,43 +52,9 @@ struct MCPRedactionPolicy {
 
     // MARK: Internal
 
-    static let sensitiveHeaders: Set<String> = [
-        "authorization",
-        "proxy-authorization",
-        "cookie",
-        "set-cookie",
-        "www-authenticate",
-        "proxy-authenticate",
-        "x-api-key",
-        "x-auth-token",
-        "x-access-token",
-        "x-csrf-token",
-        "x-xsrf-token",
-    ]
-
-    static let sensitiveQueryParams: Set<String> = [
-        "api_key",
-        "apikey",
-        "api-key",
-        "token",
-        "access_token",
-        "auth_token",
-        "refresh_token",
-        "secret",
-        "password",
-        "passwd",
-        "pwd",
-        "private_key",
-        "client_secret",
-        "key",
-    ]
-
-    static let sensitiveBodyKeys: Set<String> = sensitiveQueryParams
-        .subtracting(["key"])
-        .union([
-            "credentials",
-            "id_token",
-        ])
+    static let sensitiveHeaders = SensitiveDataRedactor.sensitiveHeaders
+    static let sensitiveQueryParams = SensitiveDataRedactor.sensitiveQueryParams
+    static let sensitiveBodyKeys = SensitiveDataRedactor.sensitiveBodyKeys
 
     let state: MCPRedactionState
 

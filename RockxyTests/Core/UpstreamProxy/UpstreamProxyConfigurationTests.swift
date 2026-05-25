@@ -30,6 +30,36 @@ struct UpstreamProxyConfigurationTests {
         }
     }
 
+    @Test("validates automatic proxy configuration PAC URL")
+    func automaticPACValidation() {
+        let valid = UpstreamProxyConfiguration(
+            isEnabled: true,
+            type: .automatic,
+            host: "",
+            port: 0,
+            pacURL: " https://proxy.example.com/proxy.pac "
+        )
+        #expect(throws: Never.self) {
+            try valid.validate()
+        }
+        #expect(valid.resolvedPACURL?.absoluteString == "https://proxy.example.com/proxy.pac")
+
+        let missing = UpstreamProxyConfiguration(isEnabled: true, type: .automatic)
+        #expect(throws: UpstreamProxyConfigurationError.pacURLRequired) {
+            try missing.validate()
+        }
+
+        let invalid = UpstreamProxyConfiguration(isEnabled: true, type: .automatic, pacURL: "not a url")
+        #expect(throws: UpstreamProxyConfigurationError.pacURLInvalid) {
+            try invalid.validate()
+        }
+
+        let unsupported = UpstreamProxyConfiguration(isEnabled: true, type: .automatic, pacURL: "file:///tmp/proxy.pac")
+        #expect(throws: UpstreamProxyConfigurationError.pacURLUnsupportedScheme) {
+            try unsupported.validate()
+        }
+    }
+
     @Test("validates RFC 1929 credential byte length")
     func credentialLengthValidation() {
         let tooLong = String(repeating: "a", count: 256)
@@ -55,5 +85,27 @@ struct UpstreamProxyConfigurationTests {
         #expect(throws: UpstreamProxyConfigurationError.tooManyBypassEntries(limit: 3)) {
             try tooMany.validate(bypassEntryLimit: 3)
         }
+    }
+
+    @Test("decodes legacy upstream proxy configuration without PAC URL")
+    func legacyDecodeWithoutPACURL() throws {
+        let json = """
+        {
+          "isEnabled": true,
+          "type": "http",
+          "host": "proxy.example.com",
+          "port": 8080,
+          "hasCredentials": false,
+          "bypassHostPatterns": [],
+          "bypassLocalhost": true
+        }
+        """
+        let data = try #require(json.data(using: .utf8))
+
+        let decoded = try JSONDecoder().decode(UpstreamProxyConfiguration.self, from: data)
+
+        #expect(decoded.type == .http)
+        #expect(decoded.host == "proxy.example.com")
+        #expect(decoded.pacURL == nil)
     }
 }

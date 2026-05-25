@@ -422,6 +422,7 @@ final class TLSInterceptHandler: ChannelInboundHandler, RemovableChannelHandler,
 
         UpstreamProxyConnector.connect(
             eventLoop: context.eventLoop,
+            targetScheme: "https",
             targetHost: host,
             targetPort: port,
             configuration: upstreamProxySnapshotProvider()
@@ -694,6 +695,7 @@ final class PostHandshakeHandler: ChannelInboundHandler, RemovableChannelHandler
         }.flatMap {
             UpstreamProxyConnector.connect(
                 eventLoop: context.eventLoop,
+                targetScheme: "https",
                 targetHost: host,
                 targetPort: port,
                 configuration: self.upstreamProxySnapshotProvider()
@@ -839,6 +841,7 @@ final class ProtocolDetectorHandler: ChannelInboundHandler, RemovableChannelHand
         }.flatMap {
             UpstreamProxyConnector.connect(
                 eventLoop: context.eventLoop,
+                targetScheme: "https",
                 targetHost: host,
                 targetPort: port,
                 configuration: self.upstreamProxySnapshotProvider()

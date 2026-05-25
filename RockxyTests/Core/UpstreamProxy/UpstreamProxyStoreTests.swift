@@ -115,6 +115,25 @@ struct UpstreamProxyStoreTests {
         #expect(didNotify)
     }
 
+    @Test("persists automatic PAC configuration under DefaultAppPolicy")
+    func automaticPACPersistence() throws {
+        let defaults = makeDefaults()
+        let store = UpstreamProxyStore(userDefaults: defaults, credentialStorage: InMemoryCredentials())
+
+        try store.saveConfiguration(UpstreamProxyConfiguration(
+            isEnabled: true,
+            type: .automatic,
+            host: "",
+            port: 0,
+            pacURL: " https://proxy.example.com/proxy.pac "
+        ))
+
+        let reloaded = UpstreamProxyStore(userDefaults: defaults, credentialStorage: InMemoryCredentials())
+        #expect(reloaded.configuration.type == .automatic)
+        #expect(reloaded.configuration.pacURL == "https://proxy.example.com/proxy.pac")
+        #expect(reloaded.resolvedSnapshot()?.allowsSOCKS5 == false)
+    }
+
     @Test("stores credentials outside UserDefaults when policy allows auth")
     func credentialStorage() throws {
         let credentials = InMemoryCredentials()

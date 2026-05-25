@@ -118,6 +118,21 @@ struct ProxyOverrideCommandActionsTests {
         #expect(actions.canToggleSystemProxyOverride)
     }
 
+    @Test("OpenAPI export command requires eligible HTTP traffic")
+    @MainActor
+    func openAPIExportCommandAvailability() {
+        let coordinator = MainContentCoordinator()
+        let actions = MainContentCommandActions(coordinator: coordinator)
+
+        #expect(actions.canExportOpenAPI == false)
+
+        coordinator.transactions = [
+            TestFixtures.makeTransaction(method: "GET", url: "https://api.example.com/users")
+        ]
+
+        #expect(actions.canExportOpenAPI)
+    }
+
     @Test("main coordinator starts with proxy override indicator hidden")
     @MainActor
     func coordinatorStartsWithProxyOverrideHidden() {

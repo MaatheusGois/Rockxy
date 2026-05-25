@@ -9,6 +9,9 @@ enum UpstreamProxyConfigurationError: LocalizedError, Equatable {
     case passwordTooLong
     case bypassPatternInvalid(String)
     case tooManyBypassEntries(limit: Int)
+    case pacURLRequired
+    case pacURLInvalid
+    case pacURLUnsupportedScheme
 
     // MARK: Internal
 
@@ -26,6 +29,12 @@ enum UpstreamProxyConfigurationError: LocalizedError, Equatable {
             String(localized: "Upstream proxy bypass pattern is invalid: \(pattern)")
         case let .tooManyBypassEntries(limit):
             String(localized: "Upstream proxy bypass list is limited to \(limit) entries.")
+        case .pacURLRequired:
+            String(localized: "Automatic proxy configuration requires a PAC URL.")
+        case .pacURLInvalid:
+            String(localized: "Automatic proxy configuration URL is invalid.")
+        case .pacURLUnsupportedScheme:
+            String(localized: "Automatic proxy configuration URL must use HTTP or HTTPS.")
         }
     }
 }

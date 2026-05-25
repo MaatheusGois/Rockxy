@@ -51,6 +51,31 @@ final class AppSettingsManager {
         save()
     }
 
+    func updateGitHubGistVisibility(_ visibility: GitHubGistVisibility) {
+        settings.githubGistVisibility = visibility
+        save()
+    }
+
+    func updateGitHubGistRedactSensitiveData(_ redact: Bool) {
+        settings.githubGistRedactSensitiveData = redact
+        save()
+    }
+
+    func updateGitHubGistAskBeforePublishing(_ ask: Bool) {
+        settings.githubGistAskBeforePublishing = ask
+        save()
+    }
+
+    func updateGitHubGistOpenInBrowser(_ openInBrowser: Bool) {
+        settings.githubGistOpenInBrowser = openInBrowser
+        save()
+    }
+
+    func updateGitHubGistCopyURLToClipboard(_ copyURL: Bool) {
+        settings.githubGistCopyURLToClipboard = copyURL
+        save()
+    }
+
     func updateLastExportedRootCAPath(_ path: String?) {
         settings.lastExportedRootCAPath = path
         save()

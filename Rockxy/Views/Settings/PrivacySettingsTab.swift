@@ -59,9 +59,9 @@ struct PrivacySettingsTab: View {
                         Text(
                             String(
                                 localized: """
-                                HAR and session exports include all captured headers, cookies, \
+                                HAR, session, and Gist exports can include captured headers, cookies, \
                                 authorization tokens, and request/response bodies. Review exports \
-                                before sharing.
+                                before sharing or publishing.
                                 """
                             )
                         )
@@ -90,7 +90,10 @@ struct PrivacySettingsTab: View {
                         }
                         Text(
                             String(
-                                localized: "Rockxy does not collect analytics or crash reports. No data is sent to external servers. All captured traffic stays on your machine."
+                                localized: """
+                                Rockxy does not collect analytics or crash reports. Captured traffic stays on your \
+                                machine unless you explicitly export, share, or publish it.
+                                """
                             )
                         )
                         .font(.system(size: 11))

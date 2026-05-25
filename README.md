@@ -54,10 +54,12 @@ See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
 ## Current Branch Highlights
 
+- Upstream Proxy now includes free/core Automatic Proxy Configuration with PAC URL routing for `DIRECT`, HTTP, and HTTPS routes while preserving existing SOCKS5 and authentication policy boundaries.
+- Export workflows now cover OpenAPI YAML/HTML and selected-traffic Gist publishing with redaction-aware payload building.
+- Inspector tools now include JSONPath/key/value filtering and quick previews for selected payload text such as JWTs.
 - Node.js Developer Setup now mirrors the selected client during validation and has a fuller localhost sample guide.
 - Developer Setup Hub now covers runtimes, browsers, clients, devices, frameworks, and environments with target-specific snippets, validation watchers, and honest guide content.
-- HTTPS response prompts, sidebar actions, and the request table now stay in sync when SSL proxying is enabled or disabled by domain or app.
-- The inspector and main request table were polished with scrolling tabs, top-aligned query content, clearer status/code separation, request/response byte columns, duration fixes, and live SSL state icons.
+- WebSocket Protobuf work continues as part of Rockxy's richer protocol inspection direction.
 
 ## Features
 
@@ -74,6 +76,8 @@ See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 **Built for Scale** — NSTableView virtual scrolling handles 100k+ requests. Ring buffer eviction, disk body offloading, batched UI updates. Zero lag.
 
 **Developer Setup Hub** — Guided setup per runtime, browser, device, framework, and environment with copyable snippets, validation probes, and troubleshooting notes.
+
+**Upstream Proxy** — Chain captured traffic through HTTP/HTTPS upstream proxies or a PAC URL for automatic proxy configuration in team, VPN-adjacent, and lab networks.
 
 **Local MCP Bridge** — Bundled Model Context Protocol server lets local MCP clients query live traffic, rules, and proxy status. Local-only, token-authenticated, sensitive data redacted by default.
 
@@ -103,6 +107,7 @@ If you want to connect Rockxy to a local MCP client after installation, see the 
 | **Native macOS foundation** | Swift + SwiftNIO + SwiftUI/AppKit | Native macOS commercial app | Cross-platform commercial app |
 | **Local-first capture** | Local proxy, certificates, helper, and capture data stay on your Mac | Desktop proxy app | Desktop proxy app |
 | **Developer setup workflow** | Built-in Developer Setup Hub for runtimes, clients, devices, frameworks, and environments | Product-specific setup guidance | Product-specific setup guidance |
+| **External proxy + PAC routing** | HTTP/HTTPS upstream proxy, PAC auto-configuration, and bypass rules | Mature commercial proxy tooling | Mature commercial proxy tooling |
 | **MCP/local automation bridge** | Built in, token-authenticated, redaction by default | Not claimed in public docs reviewed | Not claimed in public docs reviewed |
 | **Open contribution path** | Public issues, discussions, roadmap, and PRs | Vendor-controlled product | Vendor-controlled product |
 

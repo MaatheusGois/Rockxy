@@ -16,4 +16,13 @@ extension UTType {
         importedAs: RockxyIdentity.current.harUTTypeIdentifier,
         conformingTo: .json
     )
+
+    /// OpenAPI YAML export (`.yaml`).
+    static let openAPIYAML = UTType(
+        exportedAs: "\(RockxyIdentity.current.sharedUTTypePrefix).openapi-yaml",
+        conformingTo: .text
+    )
+
+    /// OpenAPI HTML documentation export (`.html`).
+    static let openAPIHTML = UTType.html
 }

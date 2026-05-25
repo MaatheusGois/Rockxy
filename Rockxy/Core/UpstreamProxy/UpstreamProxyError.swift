@@ -12,6 +12,11 @@ enum UpstreamProxyError: LocalizedError, Equatable {
     case unsupportedSOCKS5AuthMethod(UInt8)
     case socks5Reply(SOCKS5Reply)
     case targetHostTooLong
+    case pacURLInvalid
+    case pacTargetURLInvalid
+    case pacEvaluationFailed(String)
+    case pacNoSupportedRoute
+    case pacSOCKS5Unavailable
     case timeout
 
     // MARK: Internal
@@ -36,6 +41,16 @@ enum UpstreamProxyError: LocalizedError, Equatable {
             reply.errorDescription
         case .targetHostTooLong:
             String(localized: "SOCKS5 target host is too long.")
+        case .pacURLInvalid:
+            String(localized: "Automatic proxy configuration URL is invalid.")
+        case .pacTargetURLInvalid:
+            String(localized: "Automatic proxy configuration target URL is invalid.")
+        case let .pacEvaluationFailed(message):
+            String(localized: "Automatic proxy configuration failed: \(message)")
+        case .pacNoSupportedRoute:
+            String(localized: "Automatic proxy configuration did not return a supported proxy route.")
+        case .pacSOCKS5Unavailable:
+            String(localized: "Automatic proxy configuration selected SOCKS5, which is unavailable in this build.")
         case .timeout:
             String(localized: "Upstream proxy connection timed out.")
         }

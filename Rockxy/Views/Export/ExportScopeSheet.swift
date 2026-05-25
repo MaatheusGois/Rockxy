@@ -8,6 +8,19 @@ import SwiftUI
 /// transaction scopes with counts, plus a privacy note. Matches the Figma design at file
 /// BmxrbvKOU3Q2wZUe2NT87Y node 8:4.
 struct ExportScopeSheet: View {
+    // MARK: Lifecycle
+
+    init(
+        context: ExportScopeContext,
+        onExport: @escaping (ExportScope) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.context = context
+        self.onExport = onExport
+        self.onCancel = onCancel
+        _selectedScope = State(initialValue: context.initialScope)
+    }
+
     // MARK: Internal
 
     let context: ExportScopeContext
@@ -38,7 +51,7 @@ struct ExportScopeSheet: View {
     @State private var selectedScope: ExportScope = .all
 
     private var title: some View {
-        Text(String(localized: "Export as HAR"))
+        Text(context.format.title)
             .font(.system(size: 15, weight: .semibold))
             .frame(maxWidth: .infinity, alignment: .center)
     }
@@ -47,33 +60,33 @@ struct ExportScopeSheet: View {
         VStack(spacing: 0) {
             scopeRow(
                 scope: .all,
-                label: String(localized: "All Transactions"),
-                count: context.allCount,
-                isDisabled: false
+                label: context.label(for: .all),
+                count: context.eligibleCount(for: .all),
+                isDisabled: !context.isEnabled(.all)
             )
 
             dividerLine
 
             scopeRow(
                 scope: .filtered,
-                label: String(localized: "Visible / Filtered"),
-                count: context.filteredCount,
-                isDisabled: !context.hasActiveFilter
+                label: context.label(for: .filtered),
+                count: context.eligibleCount(for: .filtered),
+                isDisabled: !context.isEnabled(.filtered)
             )
 
             dividerLine
 
             scopeRow(
                 scope: .selected,
-                label: String(localized: "Selected"),
-                count: context.selectedCount,
-                isDisabled: !context.hasSelection
+                label: context.label(for: .selected),
+                count: context.eligibleCount(for: .selected),
+                isDisabled: !context.isEnabled(.selected)
             )
         }
     }
 
     private var privacyNote: some View {
-        Text(String(localized: "Exported files may contain request bodies, cookies, and authorization headers."))
+        Text(context.format.privacyNote)
             .font(.system(size: 12))
             .foregroundStyle(Color(nsColor: .secondaryLabelColor))
             .fixedSize(horizontal: false, vertical: true)
@@ -111,6 +124,7 @@ struct ExportScopeSheet: View {
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.defaultAction)
+                .disabled(!context.isEnabled(selectedScope))
             }
         }
     }

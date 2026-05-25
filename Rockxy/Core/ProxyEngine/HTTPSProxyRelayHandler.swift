@@ -311,6 +311,7 @@ final class HTTPSProxyRelayHandler: ChannelInboundHandler, @unchecked Sendable {
 
             UpstreamProxyConnector.connect(
                 eventLoop: context.eventLoop,
+                targetScheme: "https",
                 targetHost: host,
                 targetPort: port,
                 configuration: upstreamProxySnapshotProvider()
@@ -702,6 +703,7 @@ final class HTTPSProxyRelayHandler: ChannelInboundHandler, @unchecked Sendable {
 
                 UpstreamProxyConnector.connect(
                     eventLoop: context.eventLoop,
+                    targetScheme: "https",
                     targetHost: remoteHost,
                     targetPort: remotePort,
                     configuration: upstreamProxySnapshotProvider()
@@ -748,6 +750,7 @@ final class HTTPSProxyRelayHandler: ChannelInboundHandler, @unchecked Sendable {
             let connectTime = DispatchTime.now()
             UpstreamProxyConnector.connect(
                 eventLoop: context.eventLoop,
+                targetScheme: scheme,
                 targetHost: remoteHost,
                 targetPort: remotePort,
                 configuration: upstreamProxySnapshotProvider()

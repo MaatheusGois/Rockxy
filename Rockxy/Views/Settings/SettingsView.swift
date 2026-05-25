@@ -28,6 +28,11 @@ struct SettingsView: View {
                     Label(String(localized: "Tools"), systemImage: "wrench.and.screwdriver")
                 }
 
+            GitHubSettingsTab()
+                .tabItem {
+                    Label(String(localized: "GitHub"), systemImage: "link")
+                }
+
             PluginsSettingsTab()
                 .tabItem {
                     Label(String(localized: "Plugins"), systemImage: "puzzlepiece.extension")

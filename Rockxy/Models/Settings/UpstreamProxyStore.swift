@@ -163,12 +163,26 @@ final class UpstreamProxyStore {
         }
 
         do {
+            let routeCapture = PACRouteCapture()
             let channel = try await UpstreamProxyConnector.connect(
                 eventLoop: group.next(),
+                targetScheme: "http",
                 targetHost: testTarget.host,
                 targetPort: testTarget.port,
                 configuration: snapshot,
-                timeout: ProxyTimeouts.upstreamConnect
+                timeout: ProxyTimeouts.upstreamConnect,
+                pacResolver: { eventLoop, pacURL, targetScheme, targetHost, targetPort in
+                    UpstreamPACResolver.resolve(
+                        eventLoop: eventLoop,
+                        pacURL: pacURL,
+                        targetScheme: targetScheme,
+                        targetHost: targetHost,
+                        targetPort: targetPort
+                    ).map { route in
+                        routeCapture.store(route)
+                        return route
+                    }
+                }
             ) { channel in
                 channel.eventLoop.makeSucceededVoidFuture()
             }.get()
@@ -178,7 +192,8 @@ final class UpstreamProxyStore {
                 targetHost: testTarget.host,
                 targetPort: testTarget.port,
                 negotiatedType: snapshot?.configuration.type,
-                duration: duration
+                duration: duration,
+                resolvedPACRoute: routeCapture.route()
             ))
         } catch let error as UpstreamProxyError {
             return .failure(error)
@@ -235,6 +250,7 @@ final class UpstreamProxyStore {
     {
         var result = configuration
         result.host = configuration.host.trimmingCharacters(in: .whitespacesAndNewlines)
+        result.pacURL = configuration.pacURL?.trimmingCharacters(in: .whitespacesAndNewlines)
         result.username = credentials?.username ?? configuration.username
         result.hasCredentials = credentials != nil || configuration.hasCredentials
         result.bypassHostPatterns = configuration.bypassHostPatterns
@@ -247,10 +263,31 @@ final class UpstreamProxyStore {
         let credentials = try? credentialStorage.load()
         let resolved = UpstreamProxyResolvedConfiguration(
             configuration: configuration,
-            credentials: configuration.hasCredentials ? credentials : nil
+            credentials: configuration.hasCredentials ? credentials : nil,
+            allowsSOCKS5: policy.upstreamProxyAllowsSOCKS5
         )
         lock.lock()
         cachedResolvedConfiguration = resolved
         lock.unlock()
     }
+}
+
+// MARK: - PACRouteCapture
+
+private final class PACRouteCapture: @unchecked Sendable {
+    func store(_ route: UpstreamPACRoute) {
+        lock.lock()
+        capturedRoute = route
+        lock.unlock()
+    }
+
+    func route() -> UpstreamPACRoute? {
+        lock.lock()
+        let snapshot = capturedRoute
+        lock.unlock()
+        return snapshot
+    }
+
+    private let lock = NSLock()
+    private var capturedRoute: UpstreamPACRoute?
 }

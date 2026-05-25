@@ -147,6 +147,7 @@ final class MainContentCoordinator {
     var importPreview: ImportPreview?
     var showExportScope = false
     var exportScopeContext: ExportScopeContext?
+    var gistPublishContext: GistPublishContext?
     var sessionProvenance: SessionProvenance?
     var activeToast: ToastMessage?
     var sslProxyingRefreshToken: Int = 0

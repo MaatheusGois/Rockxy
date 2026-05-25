@@ -15,6 +15,7 @@ enum PreviewRenderMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case xml
     case images
     case hex
+    case jwt
     case raw
 
     // MARK: Internal
@@ -35,6 +36,7 @@ enum PreviewRenderMode: String, Codable, CaseIterable, Identifiable, Sendable {
         case .xml: "XML"
         case .images: "Images"
         case .hex: "Hex"
+        case .jwt: "JWT"
         case .raw: "Raw"
         }
     }

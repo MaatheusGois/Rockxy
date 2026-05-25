@@ -9,7 +9,7 @@ struct ExternalProxySettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             Toggle(String(localized: "Enable External Proxy Tool"), isOn: $isEnabled)
                 .toggleStyle(.checkbox)
-                .font(.system(size: 15, weight: .medium))
+                .font(.system(size: 13, weight: .medium))
 
             HStack(alignment: .top, spacing: 28) {
                 protocolList
@@ -27,7 +27,7 @@ struct ExternalProxySettingsView: View {
                     showHelp = true
                 } label: {
                     Image(systemName: "questionmark.circle.fill")
-                        .font(.title2)
+                        .font(.system(size: 22))
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -59,7 +59,7 @@ struct ExternalProxySettingsView: View {
         } message: {
             Text(
                 String(
-                    localized: "HTTP and HTTPS upstream proxy are available. SOCKS5, authentication, and bypass entry count are controlled by the app policy."
+                    localized: "Automatic, HTTP, and HTTPS upstream proxy are available. SOCKS5, authentication, and bypass entry count follow Rockxy feature limits."
                 )
             )
         }
@@ -118,14 +118,14 @@ struct ExternalProxySettingsView: View {
                     } label: {
                         HStack(spacing: 10) {
                             Image(systemName: checkboxSymbol(for: row))
-                                .font(.system(size: 14, weight: .medium))
+                                .font(.system(size: 13, weight: .medium))
                                 .foregroundStyle(
                                     selectedProtocol == row ? Color.white : Color(nsColor: .tertiaryLabelColor)
                                 )
                                 .frame(width: 18)
 
                             Text(row.displayName)
-                                .font(.system(size: 14, weight: selectedProtocol == row ? .semibold : .regular))
+                                .font(.system(size: 13, weight: selectedProtocol == row ? .semibold : .regular))
                                 .lineLimit(1)
 
                             if row == .socks5, !store.canSelectSOCKS5 {
@@ -155,7 +155,7 @@ struct ExternalProxySettingsView: View {
         case .automatic:
             VStack(alignment: .leading, spacing: 10) {
                 Text(String(localized: "Proxy Configuration URL:"))
-                    .font(.system(size: 15))
+                    .font(.system(size: 13))
                 TextField(String(localized: "http://my-server.com/proxy.pac"), text: $pacURL)
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 470)
@@ -192,7 +192,7 @@ struct ExternalProxySettingsView: View {
                         labeledTextField(String(localized: "Username:"), text: $username)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(String(localized: "Password:"))
-                                .font(.system(size: 12))
+                                .font(.system(size: 13))
                             SecureField(String(localized: "Password"), text: $password)
                                 .textFieldStyle(.roundedBorder)
                         }
@@ -204,14 +204,14 @@ struct ExternalProxySettingsView: View {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(String(localized: "SOCKS Proxy Server"))
-                        .font(.system(size: 15))
+                        .font(.system(size: 13))
                     HStack(spacing: 8) {
                         TextField(String(localized: "127.0.0.1"), text: $host)
                             .textFieldStyle(.roundedBorder)
                             .frame(maxWidth: 390)
                             .disabled(!store.canSelectSOCKS5)
                         Text(":")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.system(size: 13, weight: .semibold))
                         TextField(String(localized: "8080"), text: $port)
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 86)
@@ -248,7 +248,7 @@ struct ExternalProxySettingsView: View {
                 if !store.canSelectSOCKS5 {
                     PolicyLockNotice(
                         title: String(localized: "SOCKS5 unavailable"),
-                        message: String(localized: "SOCKS5 upstream proxy is disabled by the current app policy.")
+                        message: String(localized: "SOCKS5 upstream proxy is unavailable in this build.")
                     )
                 }
             }
@@ -297,7 +297,7 @@ struct ExternalProxySettingsView: View {
     {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.system(size: 12))
+                .font(.system(size: 13))
             TextField(placeholder ?? title, text: text)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: width)
@@ -334,6 +334,7 @@ struct ExternalProxySettingsView: View {
         host = configuration.host
         port = "\(configuration.port)"
         username = configuration.username ?? ""
+        pacURL = configuration.pacURL ?? ""
         usesAuthentication = configuration.hasCredentials
         bypassText = configuration.bypassHostPatterns.joined(separator: ", ")
         bypassLocalhost = configuration.bypassLocalhost
@@ -446,7 +447,7 @@ struct PolicyLockNotice: View {
 private extension UpstreamProxyTestResult {
     var displayMessage: String {
         let milliseconds = duration.components.seconds * 1_000 + duration.components.attoseconds / 1_000_000_000_000_000
-        let typeName = negotiatedType?.displayName ?? String(localized: "Direct")
+        let typeName = resolvedPACRoute?.displayName ?? negotiatedType?.displayName ?? String(localized: "Direct")
         return String(localized: "Connected to \(targetHost):\(targetPort) through \(typeName) in \(milliseconds) ms.")
     }
 }

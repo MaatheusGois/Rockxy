@@ -10,10 +10,12 @@ nonisolated enum UpstreamProxyConnector {
 
     static func connect(
         eventLoop: EventLoop,
+        targetScheme: String = "https",
         targetHost: String,
         targetPort: Int,
         configuration: UpstreamProxyResolvedConfiguration?,
         timeout: TimeAmount = ProxyTimeouts.upstreamConnect,
+        pacResolver: @escaping UpstreamPACResolverFunction = UpstreamPACResolver.resolve,
         channelInitializer: @escaping @Sendable (Channel) -> EventLoopFuture<Void>
     )
         -> EventLoopFuture<Channel>
@@ -32,6 +34,37 @@ nonisolated enum UpstreamProxyConnector {
         }
 
         switch configuration.configuration.type {
+        case .automatic:
+            guard let pacURL = configuration.configuration.resolvedPACURL else {
+                return eventLoop.makeFailedFuture(UpstreamProxyError.pacURLInvalid)
+            }
+            return pacResolver(eventLoop, pacURL, targetScheme, targetHost, targetPort).flatMap { route in
+                switch route {
+                case .direct:
+                    return directConnect(
+                        eventLoop: eventLoop,
+                        targetHost: targetHost,
+                        targetPort: targetPort,
+                        timeout: ProxyTimeouts.outboundConnect,
+                        channelInitializer: channelInitializer
+                    )
+                case let .proxy(type, proxyHost, proxyPort):
+                    if type == .socks5, !configuration.allowsSOCKS5 {
+                        return eventLoop.makeFailedFuture(UpstreamProxyError.pacSOCKS5Unavailable)
+                    }
+                    return proxyConnect(
+                        eventLoop: eventLoop,
+                        proxyHost: proxyHost,
+                        proxyPort: proxyPort,
+                        proxyType: type,
+                        targetHost: targetHost,
+                        targetPort: targetPort,
+                        credentials: configuration.credentials,
+                        timeout: timeout,
+                        channelInitializer: channelInitializer
+                    )
+                }
+            }
         case .http:
             return proxyConnect(
                 eventLoop: eventLoop,
@@ -169,6 +202,8 @@ nonisolated enum UpstreamProxyConnector {
                 credentials: credentials,
                 completionPromise: promise
             ))
+        case .automatic:
+            channel.eventLoop.makeFailedFuture(UpstreamProxyError.pacNoSupportedRoute)
         }
 
         addHandshake.whenFailure { error in

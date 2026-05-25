@@ -111,5 +111,6 @@ final class PluginManager: @unchecked Sendable {
         _builtInsLock.unlock()
         register(inspector: JSONInspector())
         register(exporter: HARExporter())
+        register(exporter: OpenAPIExporter())
     }
 }

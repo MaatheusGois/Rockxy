@@ -12,6 +12,8 @@ enum ExternalProxyProtocolSelection: CaseIterable, Identifiable {
 
     init(_ type: UpstreamProxyType) {
         switch type {
+        case .automatic:
+            self = .automatic
         case .http:
             self = .http
         case .https:
@@ -56,7 +58,7 @@ enum ExternalProxyProtocolSelection: CaseIterable, Identifiable {
     var proxyType: UpstreamProxyType? {
         switch self {
         case .automatic:
-            nil
+            .automatic
         case .http:
             .http
         case .https:
@@ -69,7 +71,7 @@ enum ExternalProxyProtocolSelection: CaseIterable, Identifiable {
     func canPersist(using policy: any AppPolicy) -> Bool {
         switch self {
         case .automatic:
-            false
+            true
         case .socks5:
             policy.upstreamProxyAllowsSOCKS5
         case .http,
@@ -101,15 +103,14 @@ struct ExternalProxySettingsDraft: Equatable {
     }
 
     func configuration() throws -> UpstreamProxyConfiguration {
-        guard let type = selectedProtocol.proxyType else {
-            throw ExternalProxySettingsDraftError.automaticProxyConfigurationUnsupported
-        }
+        let type = selectedProtocol.proxyType ?? .http
         let parsedPort = Int(portText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
         return UpstreamProxyConfiguration(
             isEnabled: isEnabled,
             type: type,
             host: host,
             port: parsedPort,
+            pacURL: selectedProtocol == .automatic ? pacURL : nil,
             hasCredentials: usesAuthentication,
             username: usesAuthentication ? username : nil,
             bypassHostPatterns: parsedBypassPatterns,
@@ -122,20 +123,5 @@ struct ExternalProxySettingsDraft: Equatable {
             return nil
         }
         return UpstreamProxyCredentials(username: username, password: password)
-    }
-}
-
-// MARK: - ExternalProxySettingsDraftError
-
-enum ExternalProxySettingsDraftError: Error, Equatable, LocalizedError {
-    case automaticProxyConfigurationUnsupported
-
-    // MARK: Internal
-
-    var errorDescription: String? {
-        switch self {
-        case .automaticProxyConfigurationUnsupported:
-            String(localized: "Automatic proxy configuration is not supported yet.")
-        }
     }
 }

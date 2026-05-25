@@ -11,7 +11,25 @@ struct AuthInspectorView: View {
         if let authHeader = findAuthHeader() {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    labelRow(String(localized: "Type"), authType(from: authHeader))
+                    HStack(alignment: .top) {
+                        labelRow(String(localized: "Type"), authType(from: authHeader))
+                        Spacer()
+                        if JWTPreviewDecoder.looksLikeJWT(authHeader) {
+                            Button {
+                                jwtPreview = JWTPreviewDecoder.decode(authHeader)
+                                isJWTPreviewPresented = true
+                            } label: {
+                                Label(String(localized: "Preview JWT"), systemImage: "key.viewfinder")
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .popover(isPresented: $isJWTPreviewPresented, arrowEdge: .bottom) {
+                                if let jwtPreview {
+                                    QuickPreviewPopoverView(result: jwtPreview)
+                                }
+                            }
+                        }
+                    }
                     Divider()
                     labelRow(String(localized: "Full Value"), authHeader)
                 }
@@ -27,6 +45,9 @@ struct AuthInspectorView: View {
     }
 
     // MARK: Private
+
+    @State private var isJWTPreviewPresented = false
+    @State private var jwtPreview: QuickPreviewResult?
 
     private func labelRow(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {

@@ -34,6 +34,23 @@ struct AppSettings {
     /// When true, sensitive headers and body fields are redacted in MCP responses.
     var mcpRedactSensitiveData: Bool = true
 
+    /// Default visibility for Publish to Gist. Secret Gists are unlisted but
+    /// accessible to anyone who has the link.
+    var githubGistVisibility: GitHubGistVisibility = .secret
+
+    /// When true, sensitive headers, query parameters, and body fields are
+    /// redacted before publishing selected traffic to GitHub Gist.
+    var githubGistRedactSensitiveData: Bool = true
+
+    /// Ask for confirmation before uploading captured traffic to GitHub.
+    var githubGistAskBeforePublishing: Bool = true
+
+    /// Open the created Gist in the default browser after a successful publish.
+    var githubGistOpenInBrowser: Bool = true
+
+    /// Copy the created Gist URL after a successful publish.
+    var githubGistCopyURLToClipboard: Bool = false
+
     /// The last filesystem path the user explicitly chose when exporting the
     /// Rockxy root CA certificate. This is only a UI convenience hint for
     /// snippet generation and can be nil if the certificate has never been

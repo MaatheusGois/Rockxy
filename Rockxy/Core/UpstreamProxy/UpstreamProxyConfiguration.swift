@@ -10,6 +10,7 @@ struct UpstreamProxyConfiguration: Codable, Equatable {
         type: UpstreamProxyType = .http,
         host: String = "",
         port: Int = 8_080,
+        pacURL: String? = nil,
         hasCredentials: Bool = false,
         username: String? = nil,
         bypassHostPatterns: [String] = [],
@@ -19,6 +20,7 @@ struct UpstreamProxyConfiguration: Codable, Equatable {
         self.type = type
         self.host = host
         self.port = port
+        self.pacURL = pacURL
         self.hasCredentials = hasCredentials
         self.username = username
         self.bypassHostPatterns = bypassHostPatterns
@@ -33,10 +35,18 @@ struct UpstreamProxyConfiguration: Codable, Equatable {
     var type: UpstreamProxyType
     var host: String
     var port: Int
+    var pacURL: String?
     var hasCredentials: Bool
     var username: String?
     var bypassHostPatterns: [String]
     var bypassLocalhost: Bool
+
+    var resolvedPACURL: URL? {
+        guard let pacURL else {
+            return nil
+        }
+        return URL(string: pacURL.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
 
     func validate(
         credentials: UpstreamProxyCredentials? = nil,
@@ -44,13 +54,19 @@ struct UpstreamProxyConfiguration: Codable, Equatable {
     )
         throws
     {
-        guard port > 0, port <= 65_535 else {
-            throw UpstreamProxyConfigurationError.portOutOfRange
-        }
+        if type == .automatic {
+            if isEnabled {
+                try validatePACURL()
+            }
+        } else {
+            guard port > 0, port <= 65_535 else {
+                throw UpstreamProxyConfigurationError.portOutOfRange
+            }
 
-        if isEnabled {
-            guard Self.isValidHost(host) else {
-                throw UpstreamProxyConfigurationError.hostInvalid
+            if isEnabled {
+                guard Self.isValidHost(host) else {
+                    throw UpstreamProxyConfigurationError.hostInvalid
+                }
             }
         }
 
@@ -79,6 +95,26 @@ struct UpstreamProxyConfiguration: Codable, Equatable {
     }
 
     // MARK: Private
+
+    private func validatePACURL() throws {
+        guard let pacURL,
+              !pacURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else
+        {
+            throw UpstreamProxyConfigurationError.pacURLRequired
+        }
+        guard let url = resolvedPACURL,
+              let scheme = url.scheme?.lowercased(),
+              !scheme.isEmpty else
+        {
+            throw UpstreamProxyConfigurationError.pacURLInvalid
+        }
+        guard scheme == "http" || scheme == "https" else {
+            throw UpstreamProxyConfigurationError.pacURLUnsupportedScheme
+        }
+        guard url.host?.isEmpty == false else {
+            throw UpstreamProxyConfigurationError.pacURLInvalid
+        }
+    }
 
     private static func isValidHost(_ host: String) -> Bool {
         let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)

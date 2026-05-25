@@ -24,6 +24,16 @@ struct MainContentCommandActions {
         coordinator.selectedTransaction != nil
     }
 
+    var canExportOpenAPI: Bool {
+        coordinator.transactions.contains(where: OpenAPIExporter.isEligible)
+            || coordinator.filteredTransactions.contains(where: OpenAPIExporter.isEligible)
+            || coordinator.resolveSelectedTransactions().contains(where: OpenAPIExporter.isEligible)
+    }
+
+    var canPublishGist: Bool {
+        !coordinator.resolveSelectedTransactions().isEmpty
+    }
+
     // MARK: - Diff
 
     var canCompareSelected: Bool {
@@ -90,6 +100,18 @@ struct MainContentCommandActions {
 
     func exportHAR() {
         coordinator.exportHAR()
+    }
+
+    func exportOpenAPIYAML() {
+        coordinator.exportOpenAPIYAML()
+    }
+
+    func exportOpenAPIHTML() {
+        coordinator.exportOpenAPIHTML()
+    }
+
+    func publishSelectedToGist() {
+        coordinator.publishSelectedTransactionsToGist()
     }
 
     func copyAsCURL() {

@@ -43,6 +43,8 @@ enum PreviewRenderer {
             return renderImage(body)
         case .hex:
             return renderHex(body)
+        case .jwt:
+            return renderJWT(body)
         case .raw:
             return renderRaw(body)
         }
@@ -160,6 +162,23 @@ enum PreviewRenderer {
 
     private static func renderHex(_ data: Data) -> PreviewResult {
         .hex(formatHexDump(data))
+    }
+
+    // MARK: - JWT
+
+    private static func renderJWT(_ data: Data) -> PreviewResult {
+        guard let text = String(data: data, encoding: .utf8) else {
+            return .empty(reason: String(localized: "Body is not valid text"))
+        }
+        let result = JWTPreviewDecoder.decode(text)
+        switch result {
+        case let .jwt(preview):
+            return .text(preview.copyText)
+        case let .error(_, message):
+            return .empty(reason: message)
+        default:
+            return .empty(reason: String(localized: "Body is not a JWT"))
+        }
     }
 
     // MARK: - Raw

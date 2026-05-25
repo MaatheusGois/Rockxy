@@ -527,6 +527,16 @@ struct RockxyMenuCommands: Commands {
                 actions?.exportHAR()
             }
             .keyboardShortcut("e", modifiers: [.command, .shift])
+
+            Button(String(localized: "Export OpenAPI YAML…")) {
+                actions?.exportOpenAPIYAML()
+            }
+            .disabled(actions?.canExportOpenAPI != true)
+
+            Button(String(localized: "Export OpenAPI HTML…")) {
+                actions?.exportOpenAPIHTML()
+            }
+            .disabled(actions?.canExportOpenAPI != true)
         }
     }
 
@@ -651,6 +661,23 @@ struct RockxyMenuCommands: Commands {
                 Button(String(localized: "Export as HAR…")) {
                     actions?.exportHAR()
                 }
+
+                Button(String(localized: "Export as OpenAPI YAML…")) {
+                    actions?.exportOpenAPIYAML()
+                }
+                .disabled(actions?.canExportOpenAPI != true)
+
+                Button(String(localized: "Export as OpenAPI HTML…")) {
+                    actions?.exportOpenAPIHTML()
+                }
+                .disabled(actions?.canExportOpenAPI != true)
+
+                Divider()
+
+                Button(String(localized: "Publish Selected to Gist…")) {
+                    actions?.publishSelectedToGist()
+                }
+                .disabled(actions?.canPublishGist != true)
             }
 
             Divider()
@@ -1106,6 +1133,7 @@ struct RockxyMenuCommands: Commands {
             link.addAttribute(.link, value: homepage, range: NSRange(location: 0, length: link.length))
             credits.append(link)
         }
+        credits.append(NSAttributedString(string: String(localized: "\n\nOpenAPI HTML export includes Swagger UI, licensed under Apache-2.0.")))
 
         var options: [NSApplication.AboutPanelOptionKey: Any] = [
             .applicationName: RockxyIdentity.current.displayName,
