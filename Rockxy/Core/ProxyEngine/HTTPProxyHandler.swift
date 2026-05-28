@@ -609,6 +609,7 @@ extension HTTPProxyHandler {
                 ruleEngine: self.ruleEngine,
                 scriptPluginManager: self.scriptPluginManager,
                 connectionLimiter: self.connectionLimiter,
+                bypassProxyManager: .shared,
                 customCertificateManager: self.customCertificateManager,
                 upstreamProxySnapshotProvider: self.upstreamProxySnapshotProvider,
                 clientSourcePort: self.clientSourcePort,

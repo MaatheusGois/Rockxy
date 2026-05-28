@@ -98,6 +98,17 @@ struct BypassProxyManagerTests {
         #expect(manager.isHostBypassed("localhost"))
     }
 
+    @Test("bare domain bypass includes subdomains")
+    func bareDomainMatchesSubdomains() {
+        let manager = makeManager()
+        manager.addDomain("gmail.com")
+
+        #expect(manager.isHostBypassed("gmail.com"))
+        #expect(manager.isHostBypassed("mail.gmail.com"))
+        #expect(manager.isHostBypassed("www.gmail.com"))
+        #expect(!manager.isHostBypassed("evilgmail.com"))
+    }
+
     @Test("isHostBypassed returns true for wildcard match")
     func isHostBypassedWildcard() {
         let manager = makeManager()
@@ -108,9 +119,10 @@ struct BypassProxyManagerTests {
     @Test("isHostBypassed returns false for disabled domain")
     func isHostBypassedDisabled() {
         let manager = makeManager()
-        manager.addDomain("localhost")
+        manager.addDomain("gmail.com")
         manager.toggleDomain(id: manager.domains[0].id)
-        #expect(!manager.isHostBypassed("localhost"))
+        #expect(!manager.isHostBypassed("gmail.com"))
+        #expect(!manager.isHostBypassed("mail.gmail.com"))
     }
 
     @Test("isHostBypassed returns false for non-matching host")
@@ -131,6 +143,26 @@ struct BypassProxyManagerTests {
 
         let strings = manager.enabledDomainStrings()
         #expect(strings == ["enabled.local"])
+    }
+
+    @Test("enabledDomainStringsForSystemProxy expands bare DNS domains")
+    func enabledDomainStringsForSystemProxy() {
+        let manager = makeManager()
+        manager.addDomain("gmail.com")
+        manager.addDomain("*.gmail.com")
+        manager.addDomain("127.0.0.1")
+        manager.addDomain("::1")
+        manager.addDomain("disabled.com")
+        manager.toggleDomain(id: manager.domains[4].id)
+
+        let strings = manager.enabledDomainStringsForSystemProxy()
+
+        #expect(strings == [
+            "gmail.com",
+            "*.gmail.com",
+            "127.0.0.1",
+            "::1",
+        ])
     }
 
     // MARK: - Presets

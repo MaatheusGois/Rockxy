@@ -401,7 +401,7 @@ final class SystemProxyManager: @unchecked Sendable {
     /// Apply bypass domains from BypassProxyManager to the system proxy.
     /// Uses helper tool if available, otherwise runs networksetup directly.
     func applyBypassDomains() async {
-        let domains = await BypassProxyManager.shared.enabledDomainStrings()
+        let domains = await BypassProxyManager.shared.enabledDomainStringsForSystemProxy()
 
         lock.lock()
         let currentlyUsingHelper = usingHelper

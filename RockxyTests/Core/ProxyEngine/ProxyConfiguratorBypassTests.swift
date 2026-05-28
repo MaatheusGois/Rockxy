@@ -1,4 +1,5 @@
 import Foundation
+@testable import Rockxy
 import Testing
 
 // Regression tests for `ProxyConfiguratorBypass` in the core proxy engine layer.
@@ -10,6 +11,40 @@ import Testing
 /// since the helper tool target is not linked to the test target.
 struct ProxyBackupBypassTests {
     // MARK: Internal
+
+    @Test("Bypass domain validator accepts safe proxy bypass entries")
+    func bypassDomainValidatorAcceptsSafeEntries() {
+        let accepted = [
+            "localhost",
+            "*.local",
+            "127.0.0.1",
+            "::1",
+            "[::1]",
+            "gmail.com",
+            "*.gmail.com",
+        ]
+
+        for entry in accepted {
+            #expect(ProxyBypassDomainValidator.isValid(entry), "Expected valid entry: \(entry)")
+        }
+    }
+
+    @Test("Bypass domain validator rejects unsafe proxy bypass entries")
+    func bypassDomainValidatorRejectsUnsafeEntries() {
+        let rejected = [
+            "",
+            " gmail.com",
+            "gmail.com ",
+            "bad host",
+            "bad;host",
+            "bad/host",
+            String(repeating: "a", count: 254),
+        ]
+
+        for entry in rejected {
+            #expect(!ProxyBypassDomainValidator.isValid(entry), "Expected invalid entry: \(entry)")
+        }
+    }
 
     @Test("ProxyBackup encodes and decodes bypass domains")
     func backupRoundtripWithDomains() throws {

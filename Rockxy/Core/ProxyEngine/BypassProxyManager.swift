@@ -88,6 +88,25 @@ final class BypassProxyManager {
         domains.filter(\.isEnabled).map(\.domain)
     }
 
+    /// Returns enabled patterns expanded for macOS system proxy exceptions.
+    func enabledDomainStringsForSystemProxy() -> [String] {
+        var seen: Set<String> = []
+        var result: [String] = []
+
+        for domain in domains where domain.isEnabled {
+            for pattern in BypassDomain.systemProxyPatterns(for: domain.domain) {
+                let key = pattern.lowercased()
+                guard !seen.contains(key) else {
+                    continue
+                }
+                seen.insert(key)
+                result.append(pattern)
+            }
+        }
+
+        return result
+    }
+
     func load() {
         let url = resolvedStorageURL
         if FileManager.default.fileExists(atPath: url.path) {
