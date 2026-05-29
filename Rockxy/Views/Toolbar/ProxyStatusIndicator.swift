@@ -39,29 +39,22 @@ struct ProxyStatusIndicator: View {
                             .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
                     }
                 }
-                .padding(.leading, 12)
-                .padding(.trailing, updateStatusSummary == nil ? 12 : 7)
-                .padding(.vertical, 6)
-                .contentShape(Rectangle())
+                .padding(.leading, ProxyStatusChromeMetrics.horizontalPadding)
+                .padding(.trailing, updateStatusSummary == nil ? ProxyStatusChromeMetrics.horizontalPadding : 7)
+                .frame(height: ProxyStatusChromeMetrics.outerHeight)
+                .contentShape(Capsule(style: .continuous))
             }
             .buttonStyle(.plain)
             .help(statusHelpText)
 
             if let updateStatusSummary {
                 updateStatus(updateStatusSummary)
-                    .padding(.trailing, 12)
-                    .padding(.vertical, 6)
+                    .padding(.trailing, ProxyStatusChromeMetrics.horizontalPadding)
+                    .frame(height: ProxyStatusChromeMetrics.outerHeight)
             }
         }
-        .background(
-            Color(nsColor: .windowBackgroundColor)
-                .opacity(0.55)
-        )
-        .clipShape(Capsule())
-        .overlay(
-            Capsule()
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        )
+        .frame(height: ProxyStatusChromeMetrics.outerHeight)
+        .contentShape(Rectangle())
         .popover(isPresented: $showPopover) {
             ProxyStatusPopover(
                 listenAddress: listenAddress,
@@ -74,10 +67,18 @@ struct ProxyStatusIndicator: View {
 
     // MARK: Private
 
+    private enum ProxyStatusChromeMetrics {
+        static let outerHeight: CGFloat = 32
+        static let updateBadgeHeight: CGFloat = 24
+        static let horizontalPadding: CGFloat = 14
+        static let statusDotSize: CGFloat = 10
+        static let strokeWidth: CGFloat = 0.75
+    }
+
     private var statusDot: some View {
         Circle()
             .fill(statusColor)
-            .frame(width: 9, height: 9)
+            .frame(width: ProxyStatusChromeMetrics.statusDotSize, height: ProxyStatusChromeMetrics.statusDotSize)
             .shadow(
                 color: statusShadowColor,
                 radius: 4,
@@ -149,22 +150,25 @@ struct ProxyStatusIndicator: View {
 
     private func updateBadge(_ title: String) -> some View {
         Text(title)
-            .font(.caption.weight(.semibold))
+            .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(.white)
             .lineLimit(1)
             .padding(.horizontal, 9)
-            .padding(.vertical, 3)
-            .background(
-                Capsule()
-                    .fill(updateBadgeBackground)
-            )
-            .overlay(
-                Capsule()
-                    .stroke(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.05), lineWidth: 1)
-            )
+            .frame(height: ProxyStatusChromeMetrics.updateBadgeHeight)
+            .background {
+                Capsule(style: .continuous).fill(updateBadgeBackground)
+            }
+            .overlay {
+                Capsule(style: .continuous).strokeBorder(updateBadgeStroke, lineWidth: ProxyStatusChromeMetrics.strokeWidth)
+            }
+            .contentShape(Capsule(style: .continuous))
     }
 
     private var updateBadgeBackground: Color {
         Color(nsColor: .systemGray).opacity(colorScheme == .dark ? 0.62 : 0.82)
+    }
+
+    private var updateBadgeStroke: Color {
+        Color.primary.opacity(colorScheme == .dark ? 0.10 : 0.06)
     }
 }

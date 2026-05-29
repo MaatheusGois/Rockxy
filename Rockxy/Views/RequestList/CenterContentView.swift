@@ -114,6 +114,9 @@ struct CenterContentView: View {
                 }
             }
         }
+        .onChange(of: coordinator.activeWorkspace.id) {
+            selectedIDs = coordinator.selectedTransactionIDs
+        }
     }
 
     // MARK: Private
@@ -180,6 +183,7 @@ struct CenterContentView: View {
 
     private var tableContent: some View {
         RequestTableView(
+            workspaceID: coordinator.activeWorkspace.id,
             rows: coordinator.filteredRows,
             refreshToken: coordinator.refreshToken,
             isAppendOnly: coordinator.activeWorkspace.lastDeriveWasAppendOnly,

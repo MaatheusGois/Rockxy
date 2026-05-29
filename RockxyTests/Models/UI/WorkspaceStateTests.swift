@@ -17,6 +17,7 @@ struct WorkspaceStateTests {
         #expect(workspace.inspectorLayout == .hidden)
         #expect(workspace.selectedTransaction == nil)
         #expect(workspace.selectedLogEntry == nil)
+        #expect(workspace.selectedTransactionIDs.isEmpty)
         #expect(workspace.filterCriteria.isEmpty)
         #expect(workspace.filterRules.count == 1)
         #expect(workspace.isFilterBarVisible == false)
@@ -60,7 +61,9 @@ struct WorkspaceStateTests {
         // Mutate state
         workspace.activeMainTab = .logs
         workspace.filteredTransactions = [TestFixtures.makeTransaction()]
-        workspace.selectedTransaction = TestFixtures.makeTransaction()
+        let selected = TestFixtures.makeTransaction()
+        workspace.selectedTransaction = selected
+        workspace.selectedTransactionIDs = [selected.id]
         workspace.domainTree = [DomainNode(id: "test", domain: "test.com", requestCount: 1, children: [])]
 
         workspace.reset()
@@ -70,6 +73,7 @@ struct WorkspaceStateTests {
         #expect(workspace.filteredTransactions.isEmpty)
         #expect(workspace.selectedTransaction == nil)
         #expect(workspace.selectedLogEntry == nil)
+        #expect(workspace.selectedTransactionIDs.isEmpty)
         #expect(workspace.domainTree.isEmpty)
         #expect(workspace.appNodes.isEmpty)
         // activeMainTab is NOT reset (navigation state preserved)
