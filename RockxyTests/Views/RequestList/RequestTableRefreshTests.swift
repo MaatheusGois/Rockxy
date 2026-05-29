@@ -538,6 +538,52 @@ struct RequestTableRefreshTests {
         #expect(resolved.count == 2)
     }
 
+    @Test("Selected transaction IDs are scoped to the active workspace")
+    func selectedIDsScopedToActiveWorkspace() {
+        let coordinator = MainContentCoordinator()
+        let t1 = TestFixtures.makeTransaction(url: "https://alpha.example.com/a")
+        let t2 = TestFixtures.makeTransaction(url: "https://beta.example.com/b")
+        coordinator.transactions = [t1, t2]
+        coordinator.recomputeFilteredTransactions()
+
+        let firstWorkspaceID = coordinator.workspaceStore.activeWorkspaceID
+        coordinator.selectedTransactionIDs = [t1.id]
+
+        let secondWorkspace = coordinator.workspaceStore.createWorkspace(title: "Beta")
+        coordinator.recomputeFilteredTransactions(for: secondWorkspace)
+        coordinator.selectedTransactionIDs = [t2.id]
+
+        #expect(secondWorkspace.selectedTransactionIDs == [t2.id])
+        coordinator.workspaceStore.selectWorkspace(id: firstWorkspaceID)
+        #expect(coordinator.selectedTransactionIDs == [t1.id])
+        #expect(coordinator.resolveSelectedTransactions().map(\.id) == [t1.id])
+    }
+
+    @Test("Export scope uses selected rows from active workspace")
+    func exportScopeUsesActiveWorkspaceSelection() {
+        let coordinator = MainContentCoordinator()
+        let t1 = TestFixtures.makeTransaction(url: "https://alpha.example.com/a")
+        let t2 = TestFixtures.makeTransaction(url: "https://beta.example.com/b")
+        coordinator.transactions = [t1, t2]
+        coordinator.recomputeFilteredTransactions()
+
+        let firstWorkspaceID = coordinator.workspaceStore.activeWorkspaceID
+        coordinator.selectedTransactionIDs = [t1.id]
+
+        let secondWorkspace = coordinator.workspaceStore.createWorkspace(title: "Beta")
+        coordinator.recomputeFilteredTransactions(for: secondWorkspace)
+        coordinator.selectedTransactionIDs = []
+
+        coordinator.presentExport(format: .har)
+        #expect(coordinator.exportScopeContext?.selectedCount == 0)
+        #expect(coordinator.exportScopeContext?.initialScope != .selected)
+
+        coordinator.workspaceStore.selectWorkspace(id: firstWorkspaceID)
+        coordinator.presentExport(format: .har)
+        #expect(coordinator.exportScopeContext?.selectedCount == 1)
+        #expect(coordinator.exportScopeContext?.initialScope == .selected)
+    }
+
     // MARK: - Persisted Delete Durability
 
     @Test("Persisted delete is durable across SessionStore reload")

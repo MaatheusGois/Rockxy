@@ -36,6 +36,7 @@ final class WorkspaceState: Identifiable {
     // Selection
     var selectedTransaction: HTTPTransaction?
     var selectedLogEntry: LogEntry?
+    var selectedTransactionIDs: Set<UUID> = []
 
     // Filtering
     var filterCriteria: FilterCriteria = .empty
@@ -69,6 +70,7 @@ final class WorkspaceState: Identifiable {
         // activeSortDescriptors intentionally preserved — sort is a user preference
         selectedTransaction = nil
         selectedLogEntry = nil
+        selectedTransactionIDs.removeAll()
         domainTree.removeAll()
         domainIndexMap.removeAll()
         domainGroupingIndex.removeAll()

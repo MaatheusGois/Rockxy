@@ -154,6 +154,7 @@ extension MainContentCoordinator {
     func evictFromAllWorkspaces(removedIDs: Set<UUID>) {
         for workspace in workspaceStore.workspaces {
             workspace.filteredTransactions.removeAll { removedIDs.contains($0.id) }
+            workspace.selectedTransactionIDs.subtract(removedIDs)
             if workspace.selectedTransaction.map({ removedIDs.contains($0.id) }) == true {
                 workspace.selectedTransaction = nil
             }

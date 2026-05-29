@@ -34,6 +34,18 @@ final class RockxyWorkspaceWindowManager: NSObject {
         }
     }
 
+    static func workspaceTabWidth(availableWidth: CGFloat, tabCount: Int) -> CGFloat {
+        guard tabCount > 0 else {
+            return 0
+        }
+
+        let distributedWidth = availableWidth / CGFloat(tabCount)
+        guard distributedWidth < WorkspaceTabBarMetrics.preferredMinimumTabWidth else {
+            return distributedWidth
+        }
+        return max(WorkspaceTabBarMetrics.minimumTabWidth, distributedWidth)
+    }
+
     func registerPrimaryWindow(_ window: NSWindow, coordinator: MainContentCoordinator) {
         self.coordinator = coordinator
         primaryWindow = window
@@ -311,6 +323,16 @@ final class RockxyWorkspaceWindowManager: NSObject {
     }
 }
 
+// MARK: - WorkspaceTabBarMetrics
+
+private enum WorkspaceTabBarMetrics {
+    static let barHeight: CGFloat = 36, leftInset: CGFloat = 74, rightInset: CGFloat = 12
+    static let minimumTabWidth: CGFloat = 56, preferredMinimumTabWidth: CGFloat = 82
+    static let addButtonSize: CGFloat = 28, dragThreshold: CGFloat = 4
+    static let reorderAnimationDuration: TimeInterval = 0.22
+    static let tabAnimationFrameInterval: TimeInterval = 1 / 120
+}
+
 // MARK: - WorkspaceTabBarAccessoryController
 
 @MainActor
@@ -356,7 +378,7 @@ private final class WorkspaceTabBarView: NSView, NSTextFieldDelegate {
 
     init(manager: RockxyWorkspaceWindowManager) {
         self.manager = manager
-        super.init(frame: NSRect(x: 0, y: 0, width: 900, height: Self.barHeight))
+        super.init(frame: NSRect(x: 0, y: 0, width: 900, height: WorkspaceTabBarMetrics.barHeight))
         autoresizingMask = [.width]
         wantsLayer = false
     }
@@ -377,7 +399,7 @@ private final class WorkspaceTabBarView: NSView, NSTextFieldDelegate {
     }
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: NSView.noIntrinsicMetric, height: Self.barHeight)
+        NSSize(width: NSView.noIntrinsicMetric, height: WorkspaceTabBarMetrics.barHeight)
     }
 
     override func updateTrackingAreas() {
@@ -469,7 +491,7 @@ private final class WorkspaceTabBarView: NSView, NSTextFieldDelegate {
 
         let point = convert(event.locationInWindow, from: nil)
         if draggingWorkspaceID == nil,
-           distance(from: mouseDownPoint, to: point) >= Self.dragThreshold {
+           distance(from: mouseDownPoint, to: point) >= WorkspaceTabBarMetrics.dragThreshold {
             draggingWorkspaceID = mouseDownWorkspaceID
             dragGrabOffsetX = dragGrabOffset(for: mouseDownWorkspaceID, at: mouseDownPoint)
         }
@@ -643,16 +665,6 @@ private final class WorkspaceTabBarView: NSView, NSTextFieldDelegate {
 
     // MARK: Private
 
-    private static let barHeight: CGFloat = 36
-    private static let leftInset: CGFloat = 74
-    private static let rightInset: CGFloat = 12
-    private static let minimumTabWidth: CGFloat = 82
-    private static let maximumTabWidth: CGFloat = 220
-    private static let addButtonSize: CGFloat = 28
-    private static let dragThreshold: CGFloat = 4
-    private static let reorderAnimationDuration: TimeInterval = 0.22
-    private static let tabAnimationFrameInterval: TimeInterval = 1 / 120
-
     private weak var manager: RockxyWorkspaceWindowManager!
     private weak var coordinator: MainContentCoordinator?
     private var trackingArea: NSTrackingArea?
@@ -687,21 +699,24 @@ private final class WorkspaceTabBarView: NSView, NSTextFieldDelegate {
         }
 
         let workspaces = coordinator.workspaceStore.workspaces
-        let addX = max(Self.leftInset, bounds.maxX - Self.rightInset - Self.addButtonSize - 8)
+        let addX = max(
+            WorkspaceTabBarMetrics.leftInset,
+            bounds.maxX - WorkspaceTabBarMetrics.rightInset - WorkspaceTabBarMetrics.addButtonSize - 8
+        )
         addButtonFrame = NSRect(
             x: addX,
             y: 4,
-            width: Self.addButtonSize,
-            height: Self.addButtonSize
+            width: WorkspaceTabBarMetrics.addButtonSize,
+            height: WorkspaceTabBarMetrics.addButtonSize
         )
 
         let availableWidth = max(
-            Self.minimumTabWidth,
-            addButtonFrame.minX - Self.leftInset - 6
+            WorkspaceTabBarMetrics.minimumTabWidth,
+            addButtonFrame.minX - WorkspaceTabBarMetrics.leftInset - 6
         )
-        let tabWidth = min(
-            Self.maximumTabWidth,
-            max(Self.minimumTabWidth, availableWidth / CGFloat(max(workspaces.count, 1)))
+        let tabWidth = RockxyWorkspaceWindowManager.workspaceTabWidth(
+            availableWidth: availableWidth,
+            tabCount: max(workspaces.count, 1)
         )
 
         tabFrames.removeAll(keepingCapacity: true)
@@ -709,10 +724,10 @@ private final class WorkspaceTabBarView: NSView, NSTextFieldDelegate {
 
         for (index, workspace) in workspaces.enumerated() {
             let frame = NSRect(
-                x: Self.leftInset + CGFloat(index) * tabWidth,
+                x: WorkspaceTabBarMetrics.leftInset + CGFloat(index) * tabWidth,
                 y: 4,
                 width: tabWidth,
-                height: Self.barHeight - 8
+                height: WorkspaceTabBarMetrics.barHeight - 8
             )
             tabFrames[workspace.id] = frame
             if workspace.isClosable {
@@ -730,13 +745,13 @@ private final class WorkspaceTabBarView: NSView, NSTextFieldDelegate {
         NSColor.clear.setFill()
         bounds.fill()
 
-        let stripWidth = max(0, addButtonFrame.minX - Self.leftInset - 4)
+        let stripWidth = max(0, addButtonFrame.minX - WorkspaceTabBarMetrics.leftInset - 4)
         guard stripWidth > 0 else {
             return
         }
 
         let stripRect = NSRect(
-            x: Self.leftInset - 8,
+            x: WorkspaceTabBarMetrics.leftInset - 8,
             y: 4,
             width: stripWidth + 8,
             height: 28
@@ -919,7 +934,10 @@ private final class WorkspaceTabBarView: NSView, NSTextFieldDelegate {
         let width = sourceFrame.width
         let grabOffset = dragGrabOffsetX ?? width / 2
         let rect = NSRect(
-            x: min(max(Self.leftInset, point.x - grabOffset), bounds.maxX - Self.rightInset - Self.addButtonSize - width - 10),
+            x: min(
+                max(WorkspaceTabBarMetrics.leftInset, point.x - grabOffset),
+                bounds.maxX - WorkspaceTabBarMetrics.rightInset - WorkspaceTabBarMetrics.addButtonSize - width - 10
+            ),
             y: sourceFrame.minY,
             width: width,
             height: sourceFrame.height
@@ -944,7 +962,7 @@ private final class WorkspaceTabBarView: NSView, NSTextFieldDelegate {
         guard let markerX = insertionMarkerX(for: insertionIndex) else {
             return
         }
-        let markerRect = NSRect(x: markerX - 1, y: 8, width: 2, height: Self.barHeight - 16)
+        let markerRect = NSRect(x: markerX - 1, y: 8, width: 2, height: WorkspaceTabBarMetrics.barHeight - 16)
         let path = NSBezierPath(roundedRect: markerRect, xRadius: 1, yRadius: 1)
         NSColor.controlAccentColor.withAlphaComponent(0.9).setFill()
         path.fill()
@@ -1201,7 +1219,7 @@ private final class WorkspaceTabBarView: NSView, NSTextFieldDelegate {
         presentedTabFrames = tabAnimationStartFrames
 
         let timer = Timer(
-            timeInterval: Self.tabAnimationFrameInterval,
+            timeInterval: WorkspaceTabBarMetrics.tabAnimationFrameInterval,
             target: self,
             selector: #selector(advanceTabFrameAnimation(_:)),
             userInfo: nil,
@@ -1214,7 +1232,7 @@ private final class WorkspaceTabBarView: NSView, NSTextFieldDelegate {
 
     @objc private func advanceTabFrameAnimation(_ timer: Timer) {
         let elapsed = Date().timeIntervalSince(tabAnimationStartDate)
-        let progress = min(1, elapsed / Self.reorderAnimationDuration)
+        let progress = min(1, elapsed / WorkspaceTabBarMetrics.reorderAnimationDuration)
         let easedProgress = easeOutCubic(progress)
 
         presentedTabFrames = Dictionary(uniqueKeysWithValues: tabAnimationTargetFrames.map { workspaceID, targetFrame in

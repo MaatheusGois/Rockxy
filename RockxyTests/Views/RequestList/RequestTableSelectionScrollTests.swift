@@ -9,6 +9,7 @@ struct RequestTableSelectionScrollTests {
     func unchangedSelectionReplayPreservesScrollPosition() {
         var selectedIDs = Set<UUID>()
         let parent = RequestTableView(
+            workspaceID: UUID(),
             rows: [],
             refreshToken: 0,
             isAppendOnly: false,
