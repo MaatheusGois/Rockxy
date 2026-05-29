@@ -57,7 +57,8 @@ struct CenterContentView: View {
                             coordinator.filterRules = $0
                             coordinator.recomputeFilteredTransactions()
                         }
-                    )
+                    ),
+                    presetStore: coordinator.filterPresetStore
                 )
             }
 
@@ -79,7 +80,7 @@ struct CenterContentView: View {
                 isNoCachingActive: isNoCachingEnabled,
                 isAutoSelectEnabled: coordinator.isAutoSelectEnabled,
                 isFilterBarVisible: coordinator.isFilterBarVisible,
-                activeFilterCount: coordinator.filterCriteria.activeFilterCount,
+                activeFilterCount: activeFilterCount,
                 errorCount: coordinator.errorCount,
                 proxyStartedAt: coordinator.proxyStartedAt,
                 selectedRequestInfo: coordinator.selectedTransaction.map {
@@ -112,6 +113,9 @@ struct CenterContentView: View {
                     selectedIDs = []
                 }
             }
+        }
+        .onChange(of: coordinator.activeWorkspace.id) {
+            selectedIDs = coordinator.selectedTransactionIDs
         }
     }
 
@@ -169,8 +173,17 @@ struct CenterContentView: View {
     private static let minimumBottomTableHeight: CGFloat = 200
     private static let minimumBottomInspectorHeight: CGFloat = 200
 
+    private var activeFilterCount: Int {
+        coordinator.filterCriteria.activeFilterCount
+            + FilterRuleEvaluator.activeRules(
+                in: coordinator.filterRules,
+                isFilterBarVisible: coordinator.isFilterBarVisible
+            ).count
+    }
+
     private var tableContent: some View {
         RequestTableView(
+            workspaceID: coordinator.activeWorkspace.id,
             rows: coordinator.filteredRows,
             refreshToken: coordinator.refreshToken,
             isAppendOnly: coordinator.activeWorkspace.lastDeriveWasAppendOnly,

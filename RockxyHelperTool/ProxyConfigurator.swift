@@ -134,11 +134,8 @@ enum ProxyConfigurator {
             throw ProxyConfiguratorError.noActiveService
         }
 
-        let asciiAllowed =
-            CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-_*")
         let indomains = domains.filter { domain in
-            domain.isEmpty || domain.count > 253
-                || !domain.unicodeScalars.allSatisfy { $0.isASCII && asciiAllowed.contains($0) }
+            !ProxyBypassDomainValidator.isValid(domain)
         }
         if !indomains.isEmpty {
             logger.warning("SECURITY: Rejected \(indomains.count) invalid bypass domain(s): \(indomains)")

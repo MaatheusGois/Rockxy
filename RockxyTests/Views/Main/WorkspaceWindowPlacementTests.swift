@@ -5,6 +5,19 @@ import Testing
 @MainActor
 @Suite("Workspace window placement")
 struct WorkspaceWindowPlacementTests {
+    @Test("Workspace tabs distribute available width before shrinking")
+    func workspaceTabsDistributeAvailableWidth() {
+        #expect(RockxyWorkspaceWindowManager.workspaceTabWidth(availableWidth: 1_200, tabCount: 2) == 600)
+        #expect(RockxyWorkspaceWindowManager.workspaceTabWidth(availableWidth: 1_200, tabCount: 4) == 300)
+        #expect(RockxyWorkspaceWindowManager.workspaceTabWidth(availableWidth: 640, tabCount: 8) == 80)
+    }
+
+    @Test("Workspace tab width handles empty and narrow inputs")
+    func workspaceTabWidthHandlesEdgeInputs() {
+        #expect(RockxyWorkspaceWindowManager.workspaceTabWidth(availableWidth: 1_200, tabCount: 0) == 0)
+        #expect(RockxyWorkspaceWindowManager.workspaceTabWidth(availableWidth: 320, tabCount: 8) == 56)
+    }
+
     @Test("Auxiliary windows are centered over the primary workspace window")
     func auxiliaryWindowsAreCenteredOverPrimaryWorkspaceWindow() {
         let windowFrame = NSRect(x: 0, y: 0, width: 760, height: 500)

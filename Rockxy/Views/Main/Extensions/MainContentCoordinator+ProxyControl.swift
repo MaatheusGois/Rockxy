@@ -263,7 +263,6 @@ extension MainContentCoordinator {
 
         transactions.removeAll()
         rebuildObservedDomainsByApp()
-        selectedTransactionIDs.removeAll()
         logEntries.removeAll()
         errorCount = 0
         sessionProvenance = nil

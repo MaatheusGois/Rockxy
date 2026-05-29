@@ -452,6 +452,22 @@ struct RequestTableRefreshTests {
         #expect(coordinator.domainTree.first?.domain == "other.com")
     }
 
+    @Test("Deleting selected sidebar domain clears stale sidebar filter")
+    func deleteSelectedSidebarDomainClearsFilter() {
+        let coordinator = MainContentCoordinator()
+        let transaction = TestFixtures.makeTransaction(url: "https://api.example.com/test")
+        coordinator.transactions = [transaction]
+        coordinator.rebuildSidebarIndexes()
+        coordinator.selectSidebarItem(.domainNode(domain: "example.com"))
+
+        coordinator.removeDomainFromSidebar("example.com")
+
+        #expect(coordinator.sidebarSelection == nil)
+        #expect(coordinator.filterCriteria.sidebarDomain == nil)
+        #expect(coordinator.filterCriteria.sidebarPathPrefix == nil)
+        #expect(coordinator.filterCriteria.sidebarScope == .allTraffic)
+    }
+
     @Test("Delete updates sidebar app state")
     func deleteUpdatessSidebarApp() {
         let coordinator = MainContentCoordinator()
@@ -471,6 +487,22 @@ struct RequestTableRefreshTests {
         // Sidebar rebuilt after delete — only Chrome remains
         #expect(coordinator.appNodes.count == 1)
         #expect(coordinator.appNodes.first?.name == "Chrome")
+    }
+
+    @Test("Deleting selected sidebar app clears stale app filter")
+    func deleteSelectedSidebarAppClearsFilter() {
+        let coordinator = MainContentCoordinator()
+        let transaction = TestFixtures.makeTransaction()
+        transaction.clientApp = "Chrome"
+        coordinator.transactions = [transaction]
+        coordinator.rebuildSidebarIndexes()
+        coordinator.selectSidebarItem(.app(name: "Chrome", bundleId: nil))
+
+        coordinator.removeAppFromSidebar("Chrome")
+
+        #expect(coordinator.sidebarSelection == nil)
+        #expect(coordinator.filterCriteria.sidebarApp == nil)
+        #expect(coordinator.filterCriteria.sidebarScope == .allTraffic)
     }
 
     @Test("selectedTransactionIDs is pruned after delete")
@@ -504,6 +536,52 @@ struct RequestTableRefreshTests {
         #expect(coordinator.selectedTransactionIDs.count == 2)
         let resolved = coordinator.resolveSelectedTransactions()
         #expect(resolved.count == 2)
+    }
+
+    @Test("Selected transaction IDs are scoped to the active workspace")
+    func selectedIDsScopedToActiveWorkspace() {
+        let coordinator = MainContentCoordinator()
+        let t1 = TestFixtures.makeTransaction(url: "https://alpha.example.com/a")
+        let t2 = TestFixtures.makeTransaction(url: "https://beta.example.com/b")
+        coordinator.transactions = [t1, t2]
+        coordinator.recomputeFilteredTransactions()
+
+        let firstWorkspaceID = coordinator.workspaceStore.activeWorkspaceID
+        coordinator.selectedTransactionIDs = [t1.id]
+
+        let secondWorkspace = coordinator.workspaceStore.createWorkspace(title: "Beta")
+        coordinator.recomputeFilteredTransactions(for: secondWorkspace)
+        coordinator.selectedTransactionIDs = [t2.id]
+
+        #expect(secondWorkspace.selectedTransactionIDs == [t2.id])
+        coordinator.workspaceStore.selectWorkspace(id: firstWorkspaceID)
+        #expect(coordinator.selectedTransactionIDs == [t1.id])
+        #expect(coordinator.resolveSelectedTransactions().map(\.id) == [t1.id])
+    }
+
+    @Test("Export scope uses selected rows from active workspace")
+    func exportScopeUsesActiveWorkspaceSelection() {
+        let coordinator = MainContentCoordinator()
+        let t1 = TestFixtures.makeTransaction(url: "https://alpha.example.com/a")
+        let t2 = TestFixtures.makeTransaction(url: "https://beta.example.com/b")
+        coordinator.transactions = [t1, t2]
+        coordinator.recomputeFilteredTransactions()
+
+        let firstWorkspaceID = coordinator.workspaceStore.activeWorkspaceID
+        coordinator.selectedTransactionIDs = [t1.id]
+
+        let secondWorkspace = coordinator.workspaceStore.createWorkspace(title: "Beta")
+        coordinator.recomputeFilteredTransactions(for: secondWorkspace)
+        coordinator.selectedTransactionIDs = []
+
+        coordinator.presentExport(format: .har)
+        #expect(coordinator.exportScopeContext?.selectedCount == 0)
+        #expect(coordinator.exportScopeContext?.initialScope != .selected)
+
+        coordinator.workspaceStore.selectWorkspace(id: firstWorkspaceID)
+        coordinator.presentExport(format: .har)
+        #expect(coordinator.exportScopeContext?.selectedCount == 1)
+        #expect(coordinator.exportScopeContext?.initialScope == .selected)
     }
 
     // MARK: - Persisted Delete Durability

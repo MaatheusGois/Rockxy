@@ -502,15 +502,10 @@ extension MainContentCoordinator {
         rebuildObservedDomainsByApp()
         persistedFavorites.removeAll { ids.contains($0.id) }
 
-        // Prune selection state
-        selectedTransactionIDs.subtract(ids)
-        if let selected = selectedTransaction, ids.contains(selected.id) {
-            selectedTransaction = nil
-        }
-
         // Update all workspaces (same consistency as eviction)
         for workspace in workspaceStore.workspaces {
             workspace.filteredTransactions.removeAll { ids.contains($0.id) }
+            workspace.selectedTransactionIDs.subtract(ids)
             if workspace.selectedTransaction.map({ ids.contains($0.id) }) == true {
                 workspace.selectedTransaction = nil
             }

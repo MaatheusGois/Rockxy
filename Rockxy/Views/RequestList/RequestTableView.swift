@@ -15,6 +15,7 @@ import SwiftUI
 struct RequestTableView: NSViewRepresentable {
     // MARK: Internal
 
+    let workspaceID: UUID
     let rows: [RequestListRow]
     let refreshToken: Int
     let isAppendOnly: Bool
@@ -108,15 +109,19 @@ struct RequestTableView: NSViewRepresentable {
         let coordinator = context.coordinator
         let oldToken = coordinator.lastRefreshToken
         let newToken = refreshToken
+        let oldWorkspaceID = coordinator.lastWorkspaceID
+        let workspaceChanged = oldWorkspaceID != workspaceID
 
         coordinator.parent = self
         coordinator.rows = rows
         coordinator.mainCoordinator = mainCoordinator
         coordinator.lastRefreshToken = newToken
+        coordinator.lastWorkspaceID = workspaceID
 
-        if newToken != oldToken {
+        if workspaceChanged || newToken != oldToken {
             let newCount = rows.count
-            if isAppendOnly,
+            if !workspaceChanged,
+               isAppendOnly,
                newCount > coordinator.previousRowCount,
                coordinator.previousRowCount > 0
             {
@@ -248,6 +253,7 @@ extension RequestTableView {
         var mainCoordinator: MainContentCoordinator?
         weak var tableView: NSTableView?
         var hasAutoSizedColumns = false
+        var lastWorkspaceID: UUID?
         var lastClickedColumn: String?
         var lastRefreshToken: Int = 0
         var previousRowCount: Int = 0

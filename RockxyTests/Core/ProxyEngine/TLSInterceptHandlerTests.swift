@@ -51,6 +51,37 @@ private final class RecordedTransactionBox: @unchecked Sendable {
 
 @MainActor
 struct TLSInterceptHandlerTests {
+    @Test("bypass proxy list forces raw tunnel before SSL interception")
+    func bypassProxyListForcesRawTunnel() {
+        let sslManager = makeSSLProxyingManager()
+        sslManager.addRule(SSLProxyingRule(domain: "*", listType: .include))
+        let bypassManager = makeBypassProxyManager()
+        bypassManager.addDomain("gmail.com")
+
+        let mode = TLSInterceptHandler.initialTunnelMode(
+            host: "mail.gmail.com",
+            sslProxyingManager: sslManager,
+            bypassProxyManager: bypassManager
+        )
+
+        #expect(mode == .rawTunnel(.bypassProxyList))
+    }
+
+    @Test("non-bypassed included host still intercepts")
+    func nonBypassedIncludedHostIntercepts() {
+        let sslManager = makeSSLProxyingManager()
+        sslManager.addRule(SSLProxyingRule(domain: "*", listType: .include))
+        let bypassManager = makeBypassProxyManager()
+
+        let mode = TLSInterceptHandler.initialTunnelMode(
+            host: "api.example.com",
+            sslProxyingManager: sslManager,
+            bypassProxyManager: bypassManager
+        )
+
+        #expect(mode == .intercept)
+    }
+
     @Test("central raw tunnel setup invokes success callback")
     func completeRawTunnelSetupInvokesSuccess() {
         let clientChannel = EmbeddedChannel()
@@ -179,5 +210,21 @@ struct TLSInterceptHandlerTests {
         #expect(recorded.transaction?.response?.statusCode == 200)
         #expect(recorded.transaction?.state == .completed)
         #expect(recorded.transaction?.isTLSFailure == false)
+    }
+
+    private func makeSSLProxyingManager() -> SSLProxyingManager {
+        SSLProxyingManager(
+            storageURL: makeTempURL(prefix: "rockxy-tls-ssl-test"),
+            passthroughStorageURL: makeTempURL(prefix: "rockxy-tls-passthrough-test")
+        )
+    }
+
+    private func makeBypassProxyManager() -> BypassProxyManager {
+        BypassProxyManager(storageURL: makeTempURL(prefix: "rockxy-tls-bypass-test"))
+    }
+
+    private func makeTempURL(prefix: String) -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(prefix)-\(UUID().uuidString).json")
     }
 }

@@ -96,6 +96,7 @@ final class TLSInterceptHandler: ChannelInboundHandler, RemovableChannelHandler,
         scriptPluginManager: ScriptPluginManager? = nil,
         connectionLimiter: ConnectionLimiter,
         sslProxyingManager: SSLProxyingManager = .shared,
+        bypassProxyManager: BypassProxyManager = .shared,
         customCertificateManager: CustomCertificateManager = .shared,
         upstreamProxySnapshotProvider: @escaping @Sendable () -> UpstreamProxyResolvedConfiguration? = { nil },
         clientSourcePort: UInt16? = nil,
@@ -109,6 +110,7 @@ final class TLSInterceptHandler: ChannelInboundHandler, RemovableChannelHandler,
         self.scriptPluginManager = scriptPluginManager
         self.connectionLimiter = connectionLimiter
         self.sslProxyingManager = sslProxyingManager
+        self.bypassProxyManager = bypassProxyManager
         self.customCertificateManager = customCertificateManager
         self.upstreamProxySnapshotProvider = upstreamProxySnapshotProvider
         self.clientSourcePort = clientSourcePort
@@ -120,6 +122,17 @@ final class TLSInterceptHandler: ChannelInboundHandler, RemovableChannelHandler,
 
     typealias InboundIn = ByteBuffer
     typealias OutboundOut = ByteBuffer
+
+    enum InitialTunnelMode: Equatable {
+        case rawTunnel(RawTunnelReason)
+        case intercept
+    }
+
+    enum RawTunnelReason: Equatable {
+        case bypassProxyList
+        case noSSLProxyingRule
+        case autoPassthrough
+    }
 
     nonisolated static func makeTunnelTransaction(
         host: String,
@@ -245,6 +258,7 @@ final class TLSInterceptHandler: ChannelInboundHandler, RemovableChannelHandler,
     private let scriptPluginManager: ScriptPluginManager?
     private let connectionLimiter: ConnectionLimiter
     private let sslProxyingManager: SSLProxyingManager
+    private let bypassProxyManager: BypassProxyManager
     private let customCertificateManager: CustomCertificateManager
     private let upstreamProxySnapshotProvider: @Sendable () -> UpstreamProxyResolvedConfiguration?
     private let clientSourcePort: UInt16?
@@ -262,16 +276,25 @@ final class TLSInterceptHandler: ChannelInboundHandler, RemovableChannelHandler,
         let host = self.host
         let port = self.port
 
-        if !sslProxyingManager.shouldIntercept(host) {
+        switch Self.initialTunnelMode(
+            host: host,
+            sslProxyingManager: sslProxyingManager,
+            bypassProxyManager: bypassProxyManager
+        ) {
+        case .rawTunnel(.bypassProxyList):
+            tlsLogger.info("Bypass proxy list matched \(host), passing through as raw tunnel")
+            setupRawTunnel(context: context, host: host, port: port)
+            return
+        case .rawTunnel(.noSSLProxyingRule):
             tlsLogger.info("No SSL proxying rule for \(host), passing through as raw tunnel")
             setupRawTunnel(context: context, host: host, port: port)
             return
-        }
-
-        if sslProxyingManager.isAutoPassthrough(host) {
+        case .rawTunnel(.autoPassthrough):
             tlsLogger.info("Auto-passthrough for \(host) (previous TLS rejection), raw tunnel")
             setupRawTunnel(context: context, host: host, port: port)
             return
+        case .intercept:
+            break
         }
 
         let eventLoop = context.eventLoop
@@ -321,6 +344,26 @@ final class TLSInterceptHandler: ChannelInboundHandler, RemovableChannelHandler,
                 self.setupRawTunnel(context: context, host: host, port: port)
             }
         }
+    }
+
+    nonisolated static func initialTunnelMode(
+        host: String,
+        sslProxyingManager: SSLProxyingManager,
+        bypassProxyManager: BypassProxyManager
+    ) -> InitialTunnelMode {
+        if bypassProxyManager.isHostBypassed(host) {
+            return .rawTunnel(.bypassProxyList)
+        }
+
+        if !sslProxyingManager.shouldIntercept(host) {
+            return .rawTunnel(.noSSLProxyingRule)
+        }
+
+        if sslProxyingManager.isAutoPassthrough(host) {
+            return .rawTunnel(.autoPassthrough)
+        }
+
+        return .intercept
     }
 
     nonisolated private func installTLSHandlers(

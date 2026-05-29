@@ -365,9 +365,14 @@ struct ReadinessCoordinatorTests {
         let coordinator = MainContentCoordinator()
         coordinator.selectedTransactionIDs.insert(UUID())
         coordinator.selectedTransactionIDs.insert(UUID())
-        #expect(coordinator.selectedTransactionIDs.count == 2)
+        let workspace = coordinator.workspaceStore.createWorkspace(title: "Other")
+        coordinator.selectedTransactionIDs.insert(UUID())
+        #expect(coordinator.workspaceStore.workspaces[0].selectedTransactionIDs.count == 2)
+        #expect(coordinator.selectedTransactionIDs.count == 1)
         await coordinator.clearSession()
         #expect(coordinator.selectedTransactionIDs.isEmpty)
+        #expect(coordinator.workspaceStore.workspaces[0].selectedTransactionIDs.isEmpty)
+        #expect(workspace.selectedTransactionIDs.isEmpty)
     }
 }
 

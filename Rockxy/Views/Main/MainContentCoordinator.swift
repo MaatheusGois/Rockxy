@@ -80,10 +80,6 @@ final class MainContentCoordinator {
 
     var cachedSessionStore: SessionStore?
 
-    // MARK: - UI State — Selection
-
-    var selectedTransactionIDs: Set<UUID> = []
-
     // MARK: - Sequence Numbering (request-list ordering metadata)
 
     var nextSequenceNumber: Int = 0
@@ -141,6 +137,7 @@ final class MainContentCoordinator {
     var workspaceStore: WorkspaceStore
     var previewTabStore = PreviewTabStore()
     var headerColumnStore = HeaderColumnStore()
+    var filterPresetStore = FilterPresetStore()
 
     // MARK: - UI State — Import/Export
 
@@ -194,6 +191,11 @@ final class MainContentCoordinator {
     var selectedTransaction: HTTPTransaction? {
         get { activeWorkspace.selectedTransaction }
         set { activeWorkspace.selectedTransaction = newValue }
+    }
+
+    var selectedTransactionIDs: Set<UUID> {
+        get { activeWorkspace.selectedTransactionIDs }
+        set { activeWorkspace.selectedTransactionIDs = newValue }
     }
 
     var filterCriteria: FilterCriteria {
