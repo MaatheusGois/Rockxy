@@ -31,12 +31,14 @@ struct FilterCriteria {
     var sidebarPathPrefix: String?
     var sidebarApp: String?
     var sidebarScope: SidebarScope = .allTraffic
+    var exactTransactionID: UUID?
 
     var isEmpty: Bool {
         (!isSearchEnabled || searchText.isEmpty) && methods.isEmpty && statusCodes.isEmpty
             && contentTypes.isEmpty && domains.isEmpty && logLevels.isEmpty
             && activeProtocolFilters.isEmpty && sidebarDomain == nil
             && sidebarPathPrefix == nil && sidebarApp == nil && sidebarScope == .allTraffic
+            && exactTransactionID == nil
     }
 
     var activeFilterCount: Int {

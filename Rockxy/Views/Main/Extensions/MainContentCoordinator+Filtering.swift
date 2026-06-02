@@ -95,6 +95,11 @@ extension MainContentCoordinator {
             if transaction.isTLSFailure {
                 return false
             }
+            if let exactTransactionID = filterCriteria.exactTransactionID,
+               transaction.id != exactTransactionID
+            {
+                return false
+            }
             if let sidebarDomain = filterCriteria.sidebarDomain {
                 guard DomainGrouping.host(transaction.request.host, matchesDomain: sidebarDomain) else {
                     return false
@@ -248,6 +253,11 @@ extension MainContentCoordinator {
         }
         workspace.filteredTransactions = baseList.filter { transaction in
             if transaction.isTLSFailure {
+                return false
+            }
+            if let exactTransactionID = workspace.filterCriteria.exactTransactionID,
+               transaction.id != exactTransactionID
+            {
                 return false
             }
             if let sidebarDomain = workspace.filterCriteria.sidebarDomain {

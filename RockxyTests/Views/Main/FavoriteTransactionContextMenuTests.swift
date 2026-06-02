@@ -136,20 +136,22 @@ struct FavoriteTransactionContextMenuTests {
         #expect(loaded.isEmpty)
     }
 
-    @Test("Open in new tab scopes the workspace to the exact request URL")
-    func openInNewTabUsesExactURLFilter() {
+    @Test("Open in new tab scopes the workspace to the exact request without exposing the URL as search text")
+    func openInNewTabUsesHiddenExactTransactionFilter() {
         let coordinator = MainContentCoordinator()
         let transaction = TestFixtures.makeTransaction(url: "https://api.example.com/v1/users?page=1")
+        let duplicateURL = TestFixtures.makeTransaction(url: "https://api.example.com/v1/users?page=1")
         transaction.isPinned = true
-        coordinator.transactions = [transaction]
+        duplicateURL.isPinned = true
+        coordinator.transactions = [transaction, duplicateURL]
 
         coordinator.openFavoriteTransactionInNewTab(transaction, from: .pinned)
 
         #expect(coordinator.workspaceStore.workspaces.count == 2)
         let workspace = coordinator.workspaceStore.workspaces[1]
         #expect(workspace.filterCriteria.sidebarScope == .pinned)
-        #expect(workspace.filterCriteria.searchField == .url)
-        #expect(workspace.filterCriteria.searchText == transaction.request.url.absoluteString)
+        #expect(workspace.filterCriteria.exactTransactionID == transaction.id)
+        #expect(workspace.filterCriteria.searchText.isEmpty)
         #expect(workspace.filteredTransactions.map(\.id) == [transaction.id])
         #expect(workspace.filteredRows.map(\.id) == [transaction.id])
     }
@@ -165,6 +167,8 @@ struct FavoriteTransactionContextMenuTests {
 
         let workspace = coordinator.workspaceStore.workspaces[1]
         #expect(workspace.filterCriteria.sidebarScope == .saved)
+        #expect(workspace.filterCriteria.exactTransactionID == transaction.id)
+        #expect(workspace.filterCriteria.searchText.isEmpty)
         #expect(workspace.filteredTransactions.map(\.id) == [transaction.id])
         #expect(workspace.filteredRows.map(\.id) == [transaction.id])
     }

@@ -43,6 +43,7 @@ struct ActiveFilterSummaryBar: View {
                     if coordinator.filterCriteria.sidebarScope == .saved {
                         FilterChip(label: String(localized: "Saved")) {
                             coordinator.filterCriteria.sidebarScope = .allTraffic
+                            coordinator.filterCriteria.exactTransactionID = nil
                             coordinator.sidebarSelection = nil
                             coordinator.recomputeFilteredTransactions()
                         }
@@ -51,6 +52,7 @@ struct ActiveFilterSummaryBar: View {
                     if coordinator.filterCriteria.sidebarScope == .pinned {
                         FilterChip(label: String(localized: "Pinned")) {
                             coordinator.filterCriteria.sidebarScope = .allTraffic
+                            coordinator.filterCriteria.exactTransactionID = nil
                             coordinator.sidebarSelection = nil
                             coordinator.recomputeFilteredTransactions()
                         }
