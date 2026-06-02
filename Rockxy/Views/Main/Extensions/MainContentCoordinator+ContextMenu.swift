@@ -298,8 +298,7 @@ extension MainContentCoordinator {
         }
 
         var filter = FilterCriteria.empty
-        filter.searchField = .url
-        filter.searchText = transaction.request.url.absoluteString
+        filter.exactTransactionID = transaction.id
         filter.sidebarScope = switch section {
         case .pinned: .pinned
         case .saved: .saved
