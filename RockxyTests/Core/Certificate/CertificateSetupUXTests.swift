@@ -32,6 +32,29 @@ struct CertificateSetupUXTests {
         #expect(router.route(for: .resetAll) == .resetAll)
     }
 
+    @Test("manage certificates targets the General settings tab")
+    func manageCertificatesSelectsGeneralSettings() {
+        UserDefaults.standard.removeObject(forKey: RockxySettingsTab.defaultsKey)
+        defer { UserDefaults.standard.removeObject(forKey: RockxySettingsTab.defaultsKey) }
+
+        RockxySettingsTab.select(.general)
+
+        #expect(UserDefaults.standard.string(forKey: RockxySettingsTab.defaultsKey) == RockxySettingsTab.general.rawValue)
+    }
+
+    @Test("manual trust command uses the public root CA PEM path")
+    func rootCAPublicPEMPath() {
+        let tempDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rockxy-root-ca-url-\(UUID().uuidString)", isDirectory: true)
+        CertificateStore.storageDirectoryOverride = tempDirectory
+        defer { CertificateStore.storageDirectoryOverride = nil }
+
+        let url = CertificateStore.rootCACertificateURL
+
+        #expect(url.deletingLastPathComponent() == tempDirectory)
+        #expect(url.lastPathComponent == "rootCA.pem")
+    }
+
     @Test("export service builds PEM DER P12 and private key payloads")
     func exportPayloadSuccess() async throws {
         let root = try RootCAGenerator.generate()

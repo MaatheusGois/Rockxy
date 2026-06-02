@@ -11,11 +11,6 @@ description: Latency percentile analysis, slow request detection, payload tracki
 
 The planned Performance Insights surface would turn captured timing and size data into per-endpoint statistics. Today, Rockxy exposes the raw timing data through the request table, inspector Timing tab, and Timeline tab.
 
-<Frame caption="The Performance Insights dashboard showing latency percentiles and slow request flags.">
-  <img className="block dark:hidden" src="/images/performance-insights.png" alt="Rockxy performance insights dashboard" />
-  <img className="hidden dark:block" src="/images/performance-insights-dark.png" alt="Rockxy performance insights dashboard (dark mode)" />
-</Frame>
-
 ## Current Status
 
 There is no dedicated Performance tab or performance-threshold settings page in the current main window. Available performance-oriented surfaces today are:
@@ -72,20 +67,15 @@ Large API responses are a common source of mobile performance problems. Use payl
 
 The timeline view shows a visual waterfall chart of all requests in the current session, ordered by start time. Each request bar is broken into timing phases:
 
-| Phase | Description |
-|---|---|
-| **DNS** | Domain name resolution |
-| **Connect** | TCP connection establishment |
-| **TLS** | TLS handshake (HTTPS only) |
-| **TTFB** | Time to first byte — waiting for the server to respond |
-| **Transfer** | Response body transfer |
+| Phase | Description | Color |
+|---|---|---|
+| **DNS** | Domain name resolution | Cyan |
+| **TCP** | TCP connection establishment | Green |
+| **TLS** | TLS handshake (HTTPS only) | Purple |
+| **TTFB** | Time to first byte — waiting for the server to respond | Orange |
+| **Transfer** | Response body transfer | Blue |
 
 The waterfall makes it easy to spot sequential chains (requests that start only after the previous one completes) and parallel groups (requests that overlap in time).
-
-<Frame caption="Request timeline waterfall showing timing phases and dependency chains.">
-  <img className="block dark:hidden" src="/images/request-timeline.png" alt="Rockxy request timeline waterfall" />
-  <img className="hidden dark:block" src="/images/request-timeline-dark.png" alt="Rockxy request timeline waterfall (dark mode)" />
-</Frame>
 
 ## Dependency Detection
 

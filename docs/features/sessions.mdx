@@ -7,6 +7,10 @@ description: "Save, open, import, and export captured traffic using native .rock
 
 Rockxy supports saving and restoring captured traffic in two formats: the native `.rockxysession` format for full-fidelity session files, and the industry-standard HAR (HTTP Archive) format for cross-tool compatibility.
 
+<Frame caption="Saving and exporting a captured session">
+  <img src="/images/features/DemoSessionExport.png" alt="Session save and export" />
+</Frame>
+
 ## Native .rockxysession Format
 
 Rockxy's native format preserves the full session including metadata, user annotations, and all captured transactions.
@@ -78,18 +82,19 @@ Import errors (invalid format, oversized file, deserialization failure) are show
 
 You can also export individual requests via right-click > **Export > Export as HAR...** in the request list.
 
-<Callout type="info">
+<Note>
   Exported HAR files may contain request bodies, cookies, and authorization headers. Review exports before sharing.
-</Callout>
+</Note>
 
 ## Other Export Options
 
-Beyond file-level session save/export, Rockxy supports copying individual requests in several formats via the right-click context menu:
+Beyond file-level session save/export, Rockxy supports copying individual requests via the right-click **Copy as** submenu in the request list:
 
-- **Copy as cURL** — ready-to-run cURL command.
-- **Copy as Raw HTTP** — full HTTP/1.1 text dump.
-- **Copy as JSON** — structured JSON representation.
-- **Export as HAR...** — save a single request as a `.har` file.
+- **JSON** — structured JSON representation.
+- **HAR Entry** — single-request HAR entry payload.
+- **Raw Request** / **Raw Response** — full HTTP/1.1 text dump of either side.
+- **Request Headers** / **Response Headers** / **Request Body** / **Response Body** / **Request Cookies** / **Response Cookies** — surgical clipboard copies.
+- **Copy as cURL** — available from **Edit > Copy as cURL** (`Cmd+Shift+C`) for the selected request.
 
 ## Limitations
 

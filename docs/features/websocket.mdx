@@ -5,11 +5,6 @@ description: "Capture and inspect WebSocket frames including text, binary, ping/
 
 Rockxy captures WebSocket traffic at the frame level, letting you see every message exchanged between client and server after the initial HTTP upgrade handshake.
 
-<Frame caption="WebSocket frame list showing text and binary messages with direction, timestamps, and payload preview">
-  <img className="block dark:hidden" src="/images/websocket.png" alt="WebSocket frame inspector" />
-  <img className="hidden dark:block" src="/images/websocket-dark.png" alt="WebSocket frame inspector (dark mode)" />
-</Frame>
-
 ## Entry Points
 
 | Action | How to Access |
@@ -40,11 +35,6 @@ Select a WebSocket connection in the traffic list. The **WebSocket** tab auto-se
 | Timestamp | When the frame was captured, with millisecond precision |
 | Size | Payload size in bytes |
 
-<Frame caption="Frame detail view showing a JSON text frame with formatted payload">
-  <img className="block dark:hidden" src="/images/websocket-frame-detail.png" alt="WebSocket frame detail" />
-  <img className="hidden dark:block" src="/images/websocket-frame-detail-dark.png" alt="WebSocket frame detail (dark mode)" />
-</Frame>
-
 Click any frame to expand its full payload in the detail pane below the frame list.
 
 **Direction filter** — use the segmented filter above the frame list to show All frames, only Sent (client → server), or only Received (server → client). Frame counts update in real time.
@@ -69,9 +59,9 @@ A WebSocket connection in Rockxy follows this lifecycle:
 1. **Upgrade Request** — the initial HTTP request with `Upgrade: websocket` appears in the traffic list as a standard HTTP transaction with status `101`.
 2. **Open** — the connection is established. The WebSocket tab becomes active in the inspector.
 3. **Frames** — text, binary, ping, and pong frames are captured and displayed in real time as they flow through the proxy.
-4. **Close** — a close frame (from either side) terminates the connection. The close code and reason are displayed.
+4. **Close** — a close frame (from either side) terminates the connection. The close frame appears in the frame list with its `Close` opcode badge; its payload (status code + reason, per RFC 6455) is visible in the frame detail.
 
-The inspector header shows connection statistics: total frame count, frames sent vs. received, total bytes transferred, and connection duration.
+The inspector header shows the connection state (Active / Closed), connection duration, and per-direction counts and byte totals (Sent: N frames / X KB, Received: N frames / X KB).
 
 ## Supported Opcodes
 

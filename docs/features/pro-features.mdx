@@ -1,104 +1,69 @@
 ---
 title: "Pro Features"
-description: "Understand what Rockxy Pro unlocks today, what remains in Community, and where Pro adds value in the current app."
+description: "What the open-source Rockxy build includes today, the capacity limits applied by DefaultAppPolicy, and which Pro extensions are planned but not yet shipping in this binary."
 ---
 
 # Pro Features
 
-Rockxy Pro is the paid layer on top of the same Rockxy app. You do not install a separate product. Community stays fully usable for everyday local debugging, and Pro adds higher-scale usage plus a small set of paid workflows that are currently shipped in the app.
+Rockxy is designed so that Pro ships inside the same app binary as Community. There is no separate download. The split is governed by `AppPolicy` (`Rockxy/Models/Settings/AppPolicy.swift`) — a `Sendable` protocol injected into `MainContentCoordinator.init(policy:)`. The open-source build always uses `DefaultAppPolicy`; a Pro build swaps in an unlimited variant of the same protocol. There is no `isPro` boolean to branch on, and the current open-source repo does not include a license UI, an upgrade screen, or a Pro policy implementation.
 
-This page describes the Pro experience that is available in the current app build. It does not describe roadmap items or internal licensing mechanics.
+This page describes what the current build actually ships and what is planned but not yet wired up.
 
-## What Pro Unlocks Today
+## What the open-source build includes today
 
-Rockxy Pro currently unlocks three categories of value:
+Everything below is available without any license:
 
-1. **Unlimited usage caps** for high-volume local work
-2. **Advanced Diff** for deeper side-by-side request comparison workflows
-3. **One-click Mobile Setup** for the in-app React Native Android automation flow in Developer Setup Hub
+- HTTP, HTTPS, WebSocket, and GraphQL capture
+- Request replay and editing
+- Map Local, Map Remote, Block, Modify Headers, Network Conditions, Breakpoints
+- Compare workspace (Diff window)
+- Scripting (`scriptingList` + `scriptEditor` windows)
+- Sessions and HAR import / export
+- Developer Setup Hub manual setup and automatic setup for runtime targets
+- MCP server with read-only flow / rule / status tools
 
-## Community vs Pro
+## Capacity limits applied by DefaultAppPolicy
 
-| Area | Community | Pro |
-| --- | --- | --- |
-| Workspace tabs | Up to 8 | Unlimited |
-| Domain favorites | Up to 5 | Unlimited |
-| Active rules per tool | Up to 10 | Unlimited |
-| Enabled scripts | Up to 10 | Unlimited |
-| Live history retention | Up to 1,000 entries | Unlimited |
-| Diff | Basic Compare workspace | Advanced Diff workspace |
-| Developer Setup Hub | Manual setup guidance and validation flows | Adds React Native Android automation |
+These caps are hardcoded in `DefaultAppPolicy` and enforced by the rule, script, workspace, and history layers via the policy gates (`RulePolicyGate`, `ScriptPolicyGate`, etc.) bound at app startup:
 
-## What Stays Available in Community
+| Area | DefaultAppPolicy cap |
+| --- | --- |
+| Workspace tabs | 8 |
+| Domain favorites | 5 |
+| Active rules per tool | 10 |
+| Enabled scripts | 10 |
+| Live history retention | 1,000 entries |
+| Upstream proxy bypass entries | 3 |
+| Upstream SOCKS5 | disabled |
+| Upstream proxy authentication | disabled |
+| Protobuf schema upload | disabled |
+| Stored protobuf schemas | 0 |
 
-Upgrading to Pro does not move Rockxy's core debugging value behind a paywall. Community still includes:
+A Pro build would inject an `AppPolicy` implementation that lifts these limits and turns on the gated upstream-proxy and protobuf capabilities. The current open-source binary always reports the values above.
 
-- HTTP and HTTPS capture
-- WebSocket and GraphQL inspection
-- Request replay
-- Rules and breakpoints
-- Scripting foundations
-- Sessions and HAR import/export
-- Developer Setup Hub manual setup flows
-- Local MCP read workflows
+## Planned Pro extensions (not in this build)
 
-If you never need the higher limits, Advanced Diff, or React Native Android automation, you can keep using Rockxy without a Pro license.
+The following items are part of the planned Pro layer but are **not** present in the current open-source source tree. Treat them as roadmap, not shipping features:
 
-## Shipped Pro Workflows
+- An **Advanced Diff** workspace built on top of the existing Compare flow (Compare History, pinned pairs, section summaries, additional action shortcuts).
+- Additional automation inside Developer Setup Hub for mobile targets (for example a guided React Native Android flow). Today every mobile / framework target with `automationSupport: .none` uses the Manual Setup window.
+- A **License** tab inside Settings, license activation/restore/deactivate flows, and license-state surfacing.
 
-### Advanced Diff
-
-Community includes Rockxy's standard Compare workflow. Pro replaces that with the larger **Advanced Diff** workspace when your license is active.
-
-Advanced Diff adds:
-
-- a larger comparison workspace
-- local **Compare History**
-- pinned comparison pairs
-- section summaries and jump navigation
-- workflow shortcuts such as **Edit & Repeat**, **Replay**, **Map Local**, **Map Remote**, **Breakpoint**, **Network Conditions**, **Copy cURL**, and **Export HAR**
-
-If Pro is not active, Rockxy continues to use the standard Compare workspace instead of Advanced Diff.
-
-### One-click Mobile Setup
-
-Community already includes Developer Setup Hub and its manual setup guides. Pro adds the in-app **React Native Android Setup** automation sheet for supported Android targets.
-
-That Pro workflow helps you:
-
-- review Android target readiness
-- inspect a dry-run plan before any changes are applied
-- confirm Android proxy changes explicitly
-- optionally apply Metro reverse port forwarding
-- keep a manual fallback path available
-
-This is a Pro convenience layer on top of the existing manual guidance. Manual Android setup remains available even without Pro.
-
-## License and Activation
-
-Rockxy Pro licensing now has its own dedicated guide.
-
-Go to [License Management](/features/license-management) for:
-
-- how the perpetual license works
-- what the **Updates until** date means
-- the difference between active, validation-failed, deactivated, and out-of-coverage states
-- activation, restore, deactivation, and transfer steps
-- troubleshooting for activation and validation failures
+When these ship, this page and `License Management` will be updated to describe the actual UI rather than the policy contract.
 
 ## Related Pages
 
 <CardGroup cols={2}>
   <Card title="Request Diff" icon="code-compare" href="/features/diff">
-    Learn the standard Compare workflow and how Advanced Diff fits into it.
+    The Compare workspace that ships in the open-source build today.
   </Card>
   <Card title="Developer Setup Hub" icon="screwdriver-wrench" href="/features/developer-setup-hub">
-    See where Pro adds React Native Android automation.
+    Runtime, client, device, and framework setup — automatic for runtimes, manual for everything else.
   </Card>
   <Card title="License Management" icon="key" href="/features/license-management">
-    Learn how perpetual licensing, updates coverage, activation, and transfer work.
+    Planned licensing model. No license UI ships in the current build.
   </Card>
   <Card title="Settings" icon="gear" href="/customization/settings">
-    Review the exact License tab location and settings-window terminology.
+    Current settings tabs: General, Appearance, Privacy, Tools, GitHub, Plugins, MCP, Advanced.
   </Card>
 </CardGroup>

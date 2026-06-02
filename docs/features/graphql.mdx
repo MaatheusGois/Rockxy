@@ -5,11 +5,6 @@ description: "Automatic detection and inspection of GraphQL operations sent as H
 
 Rockxy detects GraphQL-over-HTTP requests and provides a dedicated inspector tab that parses operations into their query text, variables, and response data — so you do not need to dig through raw JSON bodies manually.
 
-<Frame caption="GraphQL inspector showing a detected query with operation name, query text, and variables">
-  <img className="block dark:hidden" src="/images/graphql.png" alt="GraphQL inspector view" />
-  <img className="hidden dark:block" src="/images/graphql-dark.png" alt="GraphQL inspector view (dark mode)" />
-</Frame>
-
 ## Automatic Detection
 
 Rockxy's `GraphQLDetector` identifies GraphQL requests by checking two conditions:
@@ -35,8 +30,13 @@ If your API uses a non-standard endpoint path and does not include `graphql` in 
 |------|-------------|---------|
 | **Query** | Read-only data fetch. The most common GraphQL operation. | `query GetUser { user(id: 1) { name } }` |
 | **Mutation** | Write operation that modifies server-side data. | `mutation CreatePost { createPost(title: "...") { id } }` |
+| **Subscription** | Long-lived operation that streams updates. Classified by keyword when carried over HTTP POST. | `subscription OnMessageAdded { messageAdded { id } }` |
 
 Rockxy parses the operation keyword from the query text to classify each request. If no keyword is present, the operation defaults to `query` per the GraphQL specification.
+
+<Note>
+Subscription transport over WebSocket (`graphql-ws`, `subscriptions-transport-ws`) is not detected — only POST-bodied operations whose keyword reads `subscription` are classified here.
+</Note>
 
 ## Entry Points
 
@@ -45,11 +45,6 @@ The GraphQL tab activates automatically in the request inspector when a matching
 ## GraphQL Inspector
 
 The **GraphQL** tab in the request inspector breaks down each operation into structured sections:
-
-<Frame caption="GraphQL tab showing operation details with syntax-highlighted query and variable tree">
-  <img className="block dark:hidden" src="/images/graphql-inspector.png" alt="GraphQL inspector detail" />
-  <img className="hidden dark:block" src="/images/graphql-inspector-dark.png" alt="GraphQL inspector detail (dark mode)" />
-</Frame>
 
 ### Operation Name
 

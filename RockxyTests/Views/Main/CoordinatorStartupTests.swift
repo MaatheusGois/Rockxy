@@ -91,4 +91,58 @@ struct CoordinatorStartupTests {
         await RuleEngine.shared.replaceAll(engineSnapshot)
         await RuleTestLock.shared.release()
     }
+
+    @Test("startProxyOnLaunchIfNeeded starts when recordOnLaunch is enabled")
+    func startProxyOnLaunchIfNeededStartsWhenEnabled() {
+        let coordinator = MainContentCoordinator()
+        var settings = AppSettings()
+        settings.recordOnLaunch = true
+        var startCount = 0
+
+        let didStart = coordinator.startProxyOnLaunchIfNeeded(settings: settings) {
+            startCount += 1
+        }
+
+        #expect(didStart)
+        #expect(startCount == 1)
+    }
+
+    @Test("startProxyOnLaunchIfNeeded skips when recordOnLaunch is disabled")
+    func startProxyOnLaunchIfNeededSkipsWhenDisabled() {
+        let coordinator = MainContentCoordinator()
+        var settings = AppSettings()
+        settings.recordOnLaunch = false
+        var startCount = 0
+
+        let didStart = coordinator.startProxyOnLaunchIfNeeded(settings: settings) {
+            startCount += 1
+        }
+
+        #expect(!didStart)
+        #expect(startCount == 0)
+    }
+
+    @Test("startProxyOnLaunchIfNeeded skips while proxy is already running or starting")
+    func startProxyOnLaunchIfNeededSkipsWhenProxyActive() {
+        var settings = AppSettings()
+        settings.recordOnLaunch = true
+
+        let runningCoordinator = MainContentCoordinator()
+        runningCoordinator.isProxyRunning = true
+        var runningStartCount = 0
+        let didStartRunning = runningCoordinator.startProxyOnLaunchIfNeeded(settings: settings) {
+            runningStartCount += 1
+        }
+        #expect(!didStartRunning)
+        #expect(runningStartCount == 0)
+
+        let startingCoordinator = MainContentCoordinator()
+        startingCoordinator.isProxyStarting = true
+        var startingStartCount = 0
+        let didStartStarting = startingCoordinator.startProxyOnLaunchIfNeeded(settings: settings) {
+            startingStartCount += 1
+        }
+        #expect(!didStartStarting)
+        #expect(startingStartCount == 0)
+    }
 }

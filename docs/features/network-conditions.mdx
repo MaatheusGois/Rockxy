@@ -9,11 +9,15 @@ Network Conditions adds artificial latency to matching requests using named pres
 
 Phase 1 simulates added request-start latency only. Bandwidth shaping, packet loss, and jitter are planned for a future release.
 
+<Frame caption="Network Conditions window with latency presets">
+  <img src="/images/features/DemoNetworkConnection.png" alt="Network Conditions window" />
+</Frame>
+
 ## Entry Points
 
 | Action | How to Access |
 |--------|---------------|
-| Network Conditions window | **Tools > Network Conditions...** (`Cmd+Opt+N`) |
+| Network Conditions window | **Tools > Network Conditions...** |
 | Quick-create from request | Right-click a captured request > **Tools > Network Conditions...** |
 | Quick-create from domain | Right-click a domain in the sidebar > **Tools > Network Conditions** |
 
@@ -38,7 +42,7 @@ A warning banner appears in the Network Conditions window if multiple rules are 
 
 ## Window Layout
 
-The Network Conditions window (880 x 480) follows the standard Rockxy tool-window layout:
+The Network Conditions window (1198 x 641) follows the standard Rockxy tool-window layout:
 
 1. **Inline Toolbar** — Disable All button, Search field, Add Rule button
 2. **Info Bar** — help text describing the feature
@@ -49,7 +53,7 @@ The Network Conditions window (880 x 480) follows the standard Rockxy tool-windo
 
 ### From the dedicated window
 
-1. Open **Tools > Network Conditions...** or press `Cmd+Opt+N`.
+1. Open **Tools > Network Conditions...** from the Tools menu.
 2. Click **Add Rule** or the **+** button.
 3. Enter a rule name and URL pattern (Exact Path, Subpaths, or Regex).
 4. Select a preset or choose Custom and enter a latency value in milliseconds.
@@ -80,7 +84,7 @@ HTTPS requests are delayed after TLS interception, so the delay applies to the d
 
 ## Persistence
 
-Network Conditions rules are persisted alongside all other rules in `~/Library/Application Support/com.amunx.rockxy.community/rules.json` for the Community build. They survive app restarts and can be exported/imported through the standard rule system.
+Network Conditions rules are persisted alongside all other rules under `~/Library/Application Support/com.amunx.rockxy/` (the directory is bundle-driven via `RockxyIdentity.current.appSupportDirectoryName`). They survive app restarts and can be exported or imported through the standard rule system.
 
 ## Limitations
 

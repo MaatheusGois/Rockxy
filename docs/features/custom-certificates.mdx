@@ -1,0 +1,265 @@
+---
+title: "Custom Certificates"
+description: "Override Rockxy's root CA, defeat server-side certificate pinning, and supply client certificates for mutual TLS — all from one Custom Certificates window."
+---
+
+# Custom Certificates
+
+Rockxy can substitute its built-in TLS material with certificates you supply. There are three independent slots, each solving a different problem:
+
+| Kind | What it overrides | Used when |
+|---|---|---|
+| **Root** | Rockxy's auto-generated root CA | You want every per-host MITM certificate Rockxy mints to be signed by **your** root (for example a corporate root already trusted across your fleet). |
+| **Server** | The leaf certificate Rockxy presents *to clients* during the handshake | A target app pins a specific server certificate (cert pinning / SPKI pinning) and refuses Rockxy's auto-generated leaf. Supplying the exact cert the app pins lets the connection succeed. |
+| **Client** | The client identity Rockxy presents *to upstream servers* | The upstream endpoint requires **mutual TLS** — the server only accepts requests carrying a specific client certificate. |
+
+All three kinds live in the same window and share the same import flow, but they act at different stages of the TLS handshake.
+
+<Frame caption="Custom Certificates window with the segmented Root / Server / Client picker">
+  <img src="/images/features/CertManagement.png" alt="Custom Certificates window" />
+</Frame>
+
+## Entry Points
+
+| Action | How to Access |
+|--------|---------------|
+| Open Custom Certificates window | **Certificate → Add Custom Certificates…** in the menu bar |
+| Switch between kinds | Segmented picker at the top of the window: **Root Certificate / Server Certificates / Client Certificates** |
+| Import a root certificate | **Root Certificate** tab → **Import ▾ → Import P12…** |
+| Import a server / client certificate | **Server Certificates** or **Client Certificates** tab → **Import ▾ → Import PEM / DER…** or **Import P12…** |
+| Remove a custom root and fall back to Rockxy's default | **Revert** button (visible only on the Root tab) |
+| Remove all custom server / client certificates of the current kind | **Delete** button |
+
+The Custom Certificates window is its own scene (`customCertificates`), so you can keep it open beside the main capture window.
+
+## Custom Root Certificate
+
+By default Rockxy generates its own root CA on first launch, stores the private key in Keychain, and uses it to sign every per-host MITM certificate. Importing a custom root tells Rockxy to use **your** key pair instead for that signing step.
+
+Common reasons to do this:
+
+- **Corporate root already trusted** — your IT team has pushed a custom root CA into every employee's keychain via MDM. Reuse it so users don't have to trust an additional Rockxy CA.
+- **Shared root across machines** — multiple developers share the same MITM root so a captured session opens cleanly on any teammate's Rockxy install.
+- **Long-lived root for CI machines** — install one root with a long validity period instead of regenerating per machine.
+
+### Behavior
+
+- When a custom root is active, the Root tab shows **Custom Root Active** and lists the import date, validity window, and SHA-256 fingerprint of the imported cert.
+- Rockxy uses the most recently imported root. Importing again replaces the previous one.
+- **Revert** removes the custom root and reactivates Rockxy's default root.
+- After importing a custom root, you still need to make sure that root is trusted on every device that will route traffic through Rockxy — Rockxy does **not** push the custom root into the macOS keychain trust store for you.
+
+<Note>
+Generating a root that complies with Apple's TLS server policy is only required if you want devices to **trust** the root for HTTPS interception. The custom root identity you import here must be a PKCS#12 file (`.p12` / `.pfx`) containing both the X.509 root CA certificate and its matching private key — Rockxy uses that key to sign downstream leaf certs.
+</Note>
+
+## Custom Server Certificates
+
+If a target app validates the server certificate against a hard-coded fingerprint or public-key hash (cert pinning), Rockxy's auto-generated MITM leaf will be rejected and the TLS handshake will fail. The fix is to supply the **exact** certificate the app pins, and have Rockxy present that certificate during the client-facing half of the MITM handshake.
+
+### When this works
+
+- You have access to the real server's certificate **and** its matching private key (for example, your own backend).
+- You want Rockxy to behave as that exact server for traffic to a specific host.
+
+### When this does **not** work
+
+- The certificate is pinned to a third-party service you don't control — you won't have the upstream private key, and no amount of certificate import can defeat that pinning.
+- The app uses **SPKI pinning** against the upstream public key and rotates leaf certificates frequently — pinning is by design resistant to MITM.
+
+### Import flow
+
+1. Switch to the **Server Certificates** tab.
+2. Click **Import → Import PEM / DER…** to pick separate certificate and key files, or **Import → Import P12…** to pick a bundled identity.
+3. For PEM / DER import, pick the certificate file, then pick the private key file (Rockxy prompts for them in two separate file pickers). For P12 import, pick the `.p12` / `.pfx` file and enter its password.
+4. Enter the **host pattern** this certificate should apply to (see [Host Patterns](#host-patterns) below).
+5. Rockxy validates the cert/key pair, persists the metadata, and stores the private key in Keychain.
+
+Each subsequent TLS handshake to a matching host is served using the imported leaf — bypassing Rockxy's per-host generator entirely.
+
+## Custom Client Certificates
+
+For endpoints that require **mutual TLS (mTLS)**, the upstream server demands that the client present a certificate during the handshake. Supply that client identity here, scoped to the upstream host pattern that requires it.
+
+### Import flow
+
+Identical to server certificates: import either separate PEM / DER cert + key files or a bundled P12 identity, then enter the host pattern. The difference is **who** the certificate is presented to:
+
+| Kind | Presented during | To |
+|---|---|---|
+| Server | Rockxy → client half of the MITM | The app being debugged |
+| Client | Rockxy → upstream half of the MITM | The real upstream server |
+
+A single mTLS workflow often pairs a client certificate (so Rockxy can talk to the upstream) with a server certificate (so the pinned client app accepts Rockxy's reply).
+
+## File Format
+
+Rockxy accepts both bundled identities and separate certificate/key files:
+
+- **Root Certificate** imports use a PKCS#12 file (`.p12` / `.pfx`) containing the root certificate and matching private key.
+- **Server Certificates** and **Client Certificates** can use either a PKCS#12 file (`.p12` / `.pfx`) or separate files.
+- Separate certificate files can be PEM (`-----BEGIN CERTIFICATE-----`) or DER (`.cer`, `.crt`, `.der`).
+- Separate private key files can be PEM (`-----BEGIN PRIVATE KEY-----`, `-----BEGIN RSA PRIVATE KEY-----`, or `-----BEGIN EC PRIVATE KEY-----`) or DER.
+
+If your material is in a different format, these OpenSSL commands are useful:
+
+```bash
+# PEM cert + PEM key → PKCS#12 (.p12 / .pfx)
+openssl pkcs12 -export -in cert.pem -inkey key.pem -out identity.p12
+
+# PKCS#12 (.p12 / .pfx) → separate PEM cert + PEM key
+openssl pkcs12 -in identity.p12 -clcerts -nokeys -out cert.pem
+openssl pkcs12 -in identity.p12 -nocerts -nodes -out key.pem
+
+# DER (.cer / .der) → PEM
+openssl x509 -inform der -in cert.der -out cert.pem
+```
+
+Rockxy validates the imported pair on import:
+
+- The certificate and the private key must form a matching identity (Rockxy compares the SubjectPublicKeyInfo bytes). Mismatched files raise **"The certificate and private key do not belong to the same identity."**
+- For server and client kinds, the pair is additionally loaded through SwiftNIO's `TLSConfiguration` to confirm it forms a valid server identity at the protocol layer.
+
+## Host Patterns
+
+Server and client certificates apply only to hosts that match the pattern you entered. Custom certificate matching uses a restricted form — **simpler than rule wildcards elsewhere in Rockxy**:
+
+| Pattern | Matches | Does NOT match |
+|---|---|---|
+| `api.example.com` | Exactly `api.example.com` | `example.com`, `api.example.com:8443`, `staging.api.example.com` |
+| `*.example.com` | Any direct or nested subdomain (`api.example.com`, `a.b.example.com`) | The bare root `example.com` |
+
+Rules of thumb:
+
+- Comparison is case-insensitive (`API.Example.COM` matches `api.example.com`).
+- Only a leading `*.` wildcard is recognized — embedded wildcards and regex are **not** supported in this window.
+- When multiple patterns of the same kind would match, the **most recently imported** one wins. Older matching entries are evicted when you re-import the same pattern.
+
+## Storage and Security
+
+| What | Where |
+|---|---|
+| Certificate metadata (display name, host pattern, validity window, fingerprint) | `<Rockxy app support>/Certificates/custom-certificates.json` |
+| Private key material | macOS Keychain, one item per import (account name `custom-certificate.<kind>.<uuid>`) |
+
+The private key never lives in the JSON file. Deleting an entry from the UI removes both the JSON record and the matching Keychain item. **Reset all Rockxy Certificates** (Certificate menu) also wipes custom certificate records along with Rockxy's generated root CA.
+
+<Warning>
+Private keys you import here have the same blast radius as Rockxy's own root: anything holding the key can impersonate the matching identity. Treat exports of cert + key the same way you treat any other TLS private key — store them encrypted, scope filesystem permissions tightly, and rotate if you suspect exposure.
+</Warning>
+
+## How to Generate Self-Signed Certificates (Apple-Compliant)
+
+Apple has tightened its TLS server certificate policy several times. As of macOS 10.15 / iOS 13 a self-signed leaf must satisfy a specific list of requirements or the system rejects it during validation — even if the issuing root is trusted. Use the recipe below when you need a custom server certificate that real macOS/iOS clients will accept (for example, a self-signed server identity you want to pin against).
+
+The full policy is published by Apple at [Requirements for trusted certificates in iOS 13 and macOS 10.15](https://support.apple.com/en-us/HT210176). Key constraints:
+
+- **Key**: RSA ≥ 2048 bits, or ECC curve P-256 / P-384.
+- **Signature**: SHA-256 or stronger (no SHA-1).
+- **Validity**: ≤ 825 days from `notBefore` to `notAfter`.
+- **Extended Key Usage**: must include `id-kp-serverAuth` (`1.3.6.1.5.5.7.3.1`).
+- **Subject Alternative Name**: required. The DNS SAN must list every hostname the cert will serve — the legacy Common Name fallback no longer works.
+
+### 1. Create a self-signed root CA
+
+```bash
+# Root CA private key (P-256 ECC, modern + fast)
+openssl ecparam -name prime256v1 -genkey -noout -out rockxy-root.key
+
+# Root CA certificate, valid 10 years
+openssl req -x509 -new -nodes \
+  -key rockxy-root.key \
+  -sha256 \
+  -days 3650 \
+  -out rockxy-root.pem \
+  -subj "/CN=Rockxy Custom Root CA/O=Your Org"
+```
+
+### 2. Create the leaf certificate
+
+Write an OpenSSL extensions file (`leaf.ext`) describing the SANs and required extensions:
+
+```ini
+authorityKeyIdentifier = keyid,issuer
+basicConstraints       = CA:FALSE
+keyUsage               = digitalSignature, keyEncipherment
+extendedKeyUsage       = serverAuth
+subjectAltName         = @alt_names
+
+[alt_names]
+DNS.1 = api.example.com
+DNS.2 = *.example.com
+```
+
+Generate the leaf key, a CSR, and sign it with the root:
+
+```bash
+# Leaf key
+openssl ecparam -name prime256v1 -genkey -noout -out leaf.key
+
+# CSR (CN can be anything — SAN is what's validated)
+openssl req -new \
+  -key leaf.key \
+  -out leaf.csr \
+  -subj "/CN=api.example.com/O=Your Org"
+
+# Sign with root, applying the extensions file. 825 days = Apple's max.
+openssl x509 -req \
+  -in leaf.csr \
+  -CA rockxy-root.pem \
+  -CAkey rockxy-root.key \
+  -CAcreateserial \
+  -out leaf.pem \
+  -days 825 \
+  -sha256 \
+  -extfile leaf.ext
+```
+
+### 3. Import into Rockxy
+
+- Open **Certificate → Add Custom Certificates…**
+- Choose the **Server Certificates** tab → **Import → Import PEM / DER…**
+- Pick `leaf.pem` when prompted for the certificate, then `leaf.key` for the private key.
+- Enter the host pattern (e.g. `api.example.com` or `*.example.com`) and confirm.
+
+### 4. Trust the root on the device
+
+For real iOS/macOS clients to accept the leaf, the **root** (`rockxy-root.pem`) must be installed and trusted on the device — exactly like Rockxy's default root. See [HTTPS Interception](/features/https-interception) and the platform-specific setup guides under **Setup Guides → Device Debugging**.
+
+<Tip>
+Verify the leaf passes Apple's policy locally before pushing to a device:
+
+```bash
+openssl x509 -in leaf.pem -noout -text | \
+  grep -E "Signature Algorithm|Public Key|DNS:|Extended Key Usage|Not Before|Not After"
+```
+
+Confirm you see `sha256WithRSAEncryption` (or ECDSA-SHA256), at least one `DNS:` SAN, `TLS Web Server Authentication`, and a validity window ≤ 825 days.
+</Tip>
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| "The certificate and private key do not belong to the same identity." | The certificate and key are from different identities. | Re-export the matching pair, or import a `.p12` / `.pfx` bundle that contains both. |
+| "The private key for this certificate could not be found in Keychain." | The Keychain item was deleted out-of-band (manual cleanup, machine migration, etc.) but the JSON metadata still references it. | Delete the orphan entry from the Custom Certificates window and re-import. |
+| Server cert imports but TLS still fails on the device | The pinned app validates more than just the leaf — for example SPKI pinning against the **upstream** public key. | Custom server certs can't defeat upstream SPKI pinning. The app must be repackaged or its pinning disabled. |
+| Custom root active but devices show "not trusted" | The custom root was imported into Rockxy but not into the device's trust store. | Install and trust the root on every device routing through Rockxy — see [HTTPS Interception](/features/https-interception). |
+| mTLS handshake to upstream fails after importing a client cert | The host pattern doesn't match the actual upstream hostname (case, port suffix, or subdomain mismatch). | Re-check the [Host Patterns](#host-patterns) rules. Patterns ignore ports and only match `*.` as a subdomain wildcard. |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="HTTPS Interception" icon="lock" href="/features/https-interception">
+    The default MITM flow that custom certificates extend.
+  </Card>
+  <Card title="Upstream Proxy" icon="arrow-right-arrow-left" href="/features/upstream-proxy">
+    Combine custom client certs with an upstream proxy for complex test setups.
+  </Card>
+  <Card title="Device Setup Guides" icon="mobile" href="/setup-guides/device-debugging">
+    Install and trust the root CA on iOS, Android, and other clients.
+  </Card>
+  <Card title="Certificates & Trust" icon="shield" href="/getting-started/certificates-and-trust">
+    First-time setup for Rockxy's default root CA.
+  </Card>
+</CardGroup>

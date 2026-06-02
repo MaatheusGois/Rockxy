@@ -85,6 +85,7 @@ struct ContentView: View {
             coordinator.setupSSLProxyingObserver()
             coordinator.loadInitialRules()
             coordinator.refreshProxyOverrideStatus()
+            coordinator.startProxyOnLaunchIfNeeded()
         }
         .modifier(ConditionalScriptingWindowOpeners(isEnabled: managesLifecycle, openWindow: openWindow))
         .alert(

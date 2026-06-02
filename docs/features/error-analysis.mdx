@@ -11,11 +11,6 @@ description: Automatic error detection, pattern grouping, and cross-source corre
 
 The planned Error Analysis surface would detect errors from network traffic and application logs, group them by pattern, and correlate errors across sources. Today, Rockxy exposes the underlying traffic, logs, timing, and filters, but not this grouped analysis workflow.
 
-<Frame caption="The Error Analysis view showing grouped error patterns with occurrence counts.">
-  <img className="block dark:hidden" src="/images/error-analysis.png" alt="Rockxy error analysis view" />
-  <img className="hidden dark:block" src="/images/error-analysis-dark.png" alt="Rockxy error analysis view (dark mode)" />
-</Frame>
-
 ## Current Status
 
 There is no dedicated Errors tab in the current main window. Today, error-oriented debugging happens through the request list status codes, the inspector, the Logs tab, and filtering. The sections below describe the intended design direction, not an available production workflow.

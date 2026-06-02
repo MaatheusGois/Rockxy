@@ -389,6 +389,23 @@ final class MainContentCoordinator {
         }
     }
 
+    @discardableResult
+    func startProxyOnLaunchIfNeeded(
+        settings: AppSettings = AppSettingsStorage.load(),
+        startHandler: (() -> Void)? = nil
+    ) -> Bool {
+        guard settings.recordOnLaunch, !isProxyRunning, !isProxyStarting else {
+            return false
+        }
+
+        if let startHandler {
+            startHandler()
+        } else {
+            startProxy()
+        }
+        return true
+    }
+
     // MARK: Private
 
     nonisolated(unsafe) private var rulesObserver: NSObjectProtocol?
