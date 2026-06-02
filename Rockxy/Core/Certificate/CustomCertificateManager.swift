@@ -1,6 +1,7 @@
 import Crypto
 import Foundation
 import NIOSSL
+import Security
 import SwiftASN1
 import X509
 
@@ -45,6 +46,189 @@ struct CustomTLSIdentity: Sendable {
         get throws {
             try .privateKey(NIOSSLPrivateKey(bytes: Array(privateKeyPEM.utf8), format: .pem))
         }
+    }
+}
+
+// MARK: - CustomCertificateImportIdentity
+
+struct CustomCertificateImportIdentity: Equatable {
+    let displayName: String
+    let certificatePEM: String
+    let privateKeyPEM: String
+
+    static func fromCertificateAndPrivateKey(
+        certificateData: Data,
+        privateKeyData: Data,
+        displayName: String
+    ) throws -> Self {
+        let certificate = try certificatePEM(from: certificateData)
+        let privateKeyPEM = try privateKeyPEM(from: privateKeyData)
+        return Self(displayName: displayName, certificatePEM: certificate, privateKeyPEM: privateKeyPEM)
+    }
+
+    static func fromPKCS12(data: Data, displayName: String, passphrase: String) throws -> Self {
+        do {
+            return try fromNIOSSLPKCS12(data: data, displayName: displayName, passphrase: passphrase)
+        } catch let error as CustomCertificateImportError {
+            throw error
+        } catch {
+            return try fromSecurityPKCS12(data: data, displayName: displayName, passphrase: passphrase)
+        }
+    }
+
+    private static func fromNIOSSLPKCS12(data: Data, displayName: String, passphrase: String) throws -> Self {
+        let bundle = try pkcs12Bundle(data: data, passphrase: passphrase)
+        guard let leafCertificate = bundle.certificateChain.first else {
+            throw CustomCertificateImportError.missingCertificate
+        }
+
+        let certificateDER = try leafCertificate.toDERBytes()
+        let certificate = try Certificate(derEncoded: certificateDER)
+
+        return Self(
+            displayName: displayName,
+            certificatePEM: try pem(certificate),
+            privateKeyPEM: try privateKeyPEM(from: Data(try bundle.privateKey.derBytes))
+        )
+    }
+
+    private static func fromSecurityPKCS12(data: Data, displayName: String, passphrase: String) throws -> Self {
+        let identity = try secItemImportIdentity(data: data, passphrase: passphrase)
+        let certificate = try certificate(from: identity.certificate)
+        let privateKey: Certificate.PrivateKey
+        do {
+            privateKey = try Certificate.PrivateKey(identity.privateKey)
+        } catch {
+            throw CustomCertificateImportError.invalidPrivateKey
+        }
+
+        return Self(
+            displayName: displayName,
+            certificatePEM: try pem(certificate),
+            privateKeyPEM: try privateKey.serializeAsPEM().pemString
+        )
+    }
+
+    private static func pkcs12Bundle(data: Data, passphrase: String) throws -> NIOSSLPKCS12Bundle {
+        let bytes = Array(data)
+        if passphrase.isEmpty {
+            do {
+                return try NIOSSLPKCS12Bundle(buffer: bytes)
+            } catch {
+                return try NIOSSLPKCS12Bundle(buffer: bytes, passphrase: [UInt8]())
+            }
+        }
+        return try NIOSSLPKCS12Bundle(buffer: bytes, passphrase: Array(passphrase.utf8))
+    }
+
+    private static func secItemImportIdentity(data: Data, passphrase: String) throws -> (certificate: SecCertificate, privateKey: SecKey) {
+        var format = SecExternalFormat.formatPKCS12
+        var itemType = SecExternalItemType.itemTypeAggregate
+        let importPassphrase = passphrase as NSString
+        let keyAttributes = [kSecAttrIsExtractable] as NSArray
+        var keyParams = SecItemImportExportKeyParameters()
+        keyParams.version = UInt32(SEC_KEY_IMPORT_EXPORT_PARAMS_VERSION)
+        keyParams.passphrase = Unmanaged.passUnretained(importPassphrase)
+        keyParams.keyAttributes = Unmanaged.passUnretained(keyAttributes)
+        var importedItems: CFArray?
+        let status = SecItemImport(
+            data as CFData,
+            "p12" as CFString,
+            &format,
+            &itemType,
+            SecItemImportExportFlags(),
+            &keyParams,
+            nil,
+            &importedItems
+        )
+        guard status == errSecSuccess, let importedItems else {
+            return try secPKCS12Identity(data: data, passphrase: passphrase)
+        }
+        return try identity(from: importedItems)
+    }
+
+    private static func secPKCS12Identity(data: Data, passphrase: String) throws -> (certificate: SecCertificate, privateKey: SecKey) {
+        var importedItems: CFArray?
+        let options = [kSecImportExportPassphrase as String: passphrase] as CFDictionary
+        let status = SecPKCS12Import(data as CFData, options, &importedItems)
+        guard status == errSecSuccess, let importedItems else {
+            throw CustomCertificateImportError.invalidPKCS12
+        }
+        return try identity(from: importedItems)
+    }
+
+    private static func identity(from importedItems: CFArray) throws -> (certificate: SecCertificate, privateKey: SecKey) {
+        let items = importedItems as NSArray
+        let rawIdentity = items.compactMap { item -> Any? in
+            if CFGetTypeID(item as AnyObject) == SecIdentityGetTypeID() {
+                return item
+            }
+            return (item as? [String: Any])?[kSecImportItemIdentity as String]
+        }.first
+        guard let rawIdentity else {
+            throw CustomCertificateImportError.invalidPKCS12
+        }
+
+        let identityObject = rawIdentity as AnyObject
+        guard CFGetTypeID(identityObject) == SecIdentityGetTypeID() else {
+            throw CustomCertificateImportError.invalidPKCS12
+        }
+        let identity = unsafeBitCast(identityObject, to: SecIdentity.self)
+
+        var certificate: SecCertificate?
+        guard SecIdentityCopyCertificate(identity, &certificate) == errSecSuccess,
+              let certificate else {
+            throw CustomCertificateImportError.missingCertificate
+        }
+
+        var privateKey: SecKey?
+        guard SecIdentityCopyPrivateKey(identity, &privateKey) == errSecSuccess,
+              let privateKey else {
+            throw CustomCertificateImportError.invalidPrivateKey
+        }
+
+        return (certificate, privateKey)
+    }
+
+    private static func certificate(from secCertificate: SecCertificate) throws -> Certificate {
+        try Certificate(derEncoded: Array(SecCertificateCopyData(secCertificate) as Data))
+    }
+
+    private static func certificatePEM(from data: Data) throws -> String {
+        if let pemString = String(data: data, encoding: .utf8),
+           let certificate = try? Certificate(pemEncoded: pemString)
+        {
+            return try pem(certificate)
+        }
+
+        do {
+            let certificate = try Certificate(derEncoded: Array(data))
+            return try pem(certificate)
+        } catch {
+            throw CustomCertificateImportError.invalidCertificate
+        }
+    }
+
+    private static func privateKeyPEM(from data: Data) throws -> String {
+        if let pemString = String(data: data, encoding: .utf8),
+           let privateKey = try? Certificate.PrivateKey(pemEncoded: pemString)
+        {
+            return try privateKey.serializeAsPEM().pemString
+        }
+
+        for discriminator in ["PRIVATE KEY", "EC PRIVATE KEY", "RSA PRIVATE KEY"] {
+            let pemDocument = PEMDocument(type: discriminator, derBytes: Array(data))
+            if let privateKey = try? Certificate.PrivateKey(pemDocument: pemDocument) {
+                return try privateKey.serializeAsPEM().pemString
+            }
+        }
+        throw CustomCertificateImportError.invalidPrivateKey
+    }
+
+    private static func pem(_ certificate: Certificate) throws -> String {
+        var serializer = DER.Serializer()
+        try certificate.serialize(into: &serializer)
+        return PEMDocument(type: "CERTIFICATE", derBytes: serializer.serializedBytes).pemString
     }
 }
 
@@ -290,6 +474,28 @@ enum CustomCertificateError: LocalizedError, Equatable {
             String(localized: "The certificate and private key do not belong to the same identity.")
         case .missingPrivateKey:
             String(localized: "The private key for this certificate could not be found in Keychain.")
+        }
+    }
+}
+
+// MARK: - CustomCertificateImportError
+
+enum CustomCertificateImportError: LocalizedError, Equatable {
+    case invalidCertificate
+    case invalidPrivateKey
+    case invalidPKCS12
+    case missingCertificate
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidCertificate:
+            String(localized: "The selected certificate must be a valid PEM or DER X.509 certificate.")
+        case .invalidPrivateKey:
+            String(localized: "The selected private key must be a valid PEM or DER private key.")
+        case .invalidPKCS12:
+            String(localized: "The selected P12 file could not be imported. Check that the file contains a certificate and private key, then try the correct password.")
+        case .missingCertificate:
+            String(localized: "The selected P12 file does not contain a certificate.")
         }
     }
 }

@@ -7,6 +7,10 @@ description: "Native macOS tabs that split a single capture into independently f
 
 A workspace is an independent view onto the same live traffic stream. Each tab keeps its own filter, sort, sidebar selection, inspector tab, and inspector layout — but every tab is reading the **same underlying capture**, so traffic shows up in all of them at once. Workspaces are native macOS tabs at the window level: drag, reorder, rename in place, and `Cmd`-click as expected.
 
+<Frame caption="Multiple workspace tabs in the main window">
+  <img src="/images/features/DemoMultipleTabWorkingSpace.png" alt="Workspace tabs" />
+</Frame>
+
 ## Why workspaces
 
 A single capture often serves several investigations at once:
@@ -47,8 +51,7 @@ In other words, you cannot "stop recording" in one tab and "keep recording" in a
 | Next tab | <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>]</kbd> |
 | Previous tab | <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>[</kbd> |
 | Reorder | Drag the tab to a new position |
-| Duplicate | Right-click the tab → **Duplicate Tab** (preserves filter and selection) |
-| Close other tabs | Right-click the tab → **Close Other Tabs** |
+| Tab context menu | Right-click a tab for **Rename Tab**, **Close Tab**, and **New Tab** |
 
 Up to **8 tabs** can be open at a time (`AppPolicy.maxWorkspaceTabs`). Hitting the limit silently no-ops the new-tab action — close one to make room.
 
@@ -68,7 +71,7 @@ Keep your default **All Traffic** tab unchanged. In a second tab, set a filter r
 
 ### Replay and compare
 
-When replaying a request, open the request in a fresh tab via the favorites context menu (**Open in New Tab**). The new tab inherits the originating filter and selection, so the replayed flow lands next to its source request rather than buried in the global list.
+When focusing on a specific app or domain, use the sidebar context menu **Open in New Tab** to spawn a fresh workspace filtered to that source. The replayed flow then lands next to its source request rather than buried in the global list.
 
 ## Per-tab sort
 

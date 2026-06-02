@@ -7,11 +7,6 @@ description: Capture OSLog streams, correlate application logs with network requ
 
 Rockxy captures application logs alongside network traffic and correlates them by timestamp. When a network request fails, nearby log output can help you line up app behavior with proxy traffic without switching to Console.app.
 
-<Frame caption="The Logs tab showing captured OSLog entries correlated with network requests.">
-  <img className="block dark:hidden" src="/images/log-intelligence.png" alt="Rockxy log intelligence view" />
-  <img className="hidden dark:block" src="/images/log-intelligence-dark.png" alt="Rockxy log intelligence view (dark mode)" />
-</Frame>
-
 ## Entry Points
 
 | Action | How to Access |
@@ -36,17 +31,11 @@ Rockxy captures application logs alongside network traffic and correlates them b
 
 ## Capturing Logs
 
-When log capture is enabled in app settings, Rockxy streams logs in real time from configured sources.
+When log capture is enabled, Rockxy streams entries in real time from the configured sources. OSLog entries are pulled from `OSLogStore` (scoped to the current process, polled every 500 ms) and rendered as they arrive.
 
-To reduce noise, filter by specific apps or subsystems:
-
-1. Click the **Filter** button in the Logs toolbar.
-2. Select the target application, subsystem, or category.
-3. Only matching log entries appear in the list.
-
-<Tip>
-Filter by your app's OSLog subsystem (e.g., `com.yourcompany.yourapp`) to eliminate system noise and focus on your own log output. You can add multiple subsystem filters.
-</Tip>
+<Note>
+The current Logs tab renders a chronological list with a color-coded severity badge per row. Source, subsystem, level, keyword, and time-range filtering are planned — they are not yet exposed in the UI.
+</Note>
 
 ## Log Levels
 
@@ -59,7 +48,7 @@ Filter by your app's OSLog subsystem (e.g., `com.yourcompany.yourapp`) to elimin
 | Error | Error conditions that caused a failure | Red |
 | Fault | Critical system-level failures | Purple |
 
-Click any level badge in the filter bar to show or hide entries at that level. Combine level filters with source and keyword filters for precise results.
+Levels mirror Apple's OSLog severity ladder. Each entry's badge in the Logs list is colored using the values above.
 
 ## Log-Request Correlation
 
@@ -81,7 +70,7 @@ The current Settings UI does not expose a dedicated Logs tab or buffer-size cont
 
 ## Log Filtering
 
-Filter the log list using any combination of:
+Filtering is a planned addition to the Logs surface. Once it lands, you will be able to combine:
 
 - **Level** — show only entries at or above a minimum severity level.
 - **Source** — OSLog, stdout/stderr, or custom plugin sources.
@@ -89,7 +78,7 @@ Filter the log list using any combination of:
 - **Time Range** — restrict to entries within a specific time window.
 - **Process** — filter by process name or PID.
 
-Filters are combinable — for example, show only Error-level entries from a specific subsystem containing the word "timeout" in the last 5 minutes.
+Today, the Logs tab shows every captured entry in chronological order; narrow the noise at the source by enabling capture only when you need it.
 
 ## Next Steps
 

@@ -13,9 +13,9 @@ WebSocket Protobuf Decoding adds an on-demand decoder for binary WebSocket frame
 |--------|---------------|
 | Capture WebSocket frames | Response inspector > WebSocket tab |
 | Inspect a binary frame | Select a WebSocket binary frame |
-| Decode as Protobuf | Select Protobuf in the frame detail view |
-| Manage mapping rules | Tools > Protobuf... |
-| Review schema list | Tools > Protobuf... > Protobuf Schema... |
+| Decode as Protobuf | Switch the frame detail's payload picker to **Protobuf** (auto-selected when a frame looks like Protobuf) |
+| Manage mapping rules | **Tools > Protobuf…** (`Cmd + Option + U`) |
+| Review schema list | **Tools > Protobuf…** > **Protobuf Schema…** |
 
 The decoder runs on demand when the inspector requests it. WebSocket capture itself stays on the existing hot path, so Rockxy does not decode every frame while proxying traffic.
 

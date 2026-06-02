@@ -68,6 +68,7 @@
         "pages": [
           "features/diff",
           "features/scripting",
+          "features/custom-certificates",
           "features/upstream-proxy",
           "features/mcp"
         ]

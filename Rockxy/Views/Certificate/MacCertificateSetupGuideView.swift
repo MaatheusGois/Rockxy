@@ -1,12 +1,15 @@
+import AppKit
 import SwiftUI
 
 // MARK: - MacCertificateSetupGuideView
 
 struct MacCertificateSetupGuideView: View {
+    @Environment(\.openSettings) private var openSettings
     @State private var selectedTab = Tab.automatic
     @State private var snapshot: RootCAStatusSnapshot?
     @State private var isWorking = false
     @State private var errorMessage: String?
+    @State private var manualTrustCopyMessage: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,7 +23,7 @@ struct MacCertificateSetupGuideView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .frame(width: 360)
-            .padding(.top, 20)
+            .padding(.top, 14)
 
             Group {
                 switch selectedTab {
@@ -30,13 +33,13 @@ struct MacCertificateSetupGuideView: View {
                     manualTab
                 }
             }
-            .padding(.horizontal, 32)
-            .padding(.top, 18)
+            .padding(.horizontal, 28)
+            .padding(.top, 14)
 
-            Spacer(minLength: 18)
+            Spacer(minLength: 10)
             footer
         }
-        .frame(minWidth: 900, minHeight: 560)
+        .frame(minWidth: 820, minHeight: 500)
         .task { await refreshStatus(validate: true) }
         .alert(String(localized: "Certificate Setup Failed"), isPresented: Binding(
             get: { errorMessage != nil },
@@ -51,19 +54,19 @@ struct MacCertificateSetupGuideView: View {
     private var header: some View {
         HStack(spacing: 14) {
             Image(systemName: "laptopcomputer")
-                .font(.system(size: 40, weight: .regular))
+                .font(.system(size: 32, weight: .regular))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(.secondary)
             Text(String(localized: "Mac Setup Guide"))
-                .font(.system(size: 34, weight: .regular))
+                .font(.system(size: 28, weight: .regular))
             Spacer()
         }
-        .padding(.horizontal, 32)
-        .padding(.vertical, 22)
+        .padding(.horizontal, 28)
+        .padding(.vertical, 16)
     }
 
     private var automaticTab: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 14) {
             statusCard
 
             HStack(spacing: 12) {
@@ -88,9 +91,9 @@ struct MacCertificateSetupGuideView: View {
 
     private var statusCard: some View {
         let state = CertificateSetupState(snapshot: snapshot ?? .empty)
-        return VStack(spacing: 12) {
+        return VStack(spacing: 10) {
             Image(systemName: state.systemImageName)
-                .font(.system(size: 34, weight: .semibold))
+                .font(.system(size: 30, weight: .semibold))
                 .foregroundStyle(state.isReady ? .green : .orange)
                 .symbolRenderingMode(.hierarchical)
 
@@ -117,7 +120,7 @@ struct MacCertificateSetupGuideView: View {
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .frame(maxWidth: .infinity)
-        .padding(28)
+        .padding(22)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -126,11 +129,11 @@ struct MacCertificateSetupGuideView: View {
     }
 
     private var manualTab: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: 18) {
             guideSection(
                 number: 1,
                 title: String(localized: "Generate and Add Rockxy CA Certificate to System Keychain"),
-                symbol: "certificate",
+                symbol: "checkmark.shield.fill",
                 lines: [
                     String(localized: "Choose System or login keychain in Keychain Access."),
                     String(localized: "Use Install and Trust to generate the CA, or export the PEM file and drag it into Keychain Access.")
@@ -147,18 +150,10 @@ struct MacCertificateSetupGuideView: View {
                 ]
             )
 
-            guideSection(
-                number: 3,
-                title: String(localized: "Terminal Alternative"),
-                symbol: "terminal",
-                lines: [
-                    String(localized: "Export the PEM certificate, then use security add-trusted-cert with administrator approval."),
-                    String(localized: "Recheck the status above after changing trust settings.")
-                ]
-            )
+            terminalAlternativeSection
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(24)
+        .padding(20)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -183,14 +178,76 @@ struct MacCertificateSetupGuideView: View {
                     .font(.callout)
                     .foregroundStyle(state.isReady ? .green : .secondary)
                     .lineLimit(1)
+
+                if state.isReady {
+                    Button(String(localized: "Manage Certificates")) {
+                        openGeneralSettings()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
             }
 
             if let helpURL = URL(string: "https://github.com/RockxyApp/Rockxy/wiki") {
                 HelpLink(destination: helpURL)
             }
         }
-        .padding(.horizontal, 32)
-        .padding(.bottom, 22)
+        .padding(.horizontal, 28)
+        .padding(.bottom, 16)
+    }
+
+    private var terminalAlternativeSection: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: "terminal")
+                .font(.system(size: 22, weight: .medium))
+                .frame(width: 28)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(String(localized: "3. Terminal Alternative"))
+                    .font(.headline)
+                Text(String(localized: "Open your favorite Terminal app."))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Text(String(localized: "Copy and paste this command:"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                commandSnippetBox(manualTrustCommand)
+                Text(
+                    String(
+                        localized: "Automatically trusts the Rockxy CA in your System keychain. Administrator approval is required."
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Button(String(localized: "Copy")) {
+                        copyManualTrustCommand()
+                    }
+                    .buttonStyle(.bordered)
+
+                    if let manualTrustCopyMessage {
+                        Text(manualTrustCopyMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private func commandSnippetBox(_ command: String) -> some View {
+        ScrollView(.horizontal) {
+            Text(command)
+                .font(.system(size: 12, design: .monospaced))
+                .textSelection(.enabled)
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(height: 58)
+        .frame(maxWidth: .infinity)
+        .background(Color(nsColor: .textBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 
     private func guideSection(number: Int, title: String, symbol: String, lines: [String]) -> some View {
@@ -210,6 +267,34 @@ struct MacCertificateSetupGuideView: View {
                 }
             }
         }
+    }
+
+    private var manualTrustCommand: String {
+        [
+            "sudo security add-trusted-cert",
+            "-d",
+            "-r trustRoot",
+            "-k /Library/Keychains/System.keychain",
+            shellQuoted(CertificateStore.rootCACertificateURL.path)
+        ].joined(separator: " ")
+    }
+
+    private func shellQuoted(_ value: String) -> String {
+        let escaped = value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
+    }
+
+    private func copyManualTrustCommand() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(manualTrustCommand, forType: .string)
+        manualTrustCopyMessage = String(localized: "Copied.")
+    }
+
+    private func openGeneralSettings() {
+        RockxySettingsTab.select(.general)
+        openSettings()
     }
 
     private func installAndTrust() async {

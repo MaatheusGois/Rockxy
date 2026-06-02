@@ -9,19 +9,23 @@ Rockxy can re-send any captured HTTP or HTTPS request. There are two replay path
 
 Replay uses a proxy-bypass session (an ephemeral `URLSession` with proxy settings disabled), so replayed traffic does **not** re-enter Rockxy's proxy pipeline. This avoids infinite loops and means active rules (breakpoints, throttle, header modifications) do not apply to replayed requests.
 
+<Frame caption="Repeating a captured request from the traffic list">
+  <img src="/images/RepeatRockxy.png" alt="Request replay" />
+</Frame>
+
 ## Entry Points
 
 | Action | How to Access |
 |--------|---------------|
-| Repeat | Right-click a request > **Repeat**, or **Flow > Repeat** (`Cmd+Return`) |
-| Edit and Repeat | Right-click a request > **Edit and Repeat...**, or **Flow > Edit and Repeat...** (`Cmd+Opt+Return`) |
+| Repeat | Right-click a request > **Repeat**, or **Flow > Repeat** (`Cmd+R`) |
+| Edit and Repeat | Right-click a request > **Edit and Repeat...**, or **Flow > Edit and Repeat...** (`Cmd+E`) |
 
 ## Repeat (Fast Replay)
 
 **Repeat** re-sends the selected request with the same method, URL, headers, and body as the original. No editing step — the request goes out immediately.
 
 1. Select a request in the traffic list.
-2. Right-click and choose **Repeat**, or press `Cmd+Return`.
+2. Right-click and choose **Repeat**, or press `Cmd+R`.
 3. The response appears inline with status code, headers, and body.
 
 ## Edit and Repeat

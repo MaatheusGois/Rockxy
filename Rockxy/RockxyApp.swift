@@ -53,7 +53,7 @@ struct RockxyApp: App {
             MacCertificateSetupGuideView()
         }
         .commandsRemoved()
-        .defaultSize(width: 940, height: 620)
+        .defaultSize(width: 860, height: 540)
         .defaultPosition(.center)
         .windowToolbarStyle(.unifiedCompact)
 

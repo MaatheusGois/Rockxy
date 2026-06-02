@@ -5,7 +5,11 @@ description: "A single place in Rockxy for runtime snippets, device guides, and 
 
 # Developer Setup Hub
 
-The Developer Setup Hub is a dedicated window that collects everything you need to point a specific runtime, client, device, or framework at Rockxy's local proxy. Open it from the Rockxy menu or the main window toolbar.
+The Developer Setup Hub is a dedicated window that collects everything you need to point a specific runtime, client, device, or framework at Rockxy's local proxy. Open it from **Tools → Debug My App…** in the menu bar. The hub itself lives in its own window (`developerSetupHub`); the automatic and manual setup flows open in two separate companion windows (`automaticSetup`, `manualSetup`) so you can run setup in parallel with active debugging.
+
+<Frame caption="Developer Setup Hub window with source list, detail tabs, and status inspector">
+  <img src="/images/features/DemoDevHub.png" alt="Developer Setup Hub" />
+</Frame>
 
 Layout:
 
@@ -78,21 +82,14 @@ If the preflight sees a problem (proxy stopped, recording paused, certificate no
 
 Validate does not depend on public DNS or a third-party endpoint. If local validation succeeds but your real API call fails, treat that as a separate upstream, network, or application issue after the Rockxy proxy/capture path is known-good.
 
-## Rockxy Pro automation
+## Automatic vs manual setup
 
-Developer Setup Hub is available to all users. Rockxy Pro currently adds one paid automation workflow inside this surface:
+Each target's automation surface is driven by its `SetupAutomationSupport` value in the catalog:
 
-- **React Native Android Setup** for supported Android targets
+- **Automatic Setup** — available for runtime/terminal targets (Python, Node.js, Ruby, Go, Rust, cURL, Java). The Automatic Setup window shows the workflow plan, lets you preview the exact commands in `DeveloperSetupAutomationSheet`, and runs the local probe once you apply.
+- **Manual Setup** — used for every target where Rockxy ships snippets but does not drive the target tool itself (Firefox, Postman, Insomnia, Paw, Docker, ElectronJS, Next.js, Flutter, React Native), and for every guide-only target (devices, simulators, emulators).
 
-That Pro workflow can:
-
-- inspect target readiness
-- show a dry-run plan before changes are applied
-- help apply Android proxy changes
-- optionally apply Metro reverse port forwarding
-- keep a **Manual Setup** fallback visible inside the same flow
-
-If Pro is not active, the manual setup content remains available and Rockxy shows an upgrade prompt at the automation entry point instead of hiding the feature completely.
+The hub never silently bypasses the manual path. Even targets that expose Automatic Setup keep the Manual Setup window reachable from the same inspector.
 
 ### Guide only — concrete manual steps, no in-app snippet generator
 
@@ -129,6 +126,4 @@ The filter at the top of the source list matches on target name, category name, 
 - Guide-only pages carry concrete prerequisites and limitations rather than "coming soon" copy.
 - Every target's Overview tab states exactly what Rockxy does today for that target and what is still manual.
 
-If you run into a target where the copy does not match reality, the catalog lives at `Rockxy/Models/UI/DeveloperSetupCatalog.swift`, the workflow + snippet generators at `Rockxy/Models/UI/DeveloperSetupWorkflow.swift`, and the remaining device/framework guide tips at `Rockxy/Models/UI/DeveloperSetupGuideCatalog.swift`.
-
-For licensing, activation, and upgrade details, see [License Management](/features/license-management).
+If you run into a target where the copy does not match reality, the catalog lives at `Rockxy/Models/UI/DeveloperSetupCatalog.swift`, the workflow + snippet generators at `Rockxy/Models/UI/DeveloperSetupWorkflow.swift`, and the remaining device/framework guide tips at `Rockxy/Models/UI/DeveloperSetupGuideCatalog.swift`. `SetupSupportStatus` (`availableNow` / `guideOnly` / `notYetSupported`) is the source of truth for what each target actually ships.

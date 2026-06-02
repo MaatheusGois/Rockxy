@@ -41,6 +41,10 @@ nonisolated enum CertificateStore {
         }
     }
 
+    static var rootCACertificateURL: URL {
+        storageDirectory.appendingPathComponent(rootCACertFilename)
+    }
+
     static func saveRootCACertificate(_ certificate: Certificate) throws {
         try ensureDirectoryExists()
 
@@ -51,7 +55,7 @@ nonisolated enum CertificateStore {
         let pemDocument = PEMDocument(type: "CERTIFICATE", derBytes: derBytes)
         let pemString = pemDocument.pemString
 
-        let filePath = storageDirectory.appendingPathComponent(rootCACertFilename)
+        let filePath = rootCACertificateURL
         try Data(pemString.utf8).write(to: filePath)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: filePath.path)
         logger.info("Saved root CA certificate to disk")
@@ -86,7 +90,7 @@ nonisolated enum CertificateStore {
     }
 
     static func loadRootCACertificate() throws -> Certificate? {
-        let filePath = storageDirectory.appendingPathComponent(rootCACertFilename)
+        let filePath = rootCACertificateURL
 
         guard FileManager.default.fileExists(atPath: filePath.path) else {
             return nil
