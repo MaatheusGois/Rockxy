@@ -120,12 +120,9 @@ struct RequestTableView: NSViewRepresentable {
         coordinator.lastRefreshToken = newToken
         coordinator.lastWorkspaceID = workspaceID
 
-        let displayChanged = coordinator.applyDisplayMetrics(to: tableView)
+        let displayChange = coordinator.applyDisplayMetrics(to: tableView)
 
-        if displayChanged {
-            tableView.reloadData()
-            coordinator.previousRowCount = rows.count
-        } else if workspaceChanged || newToken != oldToken {
+        if workspaceChanged || newToken != oldToken {
             let newCount = rows.count
             if !workspaceChanged,
                isAppendOnly,
@@ -139,6 +136,8 @@ struct RequestTableView: NSViewRepresentable {
                 tableView.reloadData()
             }
             coordinator.previousRowCount = newCount
+        } else if displayChange?.reloadVisibleRows == true {
+            coordinator.reloadVisibleRows(in: tableView)
         }
 
         if !coordinator.hasAutoSizedColumns, rows.count > 10 {
@@ -196,7 +195,7 @@ struct RequestTableView: NSViewRepresentable {
             ColumnSpec(id: "row", title: String(localized: "ID"), width: 46, minWidth: 36),
             ColumnSpec(id: "url", title: String(localized: "URL"), width: 300, minWidth: 200),
             ColumnSpec(id: "client", title: String(localized: "Client"), width: 120, minWidth: 60),
-            ColumnSpec(id: "method", title: String(localized: "Method"), width: 70, minWidth: 55),
+            ColumnSpec(id: "method", title: String(localized: "Method"), width: 82, minWidth: 72),
             ColumnSpec(id: "state", title: String(localized: "Status"), width: 150, minWidth: 112),
             ColumnSpec(id: "code", title: String(localized: "Code"), width: 52, minWidth: 44),
             ColumnSpec(id: "time", title: String(localized: "Time"), width: 80, minWidth: 60),
@@ -244,6 +243,34 @@ private struct ColumnSpec {
     let minWidth: CGFloat
 }
 
+// MARK: - RequestTableAppliedMetrics
+
+private struct RequestTableAppliedMetrics: Equatable {
+    let rowHeight: CGFloat
+    let usesAlternatingRowBackgroundColors: Bool
+    let headerFontSize: CGFloat
+    let contentMetrics: RequestTableContentMetrics
+
+    init(metrics: AppUIDisplayMetrics) {
+        rowHeight = metrics.tableRowHeight
+        usesAlternatingRowBackgroundColors = metrics.settings.useAlternatingRowBackgroundColors
+        headerFontSize = metrics.secondaryFontSize
+        contentMetrics = RequestTableContentMetrics(metrics: metrics)
+    }
+}
+
+private struct RequestTableContentMetrics: Equatable {
+    let fontSize: CGFloat
+    let secondaryFontSize: CGFloat
+    let useMonospacedFont: Bool
+
+    init(metrics: AppUIDisplayMetrics) {
+        fontSize = metrics.fontSize
+        secondaryFontSize = metrics.secondaryFontSize
+        useMonospacedFont = metrics.settings.useMonospacedFont
+    }
+}
+
 // MARK: - RequestTableView.Coordinator
 
 extension RequestTableView {
@@ -269,6 +296,7 @@ extension RequestTableView {
         var lastRefreshToken: Int = 0
         var previousRowCount: Int = 0
         var lastAppliedDisplayMetrics: AppUIDisplayMetrics?
+        private var lastAppliedRequestTableMetrics: RequestTableAppliedMetrics?
 
         /// Guard flag to prevent feedback loops: when we programmatically update NSTableView
         /// selection from SwiftUI state, we suppress the delegate callback that would
@@ -287,20 +315,61 @@ extension RequestTableView {
             rows.count
         }
 
+        struct DisplayMetricsChange: Equatable {
+            let reloadVisibleRows: Bool
+            let autosizeContentColumns: Bool
+        }
+
         @discardableResult
-        func applyDisplayMetrics(to tableView: NSTableView) -> Bool {
+        func applyDisplayMetrics(to tableView: NSTableView) -> DisplayMetricsChange? {
             let metrics = parent.effectiveDisplayMetrics
-            guard lastAppliedDisplayMetrics != metrics else {
-                return false
+            let tableMetrics = RequestTableAppliedMetrics(metrics: metrics)
+            guard lastAppliedRequestTableMetrics != tableMetrics else {
+                lastAppliedDisplayMetrics = metrics
+                return nil
             }
+
+            let previousTableMetrics = lastAppliedRequestTableMetrics
             tableView.rowHeight = metrics.tableRowHeight
             tableView.usesAlternatingRowBackgroundColors = metrics.settings.useAlternatingRowBackgroundColors
             for column in tableView.tableColumns {
                 column.headerCell.font = .systemFont(ofSize: metrics.secondaryFontSize, weight: .medium)
             }
+            tableView.needsDisplay = true
+
             lastAppliedDisplayMetrics = metrics
-            hasAutoSizedColumns = false
-            return true
+            lastAppliedRequestTableMetrics = tableMetrics
+
+            let contentMetricsChanged = previousTableMetrics?.contentMetrics != tableMetrics.contentMetrics
+            let rowHeightChanged = previousTableMetrics?.rowHeight != tableMetrics.rowHeight
+            let reloadVisibleRows = previousTableMetrics == nil || contentMetricsChanged || rowHeightChanged
+            let autosizeContentColumns = previousTableMetrics == nil || contentMetricsChanged
+
+            if autosizeContentColumns {
+                hasAutoSizedColumns = false
+            }
+
+            return DisplayMetricsChange(
+                reloadVisibleRows: reloadVisibleRows,
+                autosizeContentColumns: autosizeContentColumns
+            )
+        }
+
+        func reloadVisibleRows(in tableView: NSTableView) {
+            let visibleRange = tableView.rows(in: tableView.visibleRect)
+            guard visibleRange.location != NSNotFound, visibleRange.length > 0 else {
+                return
+            }
+            let rowStart = max(0, visibleRange.location)
+            let rowEnd = min(rows.count, visibleRange.location + visibleRange.length)
+            guard rowStart < rowEnd else {
+                return
+            }
+
+            tableView.reloadData(
+                forRowIndexes: IndexSet(integersIn: rowStart ..< rowEnd),
+                columnIndexes: IndexSet(integersIn: 0 ..< tableView.numberOfColumns)
+            )
         }
 
         func tableView(_ tableView: NSTableView, sortDescriptorsDidChange oldDescriptors: [NSSortDescriptor]) {
@@ -1473,12 +1542,13 @@ extension RequestTableView {
             -> NSView
         {
             let cellID = NSUserInterfaceItemIdentifier("Cell_status")
-            let dotSize: CGFloat = 9
+            let dotSize = parent.effectiveDisplayMetrics.tableStatusDotSize
 
             if let existing = tableView.makeView(withIdentifier: cellID, owner: nil),
                let imageView = existing.subviews.first as? NSImageView
             {
                 imageView.contentTintColor = statusDotColor(for: row)
+                applyFixedSize(dotSize, to: imageView, in: existing)
                 return existing
             }
 
@@ -1493,12 +1563,7 @@ extension RequestTableView {
             }
             imageView.contentTintColor = statusDotColor(for: row)
             container.addSubview(imageView)
-            NSLayoutConstraint.activate([
-                imageView.centerXAnchor.constraint(equalTo: container.centerXAnchor),
-                imageView.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-                imageView.widthAnchor.constraint(equalToConstant: dotSize),
-                imageView.heightAnchor.constraint(equalToConstant: dotSize),
-            ])
+            applyFixedSize(dotSize, to: imageView, in: container)
             return container
         }
 
@@ -1509,13 +1574,13 @@ extension RequestTableView {
             -> NSView
         {
             let cellID = NSUserInterfaceItemIdentifier("Cell_ssl")
-            let iconSize: CGFloat = 12
+            let iconSize = parent.effectiveDisplayMetrics.tableSSLIconSize
 
             if let existing = tableView.makeView(withIdentifier: cellID, owner: nil),
                let imageView = existing.subviews.first as? NSImageView
             {
                 configureSSLImageView(imageView, row: row)
-                centerSSLImageView(imageView, in: existing)
+                applyFixedSize(iconSize, to: imageView, in: existing)
                 return existing
             }
 
@@ -1523,10 +1588,9 @@ extension RequestTableView {
             container.identifier = cellID
 
             let imageView = NSImageView(frame: NSRect(x: 0, y: 0, width: iconSize, height: iconSize))
-            imageView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: parent.effectiveDisplayMetrics.secondaryFontSize, weight: .medium)
             configureSSLImageView(imageView, row: row)
             container.addSubview(imageView)
-            centerSSLImageView(imageView, in: container)
+            applyFixedSize(iconSize, to: imageView, in: container)
             return container
         }
 
@@ -1621,6 +1685,7 @@ extension RequestTableView {
         }
 
         private func configureSSLImageView(_ imageView: NSImageView, row: RequestListRow) {
+            let iconSize = parent.effectiveDisplayMetrics.tableSSLIconSize
             let symbolName: String
             let tintColor: NSColor
 
@@ -1636,31 +1701,47 @@ extension RequestTableView {
                 tintColor = .systemGreen
             }
 
+            imageView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: iconSize, weight: .medium)
+            imageView.imageScaling = .scaleProportionallyUpOrDown
             imageView.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
             imageView.contentTintColor = tintColor
         }
 
-        private func centerSSLImageView(_ imageView: NSImageView, in container: NSView) {
+        private func applyFixedSize(_ size: CGFloat, to imageView: NSImageView, in container: NSView) {
             imageView.translatesAutoresizingMaskIntoConstraints = false
             NSLayoutConstraint.deactivate(container.constraints.filter { constraint in
                 constraint.firstItem as AnyObject? === imageView || constraint.secondItem as AnyObject? === imageView
             })
+            NSLayoutConstraint.deactivate(imageView.constraints.filter { constraint in
+                constraint.firstAttribute == .width || constraint.firstAttribute == .height
+            })
             NSLayoutConstraint.activate([
                 imageView.centerXAnchor.constraint(equalTo: container.centerXAnchor),
                 imageView.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+                imageView.widthAnchor.constraint(equalToConstant: size),
+                imageView.heightAnchor.constraint(equalToConstant: size),
             ])
         }
 
         private func appIcon(for appName: String) -> NSImage? {
+            guard let source = appIconSource(for: appName),
+                  let icon = source.copy() as? NSImage else
+            {
+                return nil
+            }
+            let iconSize = parent.effectiveDisplayMetrics.tableClientIconSize
+            icon.size = NSSize(width: iconSize, height: iconSize)
+            return icon
+        }
+
+        private func appIconSource(for appName: String) -> NSImage? {
             if let cached = Self.appIconCache[appName] {
                 return cached
             }
-
             if let bundleID = Self.bundleIDByAppName[appName],
                let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
             {
                 let icon = NSWorkspace.shared.icon(forFile: appURL.path)
-                icon.size = NSSize(width: 16, height: 16)
                 Self.appIconCache[appName] = icon
                 return icon
             }
@@ -1673,7 +1754,6 @@ extension RequestTableView {
             for path in appPaths {
                 if FileManager.default.fileExists(atPath: path) {
                     let icon = NSWorkspace.shared.icon(forFile: path)
-                    icon.size = NSSize(width: 16, height: 16)
                     Self.appIconCache[appName] = icon
                     return icon
                 }
@@ -1681,7 +1761,6 @@ extension RequestTableView {
 
             for app in NSWorkspace.shared.runningApplications {
                 if app.localizedName == appName, let icon = app.icon {
-                    icon.size = NSSize(width: 16, height: 16)
                     Self.appIconCache[appName] = icon
                     return icon
                 }
@@ -1697,7 +1776,7 @@ extension RequestTableView {
         )
             -> NSView
         {
-            let iconSize: CGFloat = 16
+            let iconSize = parent.effectiveDisplayMetrics.tableClientIconSize
             let gap: CGFloat = 4
             let rowHeight = parent.effectiveDisplayMetrics.tableRowHeight
             let iconY = (rowHeight - iconSize) / 2
@@ -1710,6 +1789,10 @@ extension RequestTableView {
                 let fallbackView = existing.subviews[1]
                 let nameLabel = existing.subviews[2] as? NSTextField
 
+                updateClientIconFrames(imageView: imageView, fallbackView: fallbackView, iconSize: iconSize, iconY: iconY)
+                if let nameLabel {
+                    updateClientNameConstraints(nameLabel, in: existing, iconSize: iconSize, gap: gap)
+                }
                 nameLabel?.stringValue = appName
                 nameLabel?.font = parent.effectiveDisplayMetrics.appKitFont()
                 if let icon = appIcon(for: appName) {
@@ -1740,7 +1823,7 @@ extension RequestTableView {
             fallbackView.wantsLayer = true
             fallbackView.layer?.cornerRadius = 4
             let initialsLabel = NSTextField(labelWithString: "")
-            initialsLabel.font = .systemFont(ofSize: 7, weight: .bold)
+            initialsLabel.font = .systemFont(ofSize: max(7, iconSize * 0.44), weight: .bold)
             initialsLabel.textColor = .white
             initialsLabel.alignment = .center
             initialsLabel.frame = NSRect(x: 0, y: 0, width: iconSize, height: iconSize)
@@ -1778,12 +1861,50 @@ extension RequestTableView {
             return container
         }
 
+        private func updateClientIconFrames(
+            imageView: NSImageView?,
+            fallbackView: NSView,
+            iconSize: CGFloat,
+            iconY: CGFloat
+        ) {
+            imageView?.frame = NSRect(x: 0, y: iconY, width: iconSize, height: iconSize)
+            fallbackView.frame = NSRect(x: 0, y: iconY, width: iconSize, height: iconSize)
+            fallbackView.layer?.cornerRadius = max(4, iconSize * 0.25)
+            if let initialsLabel = fallbackView.subviews.first as? NSTextField {
+                initialsLabel.frame = NSRect(x: 0, y: 0, width: iconSize, height: iconSize)
+                initialsLabel.font = .systemFont(ofSize: max(7, iconSize * 0.44), weight: .bold)
+            }
+        }
+
+        private func updateClientNameConstraints(
+            _ nameLabel: NSTextField,
+            in container: NSView,
+            iconSize: CGFloat,
+            gap: CGFloat
+        ) {
+            NSLayoutConstraint.deactivate(container.constraints.filter { constraint in
+                constraint.firstItem as AnyObject? === nameLabel || constraint.secondItem as AnyObject? === nameLabel
+            })
+            NSLayoutConstraint.activate([
+                nameLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: iconSize + gap),
+                nameLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -2),
+                nameLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            ])
+        }
+
         private func makeCellView(identifier: NSUserInterfaceItemIdentifier) -> NSView {
             let container = NSView()
             container.identifier = identifier
 
             let field = NSTextField(labelWithString: "")
             field.lineBreakMode = .byTruncatingTail
+            field.cell?.lineBreakMode = .byTruncatingTail
+            field.maximumNumberOfLines = 1
+            field.cell?.wraps = false
+            if let textCell = field.cell as? NSTextFieldCell {
+                textCell.usesSingleLineMode = true
+                textCell.truncatesLastVisibleLine = true
+            }
             field.font = parent.effectiveDisplayMetrics.appKitFont()
             field.textColor = .labelColor
             field.isBordered = false
@@ -1806,6 +1927,17 @@ extension RequestTableView {
             row: Int,
             rowData: RequestListRow
         ) {
+            defer {
+                cell.lineBreakMode = .byTruncatingTail
+                cell.cell?.lineBreakMode = .byTruncatingTail
+                cell.maximumNumberOfLines = 1
+                cell.cell?.wraps = false
+                if let textCell = cell.cell as? NSTextFieldCell {
+                    textCell.usesSingleLineMode = true
+                    textCell.truncatesLastVisibleLine = true
+                }
+            }
+
             let metrics = parent.effectiveDisplayMetrics
             cell.stringValue = ""
             cell.textColor = .labelColor

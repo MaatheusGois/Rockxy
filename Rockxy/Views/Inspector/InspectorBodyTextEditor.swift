@@ -263,6 +263,7 @@ struct InspectorBodyTextEditor: NSViewRepresentable {
         textView.textColor = .textColor
         textView.backgroundColor = .textBackgroundColor
         textView.isVerticallyResizable = true
+        textView.clipsToBounds = true
         textView.minSize = NSSize(width: 0, height: 0)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
 
@@ -275,6 +276,8 @@ struct InspectorBodyTextEditor: NSViewRepresentable {
 
     private func makeScrollView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
+        scrollView.clipsToBounds = true
+        scrollView.contentView.clipsToBounds = true
         let contentSize = scrollView.contentSize
         let textStorage = NSTextStorage()
         let layoutManager = NSLayoutManager()
@@ -331,6 +334,9 @@ struct InspectorBodyTextEditor: NSViewRepresentable {
         guard let textView = scrollView.documentView as? NSTextView else {
             return
         }
+        scrollView.clipsToBounds = true
+        scrollView.contentView.clipsToBounds = true
+        textView.clipsToBounds = true
         scrollView.hasHorizontalScroller = !editorSettings.wordWrap
         scrollView.contentInsets = NSEdgeInsets(
             top: 0,
@@ -347,20 +353,22 @@ struct InspectorBodyTextEditor: NSViewRepresentable {
         textView.layoutManager?.showsControlCharacters = editorSettings.showInvisibles
 
         if editorSettings.wordWrap {
-            textView.frame.size.width = max(scrollView.contentSize.width, 1)
+            textView.frame.size.width = max(scrollView.contentView.bounds.width, 1)
             textView.textContainer?.containerSize = NSSize(
-                width: max(scrollView.contentSize.width, 0),
+                width: max(scrollView.contentView.bounds.width, 0),
                 height: CGFloat.greatestFiniteMagnitude
             )
             textView.textContainer?.widthTracksTextView = true
         } else {
-            textView.frame.size.width = max(textView.frame.width, scrollView.contentSize.width)
+            textView.frame.size.width = max(textView.frame.width, scrollView.contentView.bounds.width)
             textView.textContainer?.containerSize = NSSize(
                 width: CGFloat.greatestFiniteMagnitude,
                 height: CGFloat.greatestFiniteMagnitude
             )
             textView.textContainer?.widthTracksTextView = false
         }
+        scrollView.tile()
+        scrollView.verticalRulerView?.needsDisplay = true
         applyTextStorageSettings(editorSettings, to: textView)
         textView.layoutManager?.invalidateLayout(forCharacterRange: NSRange(location: 0, length: textView.string.utf16.count), actualCharacterRange: nil)
         textView.needsDisplay = true
@@ -524,7 +532,8 @@ struct AsyncInspectorTextEditor: View {
                     editorSettings: editorSettings,
                     highlightContext: highlightContext
                 )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
 
                 if editorSettings.showMinimap {
                     InspectorTextMinimapView(text: text, editorID: renderID)
@@ -659,12 +668,14 @@ struct InspectorLoadingStateView: View {
             ProgressView()
                 .controlSize(.small)
             Text(title)
-                .font(.system(size: 12))
+                .font(.system(size: metrics.controlFontSize))
                 .foregroundStyle(.secondary)
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
+
+    @Environment(\.appUIDisplayMetrics) private var metrics
 }
 
 // MARK: - InspectorTextRenderResult

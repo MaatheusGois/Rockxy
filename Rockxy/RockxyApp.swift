@@ -43,6 +43,7 @@ struct RockxyApp: App {
 
         Window(String(localized: "Developer Setup Hub"), id: "developerSetupHub") {
             DeveloperSetupWindowView(coordinator: mainCoordinator)
+                .appUIDisplayMetrics(AppUIDisplayMetrics(settings: AppSettingsManager.shared.settings.appUI))
         }
         .commandsRemoved()
         .defaultSize(width: 1_180, height: 760)
@@ -67,6 +68,7 @@ struct RockxyApp: App {
 
         Window(String(localized: "Automatic Setup"), id: "automaticSetup") {
             DeveloperSetupAutomaticWindowView(coordinator: mainCoordinator)
+                .appUIDisplayMetrics(AppUIDisplayMetrics(settings: AppSettingsManager.shared.settings.appUI))
         }
         .commandsRemoved()
         .defaultSize(width: 760, height: 500)
@@ -76,6 +78,7 @@ struct RockxyApp: App {
 
         Window(String(localized: "Manual Setup"), id: "manualSetup") {
             DeveloperSetupManualWindowView(coordinator: mainCoordinator)
+                .appUIDisplayMetrics(AppUIDisplayMetrics(settings: AppSettingsManager.shared.settings.appUI))
         }
         .commandsRemoved()
         .defaultSize(width: 780, height: 540)

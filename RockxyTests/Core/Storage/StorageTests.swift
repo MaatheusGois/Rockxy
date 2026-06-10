@@ -158,7 +158,32 @@ struct AppSettingsStorageTests {
         #expect(defaultSettings.autoSelectPort == true)
         #expect(defaultSettings.appTheme == .system)
         #expect(defaultSettings.appUI == .default)
+        #expect(defaultSettings.appUI.fontSize == 13)
         #expect(defaultSettings.lastExportedRootCAPath == nil)
+    }
+
+    @Test("missing appearance font size key loads new readable default")
+    func missingAppearanceFontSizeKeyLoadsDefault() {
+        let cleanup = installSettingsTestGuard()
+        defer { cleanup() }
+
+        UserDefaults.standard.removeObject(forKey: RockxyIdentity.current.defaultsKey("appearance.fontSize"))
+
+        let loaded = AppSettingsStorage.load()
+
+        #expect(loaded.appUI.fontSize == 13)
+    }
+
+    @Test("explicit compact appearance font size is respected")
+    func explicitCompactAppearanceFontSizeIsRespected() {
+        let cleanup = installSettingsTestGuard()
+        defer { cleanup() }
+
+        UserDefaults.standard.set(12, forKey: RockxyIdentity.current.defaultsKey("appearance.fontSize"))
+
+        let loaded = AppSettingsStorage.load()
+
+        #expect(loaded.appUI.fontSize == 12)
     }
 
     @Test("appearance settings reject invalid stored menu values")
@@ -207,6 +232,7 @@ struct AppSettingsStorageTests {
         #expect(AppSettingsManager.shared.settings.proxyPort == 8_181)
         #expect(AppSettingsManager.shared.settings.appTheme == .system)
         #expect(AppSettingsManager.shared.settings.appUI == .default)
+        #expect(AppSettingsManager.shared.settings.appUI.fontSize == 13)
     }
 
     // MARK: Private

@@ -14,16 +14,78 @@ struct AppUIDisplayMetrics: Equatable {
         CGFloat(settings.fontSize)
     }
 
+    var primaryFontSize: CGFloat {
+        fontSize
+    }
+
+    var controlFontSize: CGFloat {
+        max(11, fontSize - 1)
+    }
+
     var secondaryFontSize: CGFloat {
         max(9, fontSize - 1)
     }
 
+    var metadataFontSize: CGFloat {
+        max(10, fontSize - 2)
+    }
+
     var badgeFontSize: CGFloat {
-        max(9, fontSize - 3)
+        max(10, fontSize - 3)
+    }
+
+    var monospacedContentFontSize: CGFloat {
+        fontSize
+    }
+
+    var sidebarNavigationFontSize: CGFloat {
+        max(11, fontSize)
+    }
+
+    var sidebarSecondaryFontSize: CGFloat {
+        max(10, fontSize - 1)
+    }
+
+    var sidebarSectionHeaderFontSize: CGFloat {
+        max(10, fontSize - 2)
+    }
+
+    var sidebarBadgeFontSize: CGFloat {
+        max(10, fontSize - 2)
+    }
+
+    var sidebarIconFontSize: CGFloat {
+        max(12, fontSize)
+    }
+
+    var sidebarAppIconSize: CGFloat {
+        max(20, min(fontSize + 7, 32))
+    }
+
+    var sidebarRowHeight: CGFloat {
+        max(24, fontSize + 12)
+    }
+
+    var tableStatusDotSize: CGFloat {
+        max(8, min(fontSize - 3, 12))
+    }
+
+    var tableSSLIconSize: CGFloat {
+        max(10, min(fontSize - 1, 16))
+    }
+
+    var tableClientIconSize: CGFloat {
+        max(14, min(fontSize + 3, 18))
     }
 
     var tableRowHeight: CGFloat {
-        max(24, fontSize + 16)
+        if fontSize <= 12 {
+            return max(24, fontSize + 16)
+        }
+        if fontSize <= 13 {
+            return 28
+        }
+        return fontSize + 16
     }
 
     var tableTextHeight: CGFloat {
@@ -68,6 +130,78 @@ struct AppUIDisplayMetrics: Equatable {
             return .system(size: fontSize, weight: weight, design: .monospaced)
         }
         return .system(size: fontSize, weight: weight)
+    }
+}
+
+// MARK: - DeveloperSetupDisplayMetrics
+
+struct DeveloperSetupDisplayMetrics: Equatable {
+    let appMetrics: AppUIDisplayMetrics
+
+    init(appMetrics: AppUIDisplayMetrics = AppUIDisplayMetrics()) {
+        self.appMetrics = appMetrics
+    }
+
+    var titleFontSize: CGFloat {
+        max(15, appMetrics.primaryFontSize + 5)
+    }
+
+    var sectionTitleFontSize: CGFloat {
+        max(13, appMetrics.primaryFontSize + 1)
+    }
+
+    var bodyFontSize: CGFloat {
+        appMetrics.primaryFontSize
+    }
+
+    var controlFontSize: CGFloat {
+        appMetrics.controlFontSize
+    }
+
+    var secondaryFontSize: CGFloat {
+        max(11, appMetrics.primaryFontSize - 1)
+    }
+
+    var metadataFontSize: CGFloat {
+        appMetrics.metadataFontSize
+    }
+
+    var badgeFontSize: CGFloat {
+        appMetrics.badgeFontSize
+    }
+
+    var iconFontSize: CGFloat {
+        max(13, appMetrics.controlFontSize + 1)
+    }
+
+    var prominentIconFontSize: CGFloat {
+        max(20, appMetrics.primaryFontSize + 9)
+    }
+
+    var snippetFontSize: CGFloat {
+        appMetrics.monospacedContentFontSize
+    }
+
+    var sidebarRowHeight: CGFloat {
+        max(36, appMetrics.primaryFontSize + 24)
+    }
+
+    var cardMinimumHeight: CGFloat {
+        max(82, appMetrics.primaryFontSize + 68)
+    }
+
+    func font(weight: Font.Weight = .regular, monospaced: Bool = false) -> Font {
+        if monospaced || appMetrics.settings.useMonospacedFont {
+            return .system(size: bodyFontSize, weight: weight, design: .monospaced)
+        }
+        return .system(size: bodyFontSize, weight: weight)
+    }
+
+    func secondaryFont(weight: Font.Weight = .regular, monospaced: Bool = false) -> Font {
+        if monospaced || appMetrics.settings.useMonospacedFont {
+            return .system(size: secondaryFontSize, weight: weight, design: .monospaced)
+        }
+        return .system(size: secondaryFontSize, weight: weight)
     }
 }
 

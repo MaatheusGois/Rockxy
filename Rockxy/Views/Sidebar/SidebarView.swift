@@ -13,23 +13,32 @@ private struct AppIconView: View {
     let name: String
 
     var body: some View {
-        if let icon = Self.resolveIcon(for: name) {
+        if let icon = Self.resolvedIcon(for: name, size: iconSize) {
             Image(nsImage: icon)
                 .resizable()
-                .frame(width: 20, height: 20)
+                .interpolation(.high)
+                .frame(width: iconSize, height: iconSize)
+                .id(iconSize)
         } else {
             RoundedRectangle(cornerRadius: 5)
                 .fill(gradient)
-                .frame(width: 20, height: 20)
+                .frame(width: iconSize, height: iconSize)
+                .id(iconSize)
                 .overlay {
                     Text(letter)
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .font(.system(size: max(11, metrics.sidebarSecondaryFontSize), weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
                 }
         }
     }
 
     // MARK: Private
+
+    @Environment(\.appUIDisplayMetrics) private var metrics
+
+    private var iconSize: CGFloat {
+        metrics.sidebarAppIconSize
+    }
 
     private static var iconCache: [String: NSImage] = [:]
 
@@ -61,7 +70,17 @@ private struct AppIconView: View {
         )
     }
 
-    private static func resolveIcon(for name: String) -> NSImage? {
+    private static func resolvedIcon(for name: String, size: CGFloat) -> NSImage? {
+        guard let source = resolveIconSource(for: name),
+              let icon = source.copy() as? NSImage else
+        {
+            return nil
+        }
+        icon.size = NSSize(width: size, height: size)
+        return icon
+    }
+
+    private static func resolveIconSource(for name: String) -> NSImage? {
         if let cached = iconCache[name] {
             return cached
         }
@@ -70,7 +89,6 @@ private struct AppIconView: View {
            let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
         {
             let icon = NSWorkspace.shared.icon(forFile: appURL.path)
-            icon.size = NSSize(width: 20, height: 20)
             iconCache[name] = icon
             return icon
         }
@@ -78,7 +96,6 @@ private struct AppIconView: View {
         for path in ["/Applications/\(name).app", "/System/Applications/\(name).app"] {
             if FileManager.default.fileExists(atPath: path) {
                 let icon = NSWorkspace.shared.icon(forFile: path)
-                icon.size = NSSize(width: 20, height: 20)
                 iconCache[name] = icon
                 return icon
             }
@@ -86,7 +103,6 @@ private struct AppIconView: View {
 
         for app in NSWorkspace.shared.runningApplications {
             if app.localizedName == name, let icon = app.icon {
-                icon.size = NSSize(width: 20, height: 20)
                 iconCache[name] = icon
                 return icon
             }
@@ -110,6 +126,7 @@ struct SidebarView: View {
                 allSection
             }
             .listStyle(.sidebar)
+            .font(.system(size: metrics.sidebarNavigationFontSize))
 
             SidebarBottomBar(
                 filterText: $sidebarFilterText,
@@ -137,6 +154,7 @@ struct SidebarView: View {
     @State private var sidebarFilterText = ""
     @State private var isAddFavoritePresented = false
     @State private var expandedDomainNodeIDs: Set<String> = []
+    @Environment(\.appUIDisplayMetrics) private var metrics
 
     private var sidebarBinding: Binding<SidebarItem?> {
         Binding(
@@ -162,17 +180,22 @@ struct SidebarView: View {
                 if pinned.isEmpty {
                     Text(String(localized: "No pinned items"))
                         .foregroundStyle(.secondary)
-                        .font(.caption)
+                        .font(.system(size: metrics.sidebarSecondaryFontSize))
+                        .frame(minHeight: metrics.sidebarRowHeight, alignment: .center)
                 } else {
                     ForEach(pinned) { transaction in
                         Label {
                             Text(transaction.request.host + transaction.request.path)
+                                .font(sidebarNavigationFont)
                                 .lineLimit(1)
                         } icon: {
                             Image(systemName: "pin.fill")
+                                .font(sidebarIconFont)
                                 .foregroundStyle(.orange)
                         }
+                        .font(sidebarNavigationFont)
                         .tag(SidebarItem.pinnedTransaction(id: transaction.id))
+                        .frame(minHeight: metrics.sidebarRowHeight)
                         .contextMenu {
                             favoriteTransactionContextMenu(transaction, section: .pinned)
                         }
@@ -182,6 +205,7 @@ struct SidebarView: View {
                 Label(String(localized: "Pinned"), systemImage: "pin.fill")
                     .badge(coordinator.allPinnedTransactions.count)
                     .tag(SidebarItem.allPinned)
+                    .frame(minHeight: metrics.sidebarRowHeight)
                     .contentShape(Rectangle())
                     .onTapGesture { coordinator.selectSidebarItem(.allPinned) }
             }
@@ -191,16 +215,21 @@ struct SidebarView: View {
                 if saved.isEmpty {
                     Text(String(localized: "No saved items"))
                         .foregroundStyle(.secondary)
-                        .font(.caption)
+                        .font(.system(size: metrics.sidebarSecondaryFontSize))
+                        .frame(minHeight: metrics.sidebarRowHeight, alignment: .center)
                 } else {
                     ForEach(saved) { transaction in
                         Label {
                             Text(transaction.request.host + transaction.request.path)
+                                .font(sidebarNavigationFont)
                                 .lineLimit(1)
                         } icon: {
                             Image(systemName: "tray.full.fill")
+                                .font(sidebarIconFont)
                         }
+                        .font(sidebarNavigationFont)
                         .tag(SidebarItem.savedTransaction(id: transaction.id))
+                        .frame(minHeight: metrics.sidebarRowHeight)
                         .contextMenu {
                             favoriteTransactionContextMenu(transaction, section: .saved)
                         }
@@ -210,6 +239,7 @@ struct SidebarView: View {
                 Label(String(localized: "Saved"), systemImage: "tray.full.fill")
                     .badge(coordinator.allSavedTransactions.count)
                     .tag(SidebarItem.allSaved)
+                    .frame(minHeight: metrics.sidebarRowHeight)
                     .contentShape(Rectangle())
                     .onTapGesture { coordinator.selectSidebarItem(.allSaved) }
             }
@@ -220,6 +250,7 @@ struct SidebarView: View {
         } header: {
             Text(String(localized: "Favorites"))
                 .foregroundStyle(Theme.Sidebar.favoritesHeader)
+                .font(.system(size: metrics.sidebarSectionHeaderFontSize, weight: .semibold))
         }
         .headerProminence(.increased)
     }
@@ -235,11 +266,14 @@ struct SidebarView: View {
                     } label: {
                         Label {
                             Text(app.name)
+                                .font(sidebarNavigationFont)
                         } icon: {
                             AppIconView(name: app.name)
                         }
+                        .font(sidebarNavigationFont)
                         .badge(app.requestCount)
                         .tag(SidebarItem.app(name: app.name, bundleId: nil))
+                        .frame(minHeight: metrics.sidebarRowHeight)
                         .contextMenu { appContextMenu(app) }
                     }
                 }
@@ -247,6 +281,7 @@ struct SidebarView: View {
                 Label(String(localized: "Apps"), systemImage: "square.stack.3d.up.fill")
                     .badge(appNodes.count)
                     .tag(SidebarItem.allApps)
+                    .frame(minHeight: metrics.sidebarRowHeight)
                     .contentShape(Rectangle())
                     .onTapGesture { coordinator.selectSidebarItem(.allApps) }
             }
@@ -259,12 +294,14 @@ struct SidebarView: View {
                 Label(String(localized: "Domains"), systemImage: "globe")
                     .badge(totalDomainCount)
                     .tag(SidebarItem.allDomains)
+                    .frame(minHeight: metrics.sidebarRowHeight)
                     .contentShape(Rectangle())
                     .onTapGesture { coordinator.selectSidebarItem(.allDomains) }
             }
         } header: {
             Text(String(localized: "All"))
                 .foregroundStyle(Theme.Sidebar.sectionHeader)
+                .font(.system(size: metrics.sidebarSectionHeaderFontSize, weight: .semibold))
         }
         .headerProminence(.increased)
     }
@@ -276,33 +313,44 @@ struct SidebarView: View {
             Label {
                 HStack(spacing: 4) {
                     Text(domain)
+                        .font(sidebarNavigationFont)
                     if coordinator.isSSLProxyingEnabled(for: domain) {
                         Image(systemName: "lock.shield.fill")
-                            .font(.caption2)
+                            .font(.system(size: metrics.sidebarBadgeFontSize))
                             .foregroundStyle(.green)
                     }
                 }
             } icon: {
                 Image(systemName: "globe")
+                    .font(sidebarIconFont)
             }
+            .font(sidebarNavigationFont)
             .tag(item)
+            .frame(minHeight: metrics.sidebarRowHeight)
             .contextMenu { domainContextMenu(domain) }
         case let .domainPath(domain, pathPrefix):
             Label {
                 Text("\(domain)\(pathPrefix)")
+                    .font(sidebarNavigationFont)
                     .lineLimit(1)
             } icon: {
                 Image(systemName: "link")
+                    .font(sidebarIconFont)
             }
+            .font(sidebarNavigationFont)
             .tag(item)
+            .frame(minHeight: metrics.sidebarRowHeight)
             .contextMenu { domainContextMenu(domain, pathPrefix: pathPrefix) }
         case let .app(name, _):
             Label {
                 Text(name)
+                    .font(sidebarNavigationFont)
             } icon: {
                 AppIconView(name: name)
             }
+            .font(sidebarNavigationFont)
             .tag(item)
+            .frame(minHeight: metrics.sidebarRowHeight)
             .contextMenu {
                 if let app = coordinator.appNodes.first(where: { $0.name == name }) {
                     appContextMenu(app)
@@ -347,30 +395,34 @@ struct SidebarView: View {
         Label {
             HStack(spacing: 5) {
                 Text(node.domain)
+                    .font(sidebarNavigationFont)
                     .foregroundStyle(node.kind == .path ? .secondary : .primary)
                     .lineLimit(1)
                     .truncationMode(.middle)
 
                 if coordinator.isSSLProxyingEnabled(for: node.selectionDomain), node.kind != .path {
                     Image(systemName: "lock.shield.fill")
-                        .font(.caption2)
+                        .font(.system(size: metrics.sidebarBadgeFontSize))
                         .foregroundStyle(.green)
                 }
 
                 if node.errorCount > 0 {
                     Label("\(node.errorCount)", systemImage: "exclamationmark.triangle.fill")
                         .labelStyle(.titleAndIcon)
-                        .font(.caption2)
+                        .font(.system(size: metrics.sidebarBadgeFontSize))
                         .foregroundStyle(.orange)
                         .help(String(localized: "\(node.errorCount) failed or error responses"))
                 }
             }
         } icon: {
             Image(systemName: domainIconName(for: node.kind))
+                .font(sidebarIconFont)
                 .foregroundStyle(node.kind == .path ? .secondary : .primary)
         }
+        .font(sidebarNavigationFont)
         .badge(node.requestCount)
         .tag(sidebarItem(for: node))
+        .frame(minHeight: metrics.sidebarRowHeight)
         .contextMenu { domainContextMenu(node.selectionDomain, pathPrefix: node.pathPrefix) }
         .help(domainHelpText(for: node))
     }
@@ -410,6 +462,14 @@ struct SidebarView: View {
             return "\(node.selectionDomain)\(pathPrefix)"
         }
         return node.selectionDomain
+    }
+
+    private var sidebarNavigationFont: Font {
+        .system(size: metrics.sidebarNavigationFontSize)
+    }
+
+    private var sidebarIconFont: Font {
+        .system(size: metrics.sidebarIconFontSize)
     }
 
     // MARK: - Context Menus

@@ -76,6 +76,25 @@ struct InspectorTextEditorSettingsTests {
         #expect(textView.layoutManager?.showsControlCharacters == true)
     }
 
+    @Test("Inspector editor keeps ruler and wrapped text contained inside the scroll view")
+    func editorRulerAndWrappedTextStayContained() throws {
+        let scrollView = makeEditorScrollView(text: "GET /very/long/request/path HTTP/1.1")
+        let textView = try #require(scrollView.documentView as? NSTextView)
+        let ruler = ScriptCodeEditorRulerView(textView: textView)
+        scrollView.verticalRulerView = ruler
+        scrollView.hasVerticalRuler = true
+        scrollView.rulersVisible = true
+
+        InspectorBodyTextEditor.applyEditorSettings(InspectorTextEditorSettings(fontSize: 22, wordWrap: true), to: scrollView)
+
+        #expect(scrollView.clipsToBounds == true)
+        #expect(scrollView.contentView.clipsToBounds == true)
+        #expect(textView.clipsToBounds == true)
+        #expect(scrollView.verticalRulerView?.frame.maxX ?? 0 <= scrollView.bounds.maxX)
+        #expect(textView.frame.width <= scrollView.contentView.bounds.width + 0.5)
+        #expect(textView.textContainer?.containerSize.width == scrollView.contentView.bounds.width)
+    }
+
     private func makeEditorScrollView() -> NSScrollView {
         makeEditorScrollView(text: "")
     }
