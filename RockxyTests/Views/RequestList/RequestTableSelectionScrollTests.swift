@@ -21,19 +21,23 @@ struct RequestTableSelectionScrollTests {
             tableStatusDot: CGFloat,
             tableSSLIcon: CGFloat,
             tableClientIcon: CGFloat,
+            chromeFont: CGFloat,
+            chromeDot: CGFloat,
+            chromeControl: CGFloat,
+            workspaceTab: CGFloat,
             sidebarRow: CGFloat,
             row: CGFloat,
             status: CGFloat,
             filter: CGFloat,
             tab: CGFloat
         )] = [
-            (10, 11, 9, 10, 10, 11, 10, 10, 10, 20, 8, 10, 14, 24, 26, 34, 26, 22),
-            (11, 11, 10, 10, 10, 11, 10, 10, 10, 20, 8, 10, 14, 24, 27, 34, 26, 22),
-            (12, 11, 11, 10, 10, 12, 11, 10, 10, 20, 9, 11, 15, 24, 28, 34, 26, 22),
-            (13, 12, 12, 11, 10, 13, 12, 11, 11, 20, 10, 12, 16, 25, 28, 35, 27, 23),
-            (14, 13, 13, 12, 11, 14, 13, 12, 12, 21, 11, 13, 17, 26, 30, 36, 28, 24),
-            (20, 19, 19, 18, 17, 20, 19, 18, 18, 27, 12, 16, 18, 32, 36, 42, 34, 30),
-            (28, 27, 27, 26, 25, 28, 27, 26, 26, 32, 12, 16, 18, 40, 44, 50, 42, 38),
+            (10, 11, 9, 10, 10, 11, 10, 10, 10, 20, 8, 10, 14, 11, 9, 32, 13, 24, 26, 34, 26, 22),
+            (11, 11, 10, 10, 10, 11, 10, 10, 10, 20, 8, 10, 14, 11, 9, 32, 13, 24, 27, 34, 26, 22),
+            (12, 11, 11, 10, 10, 12, 11, 10, 10, 20, 9, 11, 15, 11, 9, 32, 13, 24, 28, 34, 26, 22),
+            (13, 12, 12, 11, 10, 13, 12, 11, 11, 20, 10, 12, 16, 12, 10, 32, 13, 25, 28, 35, 27, 23),
+            (14, 13, 13, 12, 11, 14, 13, 12, 12, 21, 11, 13, 17, 13, 11, 32, 13, 26, 30, 36, 28, 24),
+            (20, 19, 19, 18, 17, 20, 19, 18, 18, 27, 12, 16, 18, 19, 14, 35, 18, 32, 36, 42, 34, 30),
+            (28, 27, 27, 26, 25, 28, 27, 26, 26, 32, 12, 16, 18, 27, 14, 43, 18, 40, 44, 50, 42, 38),
         ]
 
         for item in cases {
@@ -56,6 +60,11 @@ struct RequestTableSelectionScrollTests {
             #expect(metrics.tableStatusDotSize == item.tableStatusDot)
             #expect(metrics.tableSSLIconSize == item.tableSSLIcon)
             #expect(metrics.tableClientIconSize == item.tableClientIcon)
+            #expect(metrics.chromeFontSize == item.chromeFont)
+            #expect(metrics.chromeSecondaryFontSize == item.secondary)
+            #expect(metrics.chromeStatusDotSize == item.chromeDot)
+            #expect(metrics.chromeControlHeight == item.chromeControl)
+            #expect(metrics.workspaceTabFontSize == item.workspaceTab)
             #expect(metrics.sidebarRowHeight == item.sidebarRow)
             #expect(metrics.tableRowHeight == item.row)
             #expect(metrics.statusBarHeight == item.status)
@@ -637,6 +646,101 @@ struct RequestTableSelectionScrollTests {
         #expect(fallbackView.frame.size.height == expected.tableClientIconSize)
         #expect(leadingConstraintConstant(for: nameLabel, in: clientView) == expected.tableClientIconSize + 4)
         #expect(leadingConstraintCount(for: nameLabel, in: clientView) == 1)
+    }
+
+    @Test("Request table visible metric refresh converges after rapid large-small jumps")
+    func requestTableVisibleMetricRefreshConvergesAfterRapidJumps() async throws {
+        var selectedIDs = Set<UUID>()
+        var appUI = AppUISettings()
+        appUI.fontSize = 13
+        let transaction = TestFixtures.makeTransaction(method: "CONNECT", url: "https://example.com:443")
+        transaction.clientApp = "Example Client"
+        let rows = [RequestListRow(from: transaction, sslState: .secureIntercepted)]
+        let parent = RequestTableView(
+            workspaceID: UUID(),
+            rows: rows,
+            refreshToken: 0,
+            isAppendOnly: false,
+            displayMetricsOverride: AppUIDisplayMetrics(settings: appUI),
+            selectedIDs: Binding(
+                get: { selectedIDs },
+                set: { selectedIDs = $0 }
+            )
+        )
+        let coordinator = RequestTableView.Coordinator(parent: parent)
+        coordinator.rows = rows
+        let tableView = makeTableView(rowCount: rows.count, coordinator: coordinator, columns: ["status", "ssl", "client"])
+        _ = makeScrollView(documentView: tableView)
+
+        for fontSize in [13, 28, 10, 28, 10] {
+            appUI.fontSize = fontSize
+            coordinator.parent = RequestTableView(
+                workspaceID: UUID(),
+                rows: rows,
+                refreshToken: fontSize,
+                isAppendOnly: false,
+                displayMetricsOverride: AppUIDisplayMetrics(settings: appUI),
+                selectedIDs: Binding(
+                    get: { selectedIDs },
+                    set: { selectedIDs = $0 }
+                )
+            )
+            _ = coordinator.applyDisplayMetrics(to: tableView)
+            coordinator.reloadVisibleRows(in: tableView)
+            coordinator.scheduleVisibleMetricsRefresh(in: tableView, preserving: nil)
+        }
+
+        await Task.yield()
+
+        let expected = AppUIDisplayMetrics(settings: appUI)
+        let statusView = try #require(tableView.view(atColumn: 0, row: 0, makeIfNecessary: true))
+        let statusImageView = try #require(statusView.subviews.first as? NSImageView)
+        let sslView = try #require(tableView.view(atColumn: 1, row: 0, makeIfNecessary: true))
+        let sslImageView = try #require(sslView.subviews.first as? NSImageView)
+        let clientView = try #require(tableView.view(atColumn: 2, row: 0, makeIfNecessary: true))
+        let clientImageView = try #require(clientView.subviews.first as? NSImageView)
+        let fallbackView = clientView.subviews[1]
+        let nameLabel = try #require(clientView.subviews[2] as? NSTextField)
+
+        #expect(fixedConstraintConstant(.width, for: statusImageView) == expected.tableStatusDotSize)
+        #expect(fixedConstraintConstant(.height, for: statusImageView) == expected.tableStatusDotSize)
+        #expect(fixedConstraintConstant(.width, for: sslImageView) == expected.tableSSLIconSize)
+        #expect(fixedConstraintConstant(.height, for: sslImageView) == expected.tableSSLIconSize)
+        #expect(clientImageView.frame.size.width == expected.tableClientIconSize)
+        #expect(clientImageView.frame.size.height == expected.tableClientIconSize)
+        #expect(fallbackView.frame.size.width == expected.tableClientIconSize)
+        #expect(fallbackView.frame.size.height == expected.tableClientIconSize)
+        #expect(leadingConstraintConstant(for: nameLabel, in: clientView) == expected.tableClientIconSize + 4)
+    }
+
+    @Test("Request table reapplies header font to custom columns after appearance changes")
+    func requestTableHeaderMetricsApplyToCustomColumns() throws {
+        var selectedIDs = Set<UUID>()
+        var appUI = AppUISettings()
+        appUI.fontSize = 28
+        let parent = RequestTableView(
+            workspaceID: UUID(),
+            rows: [],
+            refreshToken: 0,
+            isAppendOnly: false,
+            displayMetricsOverride: AppUIDisplayMetrics(settings: appUI),
+            selectedIDs: Binding(
+                get: { selectedIDs },
+                set: { selectedIDs = $0 }
+            )
+        )
+        let coordinator = RequestTableView.Coordinator(parent: parent)
+        let tableView = makeTableView(rowCount: 1, coordinator: coordinator, columns: ["url"])
+        let customColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("reqHeader.X-Test"))
+        tableView.addTableColumn(customColumn)
+
+        _ = coordinator.applyDisplayMetrics(to: tableView)
+        coordinator.applyHeaderMetrics(to: tableView)
+
+        let expected = AppUIDisplayMetrics(settings: appUI).secondaryFontSize
+        let customHeaderFont = try #require(customColumn.headerCell.font)
+
+        #expect(customHeaderFont.pointSize == expected)
     }
 
     private func makeScrollView(documentView: NSTableView) -> NSScrollView {

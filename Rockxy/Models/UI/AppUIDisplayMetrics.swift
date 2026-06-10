@@ -78,6 +78,38 @@ struct AppUIDisplayMetrics: Equatable {
         max(14, min(fontSize + 3, 18))
     }
 
+    var chromeFontSize: CGFloat {
+        controlFontSize
+    }
+
+    var chromeSecondaryFontSize: CGFloat {
+        secondaryFontSize
+    }
+
+    var chromeIconFontSize: CGFloat {
+        max(11, controlFontSize)
+    }
+
+    var chromeBadgeFontSize: CGFloat {
+        max(10, controlFontSize)
+    }
+
+    var chromeStatusDotSize: CGFloat {
+        max(8, min(controlFontSize - 2, 14))
+    }
+
+    var chromeControlHeight: CGFloat {
+        max(32, controlFontSize + 16)
+    }
+
+    var chromeBadgeHeight: CGFloat {
+        max(24, controlFontSize + 11)
+    }
+
+    var workspaceTabFontSize: CGFloat {
+        max(13, min(controlFontSize, 18))
+    }
+
     var tableRowHeight: CGFloat {
         if fontSize <= 12 {
             return max(24, fontSize + 16)

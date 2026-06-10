@@ -50,6 +50,7 @@ final class AppSettingsManager {
         settings.appTheme = theme
         AppSettingsStorage.saveAppearance(appTheme: appTheme, appUI: appUI)
         AppThemeApplier.apply(theme.rawValue)
+        notifyAppearanceDidChange()
     }
 
     func updateAppUI(_ appUI: AppUISettings) {
@@ -62,6 +63,7 @@ final class AppSettingsManager {
         self.appUI = validated
         settings.appUI = validated
         AppSettingsStorage.saveAppearance(appTheme: appTheme, appUI: validated)
+        notifyAppearanceDidChange()
     }
 
     func updateAppUI(_ update: (inout AppUISettings) -> Void) {
@@ -82,6 +84,7 @@ final class AppSettingsManager {
         settings.appUI = .default
         AppSettingsStorage.saveAppearance(appTheme: defaultTheme, appUI: defaultUI)
         AppThemeApplier.apply(AppTheme.system.rawValue)
+        notifyAppearanceDidChange()
     }
 
     func updateMCPServerEnabled(_ enabled: Bool) {
@@ -144,5 +147,16 @@ final class AppSettingsManager {
         if appTheme != settings.appTheme {
             appTheme = settings.appTheme
         }
+    }
+
+    private func notifyAppearanceDidChange() {
+        NotificationCenter.default.post(
+            name: .appearanceDidChange,
+            object: self,
+            userInfo: [
+                "fontSize": appUI.fontSize,
+                "theme": appTheme.rawValue,
+            ]
+        )
     }
 }

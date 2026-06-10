@@ -25,10 +25,12 @@ struct RockxyApp: App {
 
     var body: some Scene {
         Window(RockxyIdentity.current.displayName, id: "main") {
-            MainWindowContent(
-                lifecycleState: lifecycleState,
-                coordinator: mainCoordinator
-            )
+            AppUIDisplayMetricsProvider {
+                MainWindowContent(
+                    lifecycleState: lifecycleState,
+                    coordinator: mainCoordinator
+                )
+            }
         }
         .windowToolbarStyle(.unified)
         .commands {

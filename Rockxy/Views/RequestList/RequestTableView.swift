@@ -122,6 +122,7 @@ struct RequestTableView: NSViewRepresentable {
 
         let scrollAnchor = !workspaceChanged ? coordinator.makeScrollAnchor(in: tableView) : nil
         let displayChange = coordinator.applyDisplayMetrics(to: tableView)
+        var reloadedVisibleRowsForMetrics = false
 
         if workspaceChanged || newToken != oldToken {
             let newCount = rows.count
@@ -135,18 +136,24 @@ struct RequestTableView: NSViewRepresentable {
                 tableView.insertRows(at: newIndexes, withAnimation: [])
                 if displayChange?.reloadVisibleRows == true {
                     coordinator.reloadVisibleRows(in: tableView)
+                    reloadedVisibleRowsForMetrics = true
                 }
             } else {
                 tableView.reloadData()
+                reloadedVisibleRowsForMetrics = displayChange?.reloadVisibleRows == true
             }
             coordinator.previousRowCount = newCount
         } else if displayChange?.reloadVisibleRows == true {
             coordinator.reloadVisibleRows(in: tableView)
+            reloadedVisibleRowsForMetrics = true
         }
 
         coordinator.scheduleInitialAutosizeIfNeeded(in: tableView)
 
         coordinator.syncHeaderColumns(in: tableView)
+        if displayChange != nil {
+            coordinator.applyHeaderMetrics(to: tableView)
+        }
         coordinator.syncSelection(to: selectedIDs, in: tableView)
 
         // Re-apply HeaderColumnStore visibility on every update (single source of truth)
@@ -169,6 +176,10 @@ struct RequestTableView: NSViewRepresentable {
            let scrollAnchor
         {
             coordinator.restoreScrollAnchor(scrollAnchor, in: tableView)
+        }
+
+        if reloadedVisibleRowsForMetrics {
+            coordinator.scheduleVisibleMetricsRefresh(in: tableView, preserving: scrollAnchor)
         }
     }
 
@@ -303,11 +314,17 @@ private struct RequestTableAppliedMetrics: Equatable {
 private struct RequestTableContentMetrics: Equatable {
     let fontSize: CGFloat
     let secondaryFontSize: CGFloat
+    let statusDotSize: CGFloat
+    let sslIconSize: CGFloat
+    let clientIconSize: CGFloat
     let useMonospacedFont: Bool
 
     init(metrics: AppUIDisplayMetrics) {
         fontSize = metrics.fontSize
         secondaryFontSize = metrics.secondaryFontSize
+        statusDotSize = metrics.tableStatusDotSize
+        sslIconSize = metrics.tableSSLIconSize
+        clientIconSize = metrics.tableClientIconSize
         useMonospacedFont = metrics.settings.useMonospacedFont
     }
 }
@@ -350,6 +367,7 @@ extension RequestTableView {
         private(set) var isUpdatingSortDescriptors = false
 
         private var lastSyncedSelectionIDs: Set<UUID> = []
+        private var visibleMetricsRefreshGeneration = 0
 
         // MARK: - NSTableViewDataSource
 
@@ -382,9 +400,7 @@ extension RequestTableView {
             let previousTableMetrics = lastAppliedRequestTableMetrics
             tableView.rowHeight = metrics.tableRowHeight
             tableView.usesAlternatingRowBackgroundColors = metrics.settings.useAlternatingRowBackgroundColors
-            for column in tableView.tableColumns {
-                column.headerCell.font = .systemFont(ofSize: metrics.secondaryFontSize, weight: .medium)
-            }
+            applyHeaderMetrics(to: tableView)
             tableView.needsDisplay = true
 
             lastAppliedDisplayMetrics = metrics
@@ -401,6 +417,14 @@ extension RequestTableView {
                 rowHeightChanged: rowHeightChanged,
                 contentMetricsChanged: contentMetricsChanged
             )
+        }
+
+        func applyHeaderMetrics(to tableView: NSTableView) {
+            let metrics = parent.effectiveDisplayMetrics
+            for column in tableView.tableColumns {
+                column.headerCell.font = .systemFont(ofSize: metrics.secondaryFontSize, weight: .medium)
+            }
+            tableView.headerView?.needsDisplay = true
         }
 
         func makeScrollAnchor(in tableView: NSTableView) -> ScrollAnchor? {
@@ -474,6 +498,30 @@ extension RequestTableView {
                 forRowIndexes: IndexSet(integersIn: rowStart ..< rowEnd),
                 columnIndexes: IndexSet(integersIn: 0 ..< tableView.numberOfColumns)
             )
+        }
+
+        func scheduleVisibleMetricsRefresh(
+            in tableView: NSTableView,
+            preserving scrollAnchor: ScrollAnchor?
+        ) {
+            visibleMetricsRefreshGeneration += 1
+            let generation = visibleMetricsRefreshGeneration
+            DispatchQueue.main.async { [weak self, weak tableView] in
+                guard let self,
+                      let tableView,
+                      self.visibleMetricsRefreshGeneration == generation else
+                {
+                    return
+                }
+                tableView.layoutSubtreeIfNeeded()
+                self.reloadVisibleRows(in: tableView)
+                self.applyHeaderMetrics(to: tableView)
+                tableView.needsDisplay = true
+                if let scrollAnchor {
+                    self.restoreScrollAnchor(scrollAnchor, in: tableView)
+                }
+                tableView.layoutSubtreeIfNeeded()
+            }
         }
 
         func tableView(_ tableView: NSTableView, sortDescriptorsDidChange oldDescriptors: [NSSortDescriptor]) {
