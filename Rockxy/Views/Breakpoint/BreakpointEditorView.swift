@@ -126,7 +126,7 @@ struct BreakpointEditorView: View {
             }
         }
         .labelsHidden()
-        .frame(width: 100)
+        .frame(width: toolMetrics.menuWidth(100))
     }
 
     private func urlField(itemId: UUID) -> some View {
@@ -136,6 +136,7 @@ struct BreakpointEditorView: View {
         ))
         .textFieldStyle(.roundedBorder)
         .font(toolMetrics.font(monospaced: true))
+        .frame(minHeight: toolMetrics.formControlHeight)
     }
 
     private func statusCodePicker(itemId: UUID) -> some View {
@@ -148,7 +149,7 @@ struct BreakpointEditorView: View {
             }
         }
         .labelsHidden()
-        .frame(width: 160)
+        .frame(width: toolMetrics.menuWidth(160))
     }
 
     private func tabContent(itemId: UUID) -> some View {
@@ -211,6 +212,7 @@ struct BreakpointEditorView: View {
                         ))
                         .textFieldStyle(.roundedBorder)
                         .font(toolMetrics.secondaryFont(monospaced: true))
+                        .frame(minHeight: toolMetrics.formControlHeight)
 
                         TextField(String(localized: "Header value"), text: Binding(
                             get: { headerValue(itemId: itemId, headerId: header.id)?.value ?? "" },
@@ -224,6 +226,7 @@ struct BreakpointEditorView: View {
                         ))
                         .textFieldStyle(.roundedBorder)
                         .font(toolMetrics.secondaryFont(monospaced: true))
+                        .frame(minHeight: toolMetrics.formControlHeight)
 
                         Button {
                             manager.updateDraft(id: itemId) { draft in
@@ -326,6 +329,7 @@ struct BreakpointEditorView: View {
                         ))
                         .textFieldStyle(.roundedBorder)
                         .font(toolMetrics.secondaryFont(monospaced: true))
+                        .frame(minHeight: toolMetrics.formControlHeight)
 
                         TextField(String(localized: "Parameter value"), text: Binding(
                             get: { queryItems.first(where: { $0.id == item.id })?.value ?? "" },
@@ -338,6 +342,7 @@ struct BreakpointEditorView: View {
                         ))
                         .textFieldStyle(.roundedBorder)
                         .font(toolMetrics.secondaryFont(monospaced: true))
+                        .frame(minHeight: toolMetrics.formControlHeight)
 
                         Button {
                             queryItems.removeAll { $0.id == item.id }

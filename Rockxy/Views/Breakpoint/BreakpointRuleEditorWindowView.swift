@@ -50,14 +50,12 @@ struct BreakpointRuleEditorWindowView: View {
         .padding(.horizontal, toolMetrics.formHorizontalPadding)
         .padding(.top, toolMetrics.formVerticalPadding)
         .padding(.bottom, toolMetrics.footerBottomPadding)
-        .frame(minWidth: 815, minHeight: max(270, toolMetrics.bodyFontSize * 10 + 150))
+        .frame(minWidth: max(815, toolMetrics.bodyFontSize * 24 + 504), minHeight: max(270, toolMetrics.bodyFontSize * 10 + 150))
         .onAppear { loadFromStore() }
         .onChange(of: store.draftVersion) { _, _ in loadFromStore() }
     }
 
     // MARK: Private
-
-    private static let labelWidth: CGFloat = 122
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appUIDisplayMetrics) private var appMetrics
@@ -80,6 +78,10 @@ struct BreakpointRuleEditorWindowView: View {
             && (breakpointRequest || breakpointResponse)
     }
 
+    private var labelWidth: CGFloat {
+        max(122, toolMetrics.formLabelWidth)
+    }
+
     private var formRows: some View {
         VStack(alignment: .leading, spacing: toolMetrics.formRowSpacing) {
             formRow(String(localized: "Name:")) {
@@ -95,14 +97,14 @@ struct BreakpointRuleEditorWindowView: View {
 
             HStack(spacing: toolMetrics.controlSpacing) {
                 Spacer()
-                    .frame(width: Self.labelWidth)
+                    .frame(width: labelWidth)
                 Picker("", selection: $httpMethod) {
                     ForEach(HTTPMethodFilter.allCases, id: \.self) { method in
                         Text(method.rawValue).tag(method)
                     }
                 }
                 .labelsHidden()
-                .frame(width: 100)
+                .frame(width: toolMetrics.menuWidth(100))
 
                 Picker("", selection: $matchType) {
                     ForEach(RuleMatchType.allCases, id: \.self) { type in
@@ -110,11 +112,12 @@ struct BreakpointRuleEditorWindowView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(width: 132)
+                .frame(width: toolMetrics.menuWidth(132))
 
                 Text(String(localized: "Support wildcard * and ?."))
                     .font(toolMetrics.secondaryFont())
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Button(String(localized: "Test your Rule")) {
                     NSSound.beep()
@@ -125,7 +128,7 @@ struct BreakpointRuleEditorWindowView: View {
 
             HStack(spacing: toolMetrics.controlSpacing) {
                 Spacer()
-                    .frame(width: Self.labelWidth)
+                    .frame(width: labelWidth)
                 Toggle(String(localized: "Include all subpaths of this URL"), isOn: $includeSubpaths)
                     .toggleStyle(.checkbox)
                     .font(toolMetrics.font())
@@ -143,10 +146,11 @@ struct BreakpointRuleEditorWindowView: View {
 
             HStack {
                 Spacer()
-                    .frame(width: Self.labelWidth)
+                    .frame(width: labelWidth)
                 Text(String(localized: "Start the breakpoint for out-going request or in-coming response."))
                     .font(toolMetrics.secondaryFont())
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -158,7 +162,7 @@ struct BreakpointRuleEditorWindowView: View {
                 dismiss()
             }
             .keyboardShortcut(.cancelAction)
-            .frame(width: 100)
+            .frame(width: toolMetrics.footerButtonWidth)
 
             Button(isEditing ? String(localized: "Save (⌘↵)") : String(localized: "Add (⌘↵)")) {
                 store.onSave?(
@@ -174,7 +178,7 @@ struct BreakpointRuleEditorWindowView: View {
             }
             .keyboardShortcut(.defaultAction)
             .disabled(!canSave)
-            .frame(width: 100)
+            .frame(width: toolMetrics.footerButtonWidth)
         }
     }
 
@@ -187,8 +191,10 @@ struct BreakpointRuleEditorWindowView: View {
         HStack(alignment: .firstTextBaseline, spacing: toolMetrics.controlSpacing) {
             Text(label)
                 .font(toolMetrics.font())
-                .frame(width: Self.labelWidth, alignment: .trailing)
+                .lineLimit(1)
+                .frame(width: labelWidth, alignment: .trailing)
             content()
+                .frame(minHeight: toolMetrics.formControlHeight)
         }
     }
 

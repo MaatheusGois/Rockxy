@@ -989,45 +989,54 @@ struct MapLocalEditorWindowView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text(String(localized: "Name:"))
-                        .frame(width: 70, alignment: .trailing)
+                        .lineLimit(1)
+                        .frame(width: compactLabelWidth, alignment: .trailing)
                     TextField(String(localized: "Untitled"), text: $viewModel.name)
                         .textFieldStyle(.roundedBorder)
+                        .font(toolMetrics.font())
+                        .frame(minHeight: toolMetrics.formControlHeight)
                 }
 
                 HStack {
                     Text(String(localized: "URL:"))
-                        .frame(width: 70, alignment: .trailing)
+                        .lineLimit(1)
+                        .frame(width: compactLabelWidth, alignment: .trailing)
                     TextField("api.proxyman.com/v1/*", text: $viewModel.urlText)
                         .textFieldStyle(.roundedBorder)
+                        .font(toolMetrics.font(monospaced: true))
+                        .frame(minHeight: toolMetrics.formControlHeight)
                 }
 
                 HStack(spacing: 10) {
-                    Spacer().frame(width: 70)
+                    Spacer().frame(width: compactLabelWidth)
                     methodMenu
                     matchTypeMenu
                     Text(String(localized: "Support wildcard * and ?."))
+                        .font(toolMetrics.secondaryFont())
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     Button(String(localized: "Test your Rule")) {}
                         .buttonStyle(.link)
                 }
 
                 HStack {
-                    Spacer().frame(width: 70)
+                    Spacer().frame(width: compactLabelWidth)
                     Toggle(String(localized: "Include all subpaths of this URL"), isOn: $viewModel.includeSubpaths)
                         .toggleStyle(.checkbox)
                 }
 
                 Divider()
-                    .padding(.leading, 70)
+                    .padding(.leading, compactLabelWidth)
 
                 HStack(spacing: 12) {
-                    Spacer().frame(width: 70)
+                    Spacer().frame(width: compactLabelWidth)
                     Text(String(localized: "Advanced Settings:"))
                         .font(toolMetrics.font(weight: .semibold))
                 }
                 HStack(spacing: 10) {
                     Text(String(localized: "Delay Response:"))
-                        .frame(width: 140, alignment: .trailing)
+                        .lineLimit(1)
+                        .frame(width: advancedLabelWidth, alignment: .trailing)
                     delayMenu
                     if viewModel.delayPreset == .custom {
                         Stepper(
@@ -1035,7 +1044,7 @@ struct MapLocalEditorWindowView: View {
                             value: $viewModel.customDelaySeconds,
                             in: 0 ... 300
                         )
-                        .frame(width: 160)
+                        .frame(width: toolMetrics.fieldWidth(160))
                     }
                 }
             }
@@ -1073,7 +1082,7 @@ struct MapLocalEditorWindowView: View {
                     Text(MapLocalTargetMode.localDirectory.displayName).tag(MapLocalTargetMode.localDirectory)
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 240)
+                .frame(width: toolMetrics.menuWidth(240))
                 .background(
                     Color(nsColor: .controlBackgroundColor)
                         .padding(.horizontal, -8)
@@ -1108,9 +1117,9 @@ struct MapLocalEditorWindowView: View {
             HStack(spacing: 10) {
                 Button(String(localized: "Select Local File")) { viewModel.choosePath() }
                 Text(String(localized: "Accept HTTP Message Format or Local File"))
+                    .font(toolMetrics.secondaryFont())
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.9)
+                    .fixedSize(horizontal: false, vertical: true)
                 Button {
                     viewModel.errorMessage = String(localized: """
                     Paste an HTTP response message or plain body. Rockxy saves the body to the local file and uses the status line for the response code.
@@ -1135,8 +1144,11 @@ struct MapLocalEditorWindowView: View {
 
             HStack {
                 Text(String(localized: "Directory Path:"))
+                    .lineLimit(1)
                 TextField("", text: $viewModel.directoryPath)
                     .textFieldStyle(.roundedBorder)
+                    .font(toolMetrics.font())
+                    .frame(minHeight: toolMetrics.formControlHeight)
             }
 
             HStack(spacing: 8) {
@@ -1148,19 +1160,21 @@ struct MapLocalEditorWindowView: View {
                     : String(localized: "Directory Not Found!"))
                 .foregroundStyle(.secondary)
             }
-            .padding(.leading, 205)
+            .padding(.leading, directoryLeading)
 
             HStack(spacing: 12) {
-                Spacer().frame(width: 200)
+                Spacer().frame(width: directoryLeading)
                 Button(String(localized: "Select Directory")) { viewModel.choosePath() }
                 Button(String(localized: "Show in Finder")) { viewModel.showSelectedPathInFinder() }
                     .disabled(!viewModel.isDirectoryValid)
             }
 
             HStack(spacing: 12) {
-                Spacer().frame(width: 200)
+                Spacer().frame(width: directoryLeading)
                 Text(String(localized: "Support map from Root or Sub-Directories"))
+                    .font(toolMetrics.secondaryFont())
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 Button {
                     viewModel.errorMessage = String(localized: """
                     Directory mode maps request subpaths into the selected local directory. Root requests fall back to index.html when present.
@@ -1280,7 +1294,19 @@ struct MapLocalEditorWindowView: View {
             Image(systemName: "chevron.up.chevron.down")
                 .font(.system(size: toolMetrics.smallIconFontSize, weight: .semibold))
         }
-        .frame(minWidth: minWidth)
+        .frame(minWidth: toolMetrics.menuWidth(minWidth))
+    }
+
+    private var compactLabelWidth: CGFloat {
+        toolMetrics.formCompactLabelWidth
+    }
+
+    private var advancedLabelWidth: CGFloat {
+        toolMetrics.menuWidth(140)
+    }
+
+    private var directoryLeading: CGFloat {
+        toolMetrics.menuWidth(200)
     }
 
     private var toolMetrics: ToolWindowDisplayMetrics {

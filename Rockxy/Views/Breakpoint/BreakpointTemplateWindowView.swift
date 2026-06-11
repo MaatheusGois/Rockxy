@@ -12,7 +12,10 @@ struct BreakpointTemplateWindowView: View {
             editor
         }
         .font(toolMetrics.font())
-        .frame(width: 802, height: 631)
+        .frame(
+            minWidth: max(802, toolMetrics.bodyFontSize * 28 + 438),
+            minHeight: max(631, toolMetrics.bodyFontSize * 18 + 397)
+        )
     }
 
     // MARK: Private

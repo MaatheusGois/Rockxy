@@ -815,18 +815,19 @@ struct MapRemoteEditorWindowView: View {
                 labeledTextField(String(localized: "Rule:"), placeholder: "/v1/*", text: $viewModel.urlText)
 
                 HStack(spacing: toolMetrics.controlSpacing) {
-                    Spacer().frame(width: 70)
+                    Spacer().frame(width: compactLabelWidth)
                     methodMenu
                     matchTypeMenu
                     Text(String(localized: "Support wildcard * and ?."))
                         .font(toolMetrics.secondaryFont())
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     Button(String(localized: "Test your Rule")) {}
                         .buttonStyle(.link)
                 }
 
                 HStack {
-                    Spacer().frame(width: 70)
+                    Spacer().frame(width: compactLabelWidth)
                     Toggle(String(localized: "Include all subpaths of this URL"), isOn: $viewModel.includeSubpaths)
                         .toggleStyle(.checkbox)
                 }
@@ -846,7 +847,8 @@ struct MapRemoteEditorWindowView: View {
             VStack(alignment: .leading, spacing: toolMetrics.controlSpacing) {
                 HStack {
                     Text(String(localized: "Protocol:"))
-                        .frame(width: 64, alignment: .trailing)
+                        .lineLimit(1)
+                        .frame(width: compactLabelWidth, alignment: .trailing)
                     schemeMenu
                 }
 
@@ -857,44 +859,54 @@ struct MapRemoteEditorWindowView: View {
 
                 HStack {
                     Text(String(localized: "Port:"))
-                        .frame(width: 64, alignment: .trailing)
+                        .lineLimit(1)
+                        .frame(width: compactLabelWidth, alignment: .trailing)
                     TextField("443", text: $viewModel.destPort)
                         .textFieldStyle(.roundedBorder)
-                        .frame(width: 60)
+                        .font(toolMetrics.font(monospaced: true))
+                        .frame(width: toolMetrics.fieldWidth(60))
                 }
 
                 labeledTextField(String(localized: "Path:"), placeholder: "v2/api", text: $viewModel.destPath)
                 labeledTextField(String(localized: "Query:"), placeholder: "id=123", text: $viewModel.destQuery)
 
                 Text(String(localized: "Leave textfields blank to keep it unchanged from matched requests. Wildcard/Regex is not allowed."))
+                    .font(toolMetrics.secondaryFont())
                     .foregroundStyle(.secondary)
-                    .padding(.leading, 78)
+                    .padding(.leading, fieldLeading)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(String(localized: "Hint: Paste your URL to the Host textfield to auto-parse each components (Host, Port, Path, Query)."))
+                    .font(toolMetrics.secondaryFont())
                     .foregroundStyle(.secondary)
-                    .padding(.leading, 78)
+                    .padding(.leading, fieldLeading)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Divider()
-                    .padding(.leading, 78)
+                    .padding(.leading, fieldLeading)
                     .padding(.vertical, 4)
 
                 Text(String(localized: "Advanced Settings:"))
                     .font(toolMetrics.font(weight: .semibold))
-                    .padding(.leading, 78)
+                    .padding(.leading, fieldLeading)
 
                 Toggle(String(localized: "Preserve the Original URL after matching with Map Remote"), isOn: $viewModel.preserveOriginalURL)
                     .toggleStyle(.checkbox)
-                    .padding(.leading, 78)
+                    .padding(.leading, fieldLeading)
                 Text(String(localized: "The Request URL will be replaced with a new Map Remote URL."))
+                    .font(toolMetrics.secondaryFont())
                     .foregroundStyle(.secondary)
-                    .padding(.leading, 78)
+                    .padding(.leading, fieldLeading)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Toggle(String(localized: "Preserve Host Header"), isOn: $viewModel.preserveHost)
                     .toggleStyle(.checkbox)
-                    .padding(.leading, 78)
+                    .padding(.leading, fieldLeading)
                     .padding(.top, 2)
                 Text(String(localized: "The `Host` header of Requests are not changed."))
+                    .font(toolMetrics.secondaryFont())
                     .foregroundStyle(.secondary)
-                    .padding(.leading, 78)
+                    .padding(.leading, fieldLeading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .font(toolMetrics.font())
             .padding(.horizontal, toolMetrics.formHorizontalPadding - 2)
@@ -908,13 +920,13 @@ struct MapRemoteEditorWindowView: View {
         HStack {
             Spacer()
             Button(String(localized: "Cancel")) { dismiss() }
-                .keyboardShortcut(.cancelAction)
-                .frame(width: 100)
+            .keyboardShortcut(.cancelAction)
+                .frame(width: toolMetrics.footerButtonWidth)
             Button(viewModel.existingID == nil ? String(localized: "Add (⌘↩)") : String(localized: "Save (⌘↩)")) {
                 saveAndClose()
             }
             .keyboardShortcut(.defaultAction)
-            .frame(width: 100)
+            .frame(width: toolMetrics.footerButtonWidth)
             .disabled(!viewModel.isSaveEnabled)
         }
         .padding(.top, 2)
@@ -933,7 +945,7 @@ struct MapRemoteEditorWindowView: View {
                 }
             }
         } label: {
-            menuLabel(viewModel.method.rawValue, minWidth: 86)
+            menuLabel(viewModel.method.rawValue, minWidth: toolMetrics.menuWidth(86))
         }
         .menuIndicator(.hidden)
         .buttonStyle(.bordered)
@@ -948,7 +960,7 @@ struct MapRemoteEditorWindowView: View {
                 }
             }
         } label: {
-            menuLabel(viewModel.matchType.displayName, minWidth: 128)
+            menuLabel(viewModel.matchType.displayName, minWidth: toolMetrics.menuWidth(128))
         }
         .menuIndicator(.hidden)
         .buttonStyle(.bordered)
@@ -968,7 +980,7 @@ struct MapRemoteEditorWindowView: View {
                 menuCheckmarkLabel("https", isSelected: viewModel.destScheme == "https")
             }
         } label: {
-            menuLabel(viewModel.destScheme.isEmpty ? "http/https" : viewModel.destScheme, minWidth: 80)
+            menuLabel(viewModel.destScheme.isEmpty ? "http/https" : viewModel.destScheme, minWidth: toolMetrics.menuWidth(80))
         }
         .menuIndicator(.hidden)
         .buttonStyle(.bordered)
@@ -978,9 +990,12 @@ struct MapRemoteEditorWindowView: View {
     private func labeledTextField(_ label: String, placeholder: String, text: Binding<String>) -> some View {
         HStack {
             Text(label)
-                .frame(width: 70, alignment: .trailing)
+                .lineLimit(1)
+                .frame(width: compactLabelWidth, alignment: .trailing)
             TextField(placeholder, text: text)
                 .textFieldStyle(.roundedBorder)
+                .font(toolMetrics.font())
+                .frame(minHeight: toolMetrics.formControlHeight)
         }
     }
 
@@ -1000,6 +1015,14 @@ struct MapRemoteEditorWindowView: View {
                 .font(.system(size: 10, weight: .semibold))
         }
         .frame(minWidth: minWidth)
+    }
+
+    private var compactLabelWidth: CGFloat {
+        toolMetrics.formCompactLabelWidth
+    }
+
+    private var fieldLeading: CGFloat {
+        compactLabelWidth + toolMetrics.controlSpacing
     }
 
     private func saveAndClose() {

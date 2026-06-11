@@ -836,32 +836,35 @@ private struct NetworkConditionsEditSheet: View {
                 Text(String(localized: "Only support Host and Port. No Wildcard or Regex"))
                     .font(toolMetrics.secondaryFont())
                     .foregroundStyle(.secondary)
-                    .padding(.leading, Self.fieldLeading)
+                    .padding(.leading, fieldLeading)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Toggle(isOn: $applySystemWide) {
                     Text(String(localized: "Apply System-wide"))
                         .font(toolMetrics.font())
                 }
                 .toggleStyle(.checkbox)
-                .padding(.leading, Self.fieldLeading)
+                .padding(.leading, fieldLeading)
 
                 Text(String(localized: "All traffic being proxied through Rockxy will be affected by Network Throttling"))
                     .font(toolMetrics.secondaryFont())
                     .foregroundStyle(.secondary)
-                    .padding(.leading, Self.fieldLeading)
+                    .padding(.leading, fieldLeading)
                     .padding(.bottom, 6)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: toolMetrics.controlSpacing) {
                     Text(String(localized: "Preset Profiles:"))
                         .font(toolMetrics.font())
-                        .frame(width: Self.labelWidth, alignment: .trailing)
+                        .lineLimit(1)
+                        .frame(width: labelWidth, alignment: .trailing)
                     Picker("", selection: $selectedPreset) {
                         ForEach(NetworkConditionPreset.allCases, id: \.self) { preset in
                             Text(preset.displayName).tag(preset)
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 160)
+                    .frame(width: toolMetrics.menuWidth(160))
                 }
 
                 profileStats
@@ -872,20 +875,21 @@ private struct NetworkConditionsEditSheet: View {
             Text(String(localized: "To simulate network condition in real-life, the bandwidth is generated randomly in a given range"))
                 .font(toolMetrics.secondaryFont())
                 .foregroundStyle(.secondary)
-                .padding(.leading, Self.fieldLeading + toolMetrics.formHorizontalPadding)
+                .padding(.leading, fieldLeading + toolMetrics.formHorizontalPadding)
                 .padding(.top, toolMetrics.formVerticalPadding)
+                .fixedSize(horizontal: false, vertical: true)
 
             HStack {
                 Spacer()
                 Button(String(localized: "Cancel")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                    .frame(width: 100)
+                    .frame(width: toolMetrics.footerButtonWidth)
                 Button(isEditing ? String(localized: "Save (⌘↩)") : String(localized: "Add (⌘↩)")) {
                     saveRule()
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!isValid)
-                .frame(width: 100)
+                .frame(width: toolMetrics.footerButtonWidth)
             }
             .padding(.top, toolMetrics.formVerticalPadding + 4)
             .padding(.horizontal, toolMetrics.formHorizontalPadding)
@@ -909,9 +913,17 @@ private struct NetworkConditionsEditSheet: View {
 
     private let draft: NetworkConditionsDraft?
     private let existingID: UUID?
-    private static let labelWidth: CGFloat = 96
-    private static let fieldWidth: CGFloat = 700
-    private static let fieldLeading = labelWidth + 8
+    private var labelWidth: CGFloat {
+        max(96, toolMetrics.formCompactLabelWidth)
+    }
+
+    private var fieldWidth: CGFloat {
+        toolMetrics.fieldWidth(700)
+    }
+
+    private var fieldLeading: CGFloat {
+        labelWidth + toolMetrics.controlSpacing
+    }
 
     private var isEditing: Bool {
         existingID != nil
@@ -937,10 +949,10 @@ private struct NetworkConditionsEditSheet: View {
             HStack(spacing: 20) {
                 Text(String(localized: "Download"))
                     .font(toolMetrics.font())
-                    .frame(width: 260, alignment: .leading)
+                    .frame(width: toolMetrics.fieldWidth(260), alignment: .leading)
                 Text(String(localized: "Upload"))
                     .font(toolMetrics.font())
-                    .frame(width: 260, alignment: .leading)
+                    .frame(width: toolMetrics.fieldWidth(260), alignment: .leading)
             }
             HStack(spacing: 20) {
                 statsCard(
@@ -955,7 +967,7 @@ private struct NetworkConditionsEditSheet: View {
                 )
             }
         }
-        .padding(.leading, Self.fieldLeading)
+        .padding(.leading, fieldLeading)
         .padding(.top, 4)
     }
 
@@ -963,11 +975,13 @@ private struct NetworkConditionsEditSheet: View {
         HStack(spacing: toolMetrics.controlSpacing) {
             Text(label)
                 .font(toolMetrics.font())
-                .frame(width: Self.labelWidth, alignment: .trailing)
+                .lineLimit(1)
+                .frame(width: labelWidth, alignment: .trailing)
             TextField(prompt, text: text)
                 .textFieldStyle(.roundedBorder)
                 .font(toolMetrics.font())
-                .frame(width: Self.fieldWidth)
+                .frame(width: fieldWidth)
+                .frame(minHeight: toolMetrics.formControlHeight)
         }
     }
 
@@ -980,7 +994,9 @@ private struct NetworkConditionsEditSheet: View {
                 if selectedPreset == .custom {
                     TextField("", value: $customLatencyMs, format: .number)
                         .textFieldStyle(.roundedBorder)
-                        .frame(width: 70)
+                        .font(toolMetrics.font(monospaced: true))
+                        .frame(width: toolMetrics.fieldWidth(70))
+                        .frame(minHeight: toolMetrics.formControlHeight)
                     Text("ms")
                 } else {
                     Text("\(latencyMs).0 ms")
@@ -989,7 +1005,8 @@ private struct NetworkConditionsEditSheet: View {
         }
         .font(toolMetrics.font())
         .padding(.horizontal, 20)
-        .frame(width: 260, height: max(88, toolMetrics.bodyFontSize + 75), alignment: .center)
+        .frame(width: toolMetrics.fieldWidth(260), alignment: .center)
+        .frame(minHeight: max(88, toolMetrics.bodyFontSize + 75), alignment: .center)
         .background(Color(nsColor: .controlBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }

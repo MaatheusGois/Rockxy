@@ -183,7 +183,9 @@ struct ScriptingListWindowView: View {
                         }
                     )
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 200)
+                    .font(toolMetrics.font())
+                    .frame(width: toolMetrics.fieldWidth(200))
+                    .frame(minHeight: toolMetrics.formControlHeight)
                 } else {
                     Text(folder.name)
                         .fontWeight(.semibold)
@@ -399,6 +401,8 @@ struct ScriptingListWindowView: View {
             .fixedSize()
             TextField("Filter…", text: $viewModel.filterText)
                 .textFieldStyle(.roundedBorder)
+                .font(toolMetrics.font())
+                .frame(minHeight: toolMetrics.formControlHeight)
             Button {
                 viewModel.isFilterVisible = false
                 viewModel.filterText = ""

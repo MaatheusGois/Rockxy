@@ -346,8 +346,28 @@ struct ToolWindowDisplayMetrics: Equatable {
         110
     }
 
+    var formCompactLabelWidth: CGFloat {
+        max(70, bodyFontSize * 4.2)
+    }
+
+    var formWideLabelWidth: CGFloat {
+        max(150, bodyFontSize * 5.5)
+    }
+
     var formControlHeight: CGFloat {
         max(24, bodyFontSize + 12)
+    }
+
+    var footerButtonWidth: CGFloat {
+        max(100, bodyFontSize + 88)
+    }
+
+    func menuWidth(_ baseWidth: CGFloat) -> CGFloat {
+        baseWidth + max(0, bodyFontSize - 13) * 4
+    }
+
+    func fieldWidth(_ baseWidth: CGFloat) -> CGFloat {
+        baseWidth + max(0, bodyFontSize - 13) * 3
     }
 
     func font(weight: Font.Weight = .regular, monospaced: Bool = false) -> Font {

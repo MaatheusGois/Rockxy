@@ -41,6 +41,10 @@ struct ToolWindowReadabilityTests {
             #expect(metrics.compactButtonSize == item.button)
             #expect(metrics.compactIconFontSize == item.icon)
             #expect(metrics.smallIconFontSize == item.smallIcon)
+            #expect(metrics.formControlHeight >= metrics.bodyFontSize + 12)
+            #expect(metrics.footerButtonWidth >= 100)
+            #expect(metrics.menuWidth(90) >= 90)
+            #expect(metrics.fieldWidth(200) >= 200)
         }
     }
 
@@ -122,6 +126,26 @@ struct ToolWindowReadabilityTests {
         }
     }
 
+    @Test("Tool windows do not pin exact frames that can clip scaled text")
+    func toolWindowsDoNotPinExactFramesThatCanClipScaledText() throws {
+        let files = [
+            "Rockxy/Views/Rules/ModifyHeaderWindowView.swift",
+            "Rockxy/Views/Breakpoint/BreakpointTemplateWindowView.swift",
+        ]
+        let forbiddenSnippets = [
+            ".frame(width: 860, height: 620)",
+            ".frame(width: 802, height: 631)",
+        ]
+
+        for file in files {
+            let source = try readProjectFile(file)
+            #expect(source.contains(".frame(\n            minWidth: max("), "\(file) should use scalable min window dimensions")
+            for snippet in forbiddenSnippets {
+                #expect(!source.contains(snippet), "\(file) must not pin exact window size \(snippet)")
+            }
+        }
+    }
+
     @Test("Custom list tables no longer hard-code tiny primary rows")
     func customListTablesNoLongerHardCodeTinyPrimaryRows() throws {
         let files = [
@@ -186,6 +210,100 @@ struct ToolWindowReadabilityTests {
         }
     }
 
+    @Test("Tool window form controls scale from display metrics")
+    func toolWindowFormControlsScaleFromDisplayMetrics() throws {
+        let files = [
+            "Rockxy/Views/Rules/AddAllowListRuleSheet.swift",
+            "Rockxy/Views/Rules/BlockListWindowView.swift",
+            "Rockxy/Views/Rules/ModifyHeaderWindowView.swift",
+            "Rockxy/Views/Rules/ModifyHeaderEditorView.swift",
+            "Rockxy/Views/Rules/MapLocalWindowView.swift",
+            "Rockxy/Views/Rules/MapRemoteWindowView.swift",
+            "Rockxy/Views/Rules/NetworkConditionsWindowView.swift",
+            "Rockxy/Views/Rules/ProtobufSettingsWindowView.swift",
+            "Rockxy/Views/Breakpoint/AddBreakpointRuleSheet.swift",
+            "Rockxy/Views/Breakpoint/BreakpointRuleEditorWindowView.swift",
+            "Rockxy/Views/Breakpoint/BreakpointSheetView.swift",
+            "Rockxy/Views/Breakpoint/BreakpointEditorView.swift",
+            "Rockxy/Views/Scripting/ScriptEditorWindowView.swift",
+            "Rockxy/Views/Scripting/ScriptListRow.swift",
+            "Rockxy/Views/Scripting/ScriptingListWindowView.swift",
+            "Rockxy/Views/Compose/ComposeWindowView.swift",
+            "Rockxy/Views/Compose/ComposeRequestEditor.swift",
+            "Rockxy/Views/Diff/DiffControlBar.swift",
+            "Rockxy/Views/Export/ExportScopeSheet.swift",
+            "Rockxy/Views/Import/ImportReviewSheet.swift",
+            "Rockxy/Views/Settings/AddSSLDomainSheet.swift",
+            "Rockxy/Views/Settings/AddSSLAppDomainSheet.swift",
+            "Rockxy/Views/Settings/BypassProxySettingsSheet.swift",
+        ]
+
+        for file in files {
+            let source = try readProjectFile(file)
+            let scalesControls = source.contains("toolMetrics.formControlHeight")
+                || source.contains("toolMetrics.menuWidth")
+                || source.contains("toolMetrics.fieldWidth")
+                || source.contains("toolMetrics.bodyFontSize")
+            #expect(scalesControls, "\(file) should scale control containers from display metrics")
+            #expect(source.contains("toolMetrics.font("), "\(file) should apply readable fonts to controls")
+        }
+    }
+
+    @Test("Tool window forms avoid fixed compact typography")
+    func toolWindowFormsAvoidFixedCompactTypography() throws {
+        let files = [
+            "Rockxy/Views/Rules",
+            "Rockxy/Views/Breakpoint",
+            "Rockxy/Views/Scripting",
+            "Rockxy/Views/Compose",
+            "Rockxy/Views/Diff",
+        ]
+        let forbiddenSnippets = [
+            ".font(.system(.body",
+            ".font(.caption",
+            ".font(.callout",
+        ]
+
+        for directory in files {
+            let sourceFiles = try projectSwiftFiles(under: directory)
+            for file in sourceFiles {
+                let source = try readProjectFile(file)
+                for snippet in forbiddenSnippets {
+                    #expect(!source.contains(snippet), "\(file) must not keep fixed compact typography \(snippet)")
+                }
+            }
+        }
+    }
+
+    @Test("Popup sheets avoid fixed compact control containers")
+    func popupSheetsAvoidFixedCompactControlContainers() throws {
+        let files = [
+            "Rockxy/Views/Export/ExportScopeSheet.swift",
+            "Rockxy/Views/Export/GistPublishConfirmationSheet.swift",
+            "Rockxy/Views/Import/ImportReviewSheet.swift",
+            "Rockxy/Views/Settings/AddSSLDomainSheet.swift",
+            "Rockxy/Views/Settings/AddSSLAppDomainSheet.swift",
+            "Rockxy/Views/Settings/BypassProxySettingsSheet.swift",
+        ]
+        let forbiddenSnippets = [
+            ".font(.caption",
+            ".font(.system(.body",
+            ".frame(height: 25",
+            ".frame(height: 28",
+            ".frame(height: 29",
+            ".frame(width: 68",
+            ".frame(width: 80",
+        ]
+
+        for file in files {
+            let source = try readProjectFile(file)
+            #expect(source.contains("ToolWindowDisplayMetrics"), "\(file) should use tool metrics")
+            for snippet in forbiddenSnippets {
+                #expect(!source.contains(snippet), "\(file) must not keep fixed compact popup layout \(snippet)")
+            }
+        }
+    }
+
     @Test("Readable dialogs do not keep compact fixed typography")
     func readableDialogsDoNotKeepCompactFixedTypography() throws {
         let files = [
@@ -238,6 +356,25 @@ struct ToolWindowReadabilityTests {
         let root = try resolveProjectRoot()
         let url = root.appendingPathComponent(relativePath)
         return try String(contentsOf: url, encoding: .utf8)
+    }
+
+    private func projectSwiftFiles(under relativePath: String) throws -> [String] {
+        let root = try resolveProjectRoot()
+        let url = root.appendingPathComponent(relativePath)
+        let enumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )
+        var files: [String] = []
+        while let fileURL = enumerator?.nextObject() as? URL {
+            guard fileURL.pathExtension == "swift" else {
+                continue
+            }
+            let relative = fileURL.path.replacingOccurrences(of: root.path + "/", with: "")
+            files.append(relative)
+        }
+        return files.sorted()
     }
 
     private func resolveProjectRoot() throws -> URL {

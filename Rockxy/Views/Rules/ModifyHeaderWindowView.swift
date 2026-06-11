@@ -190,7 +190,10 @@ struct ModifyHeaderWindowView: View {
             bottomBar
         }
         .font(toolMetrics.font())
-        .frame(width: 860, height: 620)
+        .frame(
+            minWidth: max(860, toolMetrics.bodyFontSize * 28 + 496),
+            minHeight: max(620, toolMetrics.bodyFontSize * 18 + 386)
+        )
         .task { await viewModel.refreshFromEngine() }
         .onReceive(NotificationCenter.default.publisher(for: .rulesDidChange)) { notification in
             viewModel.handleRulesDidChange(notification)
@@ -595,13 +598,11 @@ private struct ModifyHeaderEditSheet: View {
             .padding(.vertical, toolMetrics.controlSpacing)
         }
         .font(toolMetrics.font())
-        .frame(minWidth: 720)
+        .frame(minWidth: max(720, toolMetrics.bodyFontSize * 24 + 408))
         .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: Private
-
-    private static let labelWidth: CGFloat = 122
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appUIDisplayMetrics) private var appMetrics
@@ -635,10 +636,14 @@ private struct ModifyHeaderEditSheet: View {
             && operations.allSatisfy(\.isValid)
     }
 
+    private var labelWidth: CGFloat {
+        max(122, toolMetrics.formLabelWidth)
+    }
+
     private var methodAndMatchRow: some View {
         HStack(spacing: toolMetrics.controlSpacing) {
             Spacer()
-                .frame(width: Self.labelWidth + toolMetrics.controlSpacing)
+                .frame(width: labelWidth + toolMetrics.controlSpacing)
             Picker("", selection: $httpMethod) {
                 ForEach(HTTPMethodFilter.allCases, id: \.self) { method in
                     Text(method.rawValue).tag(method)
@@ -647,7 +652,7 @@ private struct ModifyHeaderEditSheet: View {
             .pickerStyle(.menu)
             .labelsHidden()
             .accessibilityLabel(String(localized: "HTTP Method"))
-            .frame(width: 90)
+            .frame(width: toolMetrics.menuWidth(90))
 
             Picker("", selection: $matchType) {
                 ForEach(RuleMatchType.allCases, id: \.self) { type in
@@ -657,12 +662,13 @@ private struct ModifyHeaderEditSheet: View {
             .pickerStyle(.menu)
             .labelsHidden()
             .accessibilityLabel(String(localized: "Match Type"))
-            .frame(width: 175)
+            .frame(width: toolMetrics.menuWidth(175))
 
             if matchType == .wildcard {
                 Text(String(localized: "Support wildcard * and ?."))
                     .font(toolMetrics.secondaryFont())
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -671,7 +677,7 @@ private struct ModifyHeaderEditSheet: View {
         if matchType == .wildcard {
             HStack(spacing: toolMetrics.controlSpacing) {
                 Spacer()
-                    .frame(width: Self.labelWidth + toolMetrics.controlSpacing)
+                    .frame(width: labelWidth + toolMetrics.controlSpacing)
                 Toggle(String(localized: "Include all subpaths of this URL"), isOn: $includeSubpaths)
                     .toggleStyle(.checkbox)
                     .font(toolMetrics.font())
@@ -688,11 +694,13 @@ private struct ModifyHeaderEditSheet: View {
         HStack(alignment: .top, spacing: toolMetrics.controlSpacing) {
             Text(label)
                 .font(toolMetrics.font())
-                .frame(width: Self.labelWidth, alignment: .trailing)
+                .lineLimit(1)
+                .frame(width: labelWidth, alignment: .trailing)
                 .padding(.top, 4)
             VStack(alignment: .leading, spacing: 4) {
                 content()
             }
+            .frame(minHeight: toolMetrics.formControlHeight)
         }
     }
 

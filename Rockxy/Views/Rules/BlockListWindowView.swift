@@ -861,7 +861,7 @@ private struct AddBlockRuleSheet: View {
                 formRow(String(localized: "Matching Rule:")) {
                     TextField("", text: $urlPattern, prompt: Text("https://example.com"))
                         .textFieldStyle(.roundedBorder)
-                        .font(.system(.body, design: .monospaced))
+                        .font(toolMetrics.font(monospaced: true))
                 }
 
                 methodAndMatchRow
@@ -877,7 +877,7 @@ private struct AddBlockRuleSheet: View {
                     .pickerStyle(.menu)
                     .labelsHidden()
                     .accessibilityLabel(String(localized: "Action"))
-                    .frame(width: 220)
+                    .frame(width: toolMetrics.menuWidth(220))
                 }
             }
             .padding(.horizontal, toolMetrics.formHorizontalPadding)
@@ -911,11 +911,9 @@ private struct AddBlockRuleSheet: View {
             .padding(.vertical, toolMetrics.controlSpacing)
         }
         .font(toolMetrics.font())
-        .frame(minWidth: 640)
+        .frame(minWidth: max(640, toolMetrics.bodyFontSize * 20 + 380))
         .fixedSize(horizontal: false, vertical: true)
     }
-
-    private static let labelWidth: CGFloat = 122
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appUIDisplayMetrics) private var appMetrics
@@ -931,6 +929,10 @@ private struct AddBlockRuleSheet: View {
             return String(localized: "Save")
         }
         return String(localized: "Done")
+    }
+
+    private var labelWidth: CGFloat {
+        max(122, toolMetrics.formLabelWidth)
     }
 
     @ViewBuilder private var provenanceBanner: some View {
@@ -965,7 +967,7 @@ private struct AddBlockRuleSheet: View {
     private var methodAndMatchRow: some View {
         HStack(spacing: toolMetrics.controlSpacing) {
             Spacer()
-                .frame(width: Self.labelWidth + toolMetrics.controlSpacing)
+                .frame(width: labelWidth + toolMetrics.controlSpacing)
             Picker("", selection: $httpMethod) {
                 ForEach(HTTPMethodFilter.allCases, id: \.self) { method in
                     Text(method.rawValue).tag(method)
@@ -974,7 +976,7 @@ private struct AddBlockRuleSheet: View {
             .pickerStyle(.menu)
             .labelsHidden()
             .accessibilityLabel(String(localized: "HTTP Method"))
-            .frame(width: 90)
+            .frame(width: toolMetrics.menuWidth(90))
 
             Picker("", selection: $matchType) {
                 ForEach(BlockMatchType.allCases, id: \.self) { type in
@@ -984,12 +986,13 @@ private struct AddBlockRuleSheet: View {
             .pickerStyle(.menu)
             .labelsHidden()
             .accessibilityLabel(String(localized: "Match Type"))
-            .frame(width: 175)
+            .frame(width: toolMetrics.menuWidth(175))
 
             if matchType == .wildcard {
                 Text(String(localized: "Support wildcard * and ?."))
                     .font(toolMetrics.secondaryFont())
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -998,7 +1001,7 @@ private struct AddBlockRuleSheet: View {
         if matchType == .wildcard {
             HStack(spacing: 8) {
                 Spacer()
-                    .frame(width: Self.labelWidth + toolMetrics.controlSpacing)
+                    .frame(width: labelWidth + toolMetrics.controlSpacing)
                 Toggle(String(localized: "Include all subpaths of this URL"), isOn: $includeSubpaths)
                     .toggleStyle(.checkbox)
                     .font(toolMetrics.font())
@@ -1015,11 +1018,13 @@ private struct AddBlockRuleSheet: View {
         HStack(alignment: .top, spacing: toolMetrics.controlSpacing) {
             Text(label)
                 .font(toolMetrics.font())
-                .frame(width: Self.labelWidth, alignment: .trailing)
+                .lineLimit(1)
+                .frame(width: labelWidth, alignment: .trailing)
                 .padding(.top, 4)
             VStack(alignment: .leading, spacing: 4) {
                 content()
             }
+            .frame(minHeight: toolMetrics.formControlHeight)
         }
     }
 
