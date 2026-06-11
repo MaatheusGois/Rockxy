@@ -347,11 +347,11 @@ struct ToolWindowDisplayMetrics: Equatable {
     }
 
     var formCompactLabelWidth: CGFloat {
-        max(70, bodyFontSize * 4.2)
+        92
     }
 
     var formWideLabelWidth: CGFloat {
-        max(150, bodyFontSize * 5.5)
+        150
     }
 
     var formControlHeight: CGFloat {
@@ -363,11 +363,11 @@ struct ToolWindowDisplayMetrics: Equatable {
     }
 
     func menuWidth(_ baseWidth: CGFloat) -> CGFloat {
-        baseWidth + max(0, bodyFontSize - 13) * 4
+        baseWidth
     }
 
     func fieldWidth(_ baseWidth: CGFloat) -> CGFloat {
-        baseWidth + max(0, bodyFontSize - 13) * 3
+        baseWidth
     }
 
     func font(weight: Font.Weight = .regular, monospaced: Bool = false) -> Font {
@@ -393,6 +393,85 @@ struct ToolWindowDisplayMetrics: Equatable {
 
     func tableHeaderFont(weight: Font.Weight = .medium) -> Font {
         .system(size: tableHeaderFontSize, weight: weight)
+    }
+}
+
+// MARK: - SettingsDisplayMetrics
+
+struct SettingsDisplayMetrics: Equatable {
+    var appMetrics: AppUIDisplayMetrics
+
+    var bodyFontSize: CGFloat {
+        appMetrics.primaryFontSize
+    }
+
+    var secondaryFontSize: CGFloat {
+        max(10, appMetrics.primaryFontSize - 1)
+    }
+
+    var metadataFontSize: CGFloat {
+        max(10, appMetrics.primaryFontSize - 2)
+    }
+
+    var windowWidth: CGFloat {
+        820
+    }
+
+    var windowHeight: CGFloat {
+        600
+    }
+
+    var contentPadding: CGFloat {
+        28
+    }
+
+    var labelWidth: CGFloat {
+        160
+    }
+
+    var wideLabelWidth: CGFloat {
+        182
+    }
+
+    var rowLeading: CGFloat {
+        labelWidth + 16
+    }
+
+    var controlHeight: CGFloat {
+        max(24, bodyFontSize + 12)
+    }
+
+    var footerHeight: CGFloat {
+        max(36, bodyFontSize + 24)
+    }
+
+    func fieldWidth(_ baseWidth: CGFloat) -> CGFloat {
+        baseWidth
+    }
+
+    func menuWidth(_ baseWidth: CGFloat) -> CGFloat {
+        baseWidth
+    }
+
+    func font(weight: Font.Weight = .regular, monospaced: Bool = false) -> Font {
+        if monospaced || appMetrics.settings.useMonospacedFont {
+            return .system(size: bodyFontSize, weight: weight, design: .monospaced)
+        }
+        return .system(size: bodyFontSize, weight: weight)
+    }
+
+    func secondaryFont(weight: Font.Weight = .regular, monospaced: Bool = false) -> Font {
+        if monospaced || appMetrics.settings.useMonospacedFont {
+            return .system(size: secondaryFontSize, weight: weight, design: .monospaced)
+        }
+        return .system(size: secondaryFontSize, weight: weight)
+    }
+
+    func metadataFont(weight: Font.Weight = .regular, monospaced: Bool = false) -> Font {
+        if monospaced || appMetrics.settings.useMonospacedFont {
+            return .system(size: metadataFontSize, weight: weight, design: .monospaced)
+        }
+        return .system(size: metadataFontSize, weight: weight)
     }
 }
 

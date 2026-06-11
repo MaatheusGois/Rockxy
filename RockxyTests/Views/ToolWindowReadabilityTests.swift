@@ -48,6 +48,60 @@ struct ToolWindowReadabilityTests {
         }
     }
 
+    @Test("Settings display metrics derive from Appearance font size")
+    func settingsDisplayMetricsDeriveFromAppearanceFontSize() {
+        let cases: [(fontSize: Int, width: CGFloat, height: CGFloat, labelWidth: CGFloat, controlHeight: CGFloat)] = [
+            (10, 820, 600, 160, 24),
+            (12, 820, 600, 160, 24),
+            (13, 820, 600, 160, 25),
+            (14, 820, 600, 160, 26),
+            (20, 820, 600, 160, 32),
+            (28, 820, 600, 160, 40),
+        ]
+
+        for item in cases {
+            var appUI = AppUISettings()
+            appUI.fontSize = item.fontSize
+            let metrics = SettingsDisplayMetrics(appMetrics: AppUIDisplayMetrics(settings: appUI))
+
+            #expect(metrics.bodyFontSize == CGFloat(item.fontSize))
+            #expect(metrics.secondaryFontSize == max(10, CGFloat(item.fontSize - 1)))
+            #expect(metrics.metadataFontSize == max(10, CGFloat(item.fontSize - 2)))
+            #expect(metrics.windowWidth == item.width)
+            #expect(metrics.windowHeight == item.height)
+            #expect(metrics.labelWidth == item.labelWidth)
+            #expect(metrics.controlHeight == item.controlHeight)
+            #expect(metrics.fieldWidth(200) >= 200)
+            #expect(metrics.menuWidth(120) >= 120)
+        }
+    }
+
+    @Test("Settings scene and tabs use display metrics")
+    func settingsSceneAndTabsUseDisplayMetrics() throws {
+        let appSource = try readProjectFile("Rockxy/RockxyApp.swift")
+        #expect(appSource.contains("Settings {\n            AppUIDisplayMetricsProvider"), "Settings scene must inherit Appearance display metrics")
+
+        let files = [
+            "Rockxy/Views/Settings/SettingsView.swift",
+            "Rockxy/Views/Settings/GeneralSettingsTab.swift",
+            "Rockxy/Views/Settings/AppearanceSettingsTab.swift",
+            "Rockxy/Views/Settings/PrivacySettingsTab.swift",
+            "Rockxy/Views/Settings/MCPSettingsTab.swift",
+            "Rockxy/Views/Settings/GitHubSettingsTab.swift",
+            "Rockxy/Views/Settings/PluginsSettingsTab.swift",
+            "Rockxy/Views/Settings/PluginDetailView.swift",
+            "Rockxy/Views/Settings/ToolsSettingsTab.swift",
+            "Rockxy/Views/Settings/PreviewerTabSettingsView.swift",
+            "Rockxy/Views/Settings/CustomHeaderColumnsView.swift",
+            "Rockxy/Views/Settings/AdvancedSettingsTab.swift",
+        ]
+
+        for file in files {
+            let source = try readProjectFile(file)
+            #expect(source.contains("SettingsDisplayMetrics"), "\(file) should derive settings metrics from Appearance")
+        }
+    }
+
     @Test("Custom tool windows are wrapped in display metrics provider")
     func customToolWindowsAreWrappedInDisplayMetricsProvider() throws {
         let source = try readProjectFile("Rockxy/RockxyApp.swift")
@@ -236,6 +290,11 @@ struct ToolWindowReadabilityTests {
             "Rockxy/Views/Settings/AddSSLDomainSheet.swift",
             "Rockxy/Views/Settings/AddSSLAppDomainSheet.swift",
             "Rockxy/Views/Settings/BypassProxySettingsSheet.swift",
+            "Rockxy/Views/Settings/BypassProxyListView.swift",
+            "Rockxy/Views/Settings/SSLProxyingListView.swift",
+            "Rockxy/Views/Settings/ExternalProxySettingsView.swift",
+            "Rockxy/Views/Settings/SOCKSProxySettingsView.swift",
+            "Rockxy/Views/Settings/AdvancedProxySettingsView.swift",
         ]
 
         for file in files {
@@ -247,6 +306,45 @@ struct ToolWindowReadabilityTests {
             #expect(scalesControls, "\(file) should scale control containers from display metrics")
             #expect(source.contains("toolMetrics.font("), "\(file) should apply readable fonts to controls")
         }
+    }
+
+    @Test("Settings-launched windows keep fixed shells while scaling typography")
+    func settingsLaunchedWindowsKeepFixedShellsWhileScalingTypography() throws {
+        let files = [
+            "Rockxy/Views/Settings/BypassProxyListView.swift",
+            "Rockxy/Views/Settings/SSLProxyingListView.swift",
+            "Rockxy/Views/Settings/ExternalProxySettingsView.swift",
+            "Rockxy/Views/Settings/SOCKSProxySettingsView.swift",
+            "Rockxy/Views/Settings/AdvancedProxySettingsView.swift",
+        ]
+        let forbiddenSnippets = [
+            ".font(.caption",
+            ".font(.callout",
+            ".font(.system(.body",
+            ".font(.system(size: 11",
+            ".font(.system(size: 12",
+            ".font(.system(size: 13",
+            "height: max(",
+            "width: max(",
+            ".frame(minWidth:",
+        ]
+
+        for file in files {
+            let source = try readProjectFile(file)
+            #expect(source.contains("ToolWindowDisplayMetrics"), "\(file) should use tool metrics from Appearance")
+            for snippet in forbiddenSnippets {
+                #expect(!source.contains(snippet), "\(file) must not keep compact fixed setting-window layout \(snippet)")
+            }
+        }
+    }
+
+    @Test("Settings shell keeps fixed dimensions while font size changes")
+    func settingsShellKeepsFixedDimensionsWhileFontSizeChanges() throws {
+        let source = try readProjectFile("Rockxy/Views/Settings/SettingsView.swift")
+
+        #expect(source.contains(".frame(width: settingsMetrics.windowWidth, height: settingsMetrics.windowHeight)"))
+        #expect(!source.contains(".frame(minWidth: settingsMetrics.windowWidth"))
+        #expect(!source.contains(".frame(minHeight: settingsMetrics.windowHeight"))
     }
 
     @Test("Tool window forms avoid fixed compact typography")

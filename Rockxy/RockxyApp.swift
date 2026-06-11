@@ -320,7 +320,9 @@ struct RockxyApp: App {
         composeWindow
 
         Settings {
-            SettingsView()
+            AppUIDisplayMetricsProvider {
+                SettingsView()
+            }
         }
     }
 
