@@ -72,9 +72,11 @@ Defense-in-depth includes:
 
 ## Public Release Metadata
 
-Rockxy publishes signed update metadata in `appcast.xml`, latest-release metadata in `releases/latest.json`, and an all-release catalog in `releases/catalog.json`. Each signed installable release carries a UTC `release_date`, download URL, SHA-256 checksum, DMG length, Sparkle EdDSA signature, release notes URL, and minimum macOS version.
+Rockxy publishes signed update metadata in `appcast.xml`, latest-release metadata in `releases/latest.json`, and an all-release catalog in `releases/catalog.json`. The canonical public release date for update eligibility is the UTC `release_date` field on each `releases/catalog.json` entry. The latest appcast item mirrors that same value in `rockxy:releaseDate`, and its Sparkle `pubDate` must match it.
 
-Rockxy `release_date` is used by Rockxy licensing services to determine update eligibility. This public repository does not contain private entitlement payloads, license-signature rules, purchase-provider configuration, or license-validation code.
+Each signed installable release entry carries version, build, UTC `release_date`, GitHub DMG download URL, SHA-256 checksum, DMG length, Sparkle EdDSA signature, release notes URL, and minimum macOS version. Downstream update-eligibility services can mirror the public catalog and choose the newest release whose `release_date` is within their eligibility window.
+
+This public repository stores release metadata only. It does not contain private entitlement payloads, license-signature rules, purchase-provider configuration, or license-validation code.
 
 ## Vulnerability Reporting
 

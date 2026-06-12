@@ -46,6 +46,8 @@ APPCAST_REQUIRED = {
     "rockxy:releaseDate",
 }
 
+UTC_RELEASE_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+
 PRIVATE_TOKEN_RE = re.compile(
     r"RockxyPro|Lemon|licenseProviderMode|licensingMode|licenseEndpoint|"
     r"lemon(Store|Product|Pro|Enterprise)|entitlement|keychain|"
@@ -87,6 +89,13 @@ def normalize_release_date(value: Any) -> str:
     return parsed.isoformat().replace("+00:00", "Z")
 
 
+def validate_utc_release_date(value: Any, label: str) -> str:
+    raw = str(value or "").strip()
+    if not UTC_RELEASE_DATE_RE.fullmatch(raw):
+        fail(f"{label} must be an explicit UTC timestamp like 2026-06-10T00:00:00Z")
+    return normalize_release_date(raw)
+
+
 def comparable_version(version: str) -> tuple[int, ...]:
     parts = []
     for part in version.split("."):
@@ -113,6 +122,15 @@ def ensure_public_safe(path: Path, value: Any) -> None:
 def validate_catalog(path: Path) -> dict[str, Any]:
     catalog = load_json(path)
     ensure_public_safe(path, catalog)
+    for key in ("schema_version", "product", "channel", "catalog_url"):
+        if catalog.get(key) in ("", None):
+            fail(f"{path} missing required top-level field: {key}")
+    if catalog.get("product") != "Rockxy":
+        fail(f"{path} product must be Rockxy")
+    if not str(catalog.get("catalog_url", "")).startswith(
+        "https://raw.githubusercontent.com/RockxyApp/Rockxy/main/releases/catalog.json"
+    ):
+        fail(f"{path} catalog_url must point at the public Rockxy catalog")
     releases = catalog.get("releases")
     if not isinstance(releases, list) or not releases:
         fail(f"{path} must contain a non-empty releases array")
@@ -131,9 +149,12 @@ def validate_catalog(path: Path) -> dict[str, Any]:
         if identity in seen:
             fail(f"{path} contains duplicate release {identity[0]} build {identity[1]}")
         seen.add(identity)
-        normalize_release_date(release["release_date"])
+        validate_utc_release_date(release["release_date"], f"{path} release {identity[0]} release_date")
         if not str(release["download_url"]).startswith("https://github.com/RockxyApp/Rockxy/releases/download/"):
             fail(f"{path} release {identity[0]} has a non-canonical download_url")
+        expected_artifact = f"Rockxy-{identity[0]}-{identity[1]}.dmg"
+        if not str(release["download_url"]).endswith(f"/{expected_artifact}"):
+            fail(f"{path} release {identity[0]} download_url must end with {expected_artifact}")
         if not re.fullmatch(r"[0-9a-f]{64}", str(release["checksum_sha256"])):
             fail(f"{path} release {identity[0]} checksum_sha256 must be a SHA-256 hex digest")
         if int(release["dmg_length"]) <= 0:
@@ -186,10 +207,22 @@ def validate_appcast(path: Path) -> list[dict[str, str]]:
         missing = sorted(key for key in APPCAST_REQUIRED if not values[key])
         if missing:
             fail(f"{path} item {index} missing required fields: {', '.join(missing)}")
-        pub_date = email.utils.parsedate_to_datetime(values["pubDate"]).astimezone(timezone.utc)
-        release_date = normalize_release_date(values["rockxy:releaseDate"])
+        try:
+            parsed_pub_date = email.utils.parsedate_to_datetime(values["pubDate"])
+        except (TypeError, ValueError) as error:
+            fail(f"{path} item {index} pubDate is invalid: {error}")
+        if parsed_pub_date is None:
+            fail(f"{path} item {index} pubDate is invalid")
+        pub_date = parsed_pub_date.astimezone(timezone.utc)
+        release_date = validate_utc_release_date(values["rockxy:releaseDate"], f"{path} item {index} rockxy:releaseDate")
         if normalize_release_date(pub_date.isoformat()) != release_date:
             fail(f"{path} item {index} pubDate and rockxy:releaseDate differ")
+        try:
+            enclosure_length = int(values["enclosure.length"])
+        except ValueError:
+            fail(f"{path} item {index} enclosure length must be numeric")
+        if enclosure_length <= 0:
+            fail(f"{path} item {index} enclosure length must be positive")
         releases.append(
             {
                 "version": values["enclosure.sparkle:shortVersionString"],
@@ -227,7 +260,16 @@ def validate_latest(path: Path) -> dict[str, Any]:
     missing = sorted(key for key in CATALOG_REQUIRED if release.get(key) in ("", None))
     if missing:
         fail(f"{path} missing required latest metadata: {', '.join(missing)}")
-    normalize_release_date(release["release_date"])
+    release["release_date"] = validate_utc_release_date(release["release_date"], f"{path} release_date")
+    aliases = {
+        "releaseDateUtc": latest.get("releaseDateUtc"),
+        "release_date": latest.get("release_date"),
+    }
+    for key, value in aliases.items():
+        if value not in ("", None) and normalize_release_date(value) != release["release_date"]:
+            fail(f"{path} {key} does not match canonical release_date")
+    if latest.get("releaseDate") not in ("", None) and normalize_release_date(latest["releaseDate"]) != release["release_date"]:
+        fail(f"{path} releaseDate does not match canonical release_date")
     return release
 
 
@@ -238,7 +280,42 @@ def validate_manifest(path: Path) -> dict[str, Any]:
     missing = sorted(key for key in CATALOG_REQUIRED if release.get(key) in ("", None))
     if missing:
         fail(f"{path} missing required public manifest metadata: {', '.join(missing)}")
+    release["release_date"] = validate_utc_release_date(release["release_date"], f"{path} release_date")
     return release
+
+
+def load_xcconfig(path: Path) -> dict[str, str]:
+    try:
+        lines = path.read_text().splitlines()
+    except FileNotFoundError:
+        fail(f"{path} is missing")
+    values: dict[str, str] = {}
+    for raw_line in lines:
+        line = raw_line.split("//", 1)[0].strip()
+        if not line or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip()
+    return values
+
+
+def validate_build_settings(path: Path, expected: dict[str, Any]) -> None:
+    settings = load_xcconfig(path)
+    checks = {
+        "ROCKXY_APP_VERSION": expected["version"],
+        "ROCKXY_APP_BUILD": expected["build"],
+    }
+    for key, expected_value in checks.items():
+        if str(settings.get(key, "")) != str(expected_value):
+            fail(f"{path} {key} is {settings.get(key)!r}, expected {expected_value!r}")
+
+    release_date = settings.get("ROCKXY_BUILD_RELEASE_DATE") or settings.get("ROCKXY_RELEASE_BUILD_DATE")
+    if release_date in ("", None):
+        fail(f"{path} must set ROCKXY_BUILD_RELEASE_DATE or ROCKXY_RELEASE_BUILD_DATE for release builds")
+    actual_date = validate_utc_release_date(release_date, f"{path} build release date")
+    expected_date = validate_utc_release_date(expected["release_date"], "expected release_date")
+    if actual_date != expected_date:
+        fail(f"{path} build release date is {actual_date}, expected {expected_date}")
 
 
 def validate_app_bundle(app_path: Path, expected: dict[str, Any]) -> None:
@@ -269,6 +346,7 @@ def main() -> int:
     parser.add_argument("--catalog", default="releases/catalog.json", type=Path)
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--app", type=Path, help="Path to Rockxy.app or an Info.plist to compare against metadata")
+    parser.add_argument("--build-settings", type=Path, help="Path to a release xcconfig to compare against metadata")
     args = parser.parse_args()
 
     catalog = validate_catalog(args.catalog)
@@ -284,6 +362,8 @@ def main() -> int:
     for key in ("download_url", "dmg_length", "sparkle_ed_signature", "release_notes_url", "minimum_system_version"):
         if str(latest[key]) != str(newest_catalog[key]):
             fail(f"latest.json {key} does not match catalog.json")
+        if str(appcast_releases[0][key]) != str(newest_catalog[key]):
+            fail(f"appcast.xml newest item {key} does not match catalog.json")
 
     if args.manifest:
         manifest = validate_manifest(args.manifest)
@@ -291,6 +371,8 @@ def main() -> int:
             fail("public manifest does not match catalog.json")
     if args.app:
         validate_app_bundle(args.app, newest_catalog)
+    if args.build_settings:
+        validate_build_settings(args.build_settings, newest_catalog)
 
     print("release metadata validation OK")
     return 0
