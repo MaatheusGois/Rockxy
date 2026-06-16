@@ -6,34 +6,22 @@
     <description>Rockxy release channel</description>
     <language>en</language>
     <item>
-      <title>Version 0.27.0 (build 40)</title>
-      <pubDate>Sat, 13 Jun 2026 00:00:00 +0000</pubDate>
-      <rockxy:releaseDate>2026-06-13T00:00:00Z</rockxy:releaseDate>
+      <title>Version 0.27.0 (build 41)</title>
+      <pubDate>Tue, 16 Jun 2026 00:00:00 +0000</pubDate>
+      <rockxy:releaseDate>2026-06-16T00:00:00Z</rockxy:releaseDate>
       <enclosure
-        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.27.0/Rockxy-0.27.0-40.dmg"
-        sparkle:version="40"
+        url="https://github.com/RockxyApp/Rockxy/releases/download/v0.27.0/Rockxy-0.27.0-41.dmg"
+        sparkle:version="41"
         sparkle:shortVersionString="0.27.0"
-        sparkle:edSignature="UfZv+WM0p4N0LXP/RcThO0Wh3IkmWPz+Y+MOetz947QM9zNoAjKncFxzhd+BQlHTvFMCDTsv+NKGlnC6+DAtAw=="
-        length="28936725"
+        sparkle:edSignature="giyARbaVMku/EKDJsyzue7smSBk575tahq8MHkeT8ETqB6wHnslTny+1IU3Z9DtPKsEyrpDEgInum9Q65VclDQ=="
+        length="28942018"
         type="application/octet-stream" />
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <sparkle:releaseNotesLink>https://github.com/RockxyApp/Rockxy/releases/tag/v0.27.0</sparkle:releaseNotesLink>
       <description><![CDATA[
-<h3>Added</h3>
-<ul>
-  <li>Added Workspace Log upload support for securely sharing sanitized HAR captures from Rockxy into a workspace.</li>
-  <li>Added workspace desktop sign-in and session recovery paths for Workspace Log sharing.</li>
-</ul>
 <h3>Fixed</h3>
 <ul>
-  <li>Fixed custom tool and settings windows so Appearance font-size changes scale controls, labels, rows, and tab text more reliably.</li>
-  <li>Hardened Workspace Log upload gating so expired sessions, locked workspace access, and missing recovery grants fail closed with clearer recovery states.</li>
-  <li>Hardened Pro license update eligibility so perpetual licenses keep eligible builds working while blocking builds released outside the covered update window.</li>
-</ul>
-<h3>Changed</h3>
-<ul>
-  <li>Improved readability across more secondary windows, including rule, scripting, compose, diff, settings-launched, and Workspace surfaces.</li>
-  <li>Strengthened release metadata validation so appcast, latest, and catalog metadata stay consistent before publishing.</li>
+  <li>Fixed Pro license settings so Mac activation counts and plan names reflect the correct Mac-specific activation limit instead of a combined provider limit.</li>
 </ul>
       ]]></description>
     </item>
