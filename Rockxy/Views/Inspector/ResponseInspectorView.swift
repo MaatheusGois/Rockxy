@@ -349,16 +349,17 @@ struct ResponseInspectorView: View {
 
     @ViewBuilder
     private func responseBodyView(response: HTTPResponseData) -> some View {
+        let snapshot = InspectorResponseSnapshot(response: response)
         if bodyDisplayMode == .raw {
             responseRawView()
-        } else if let body = response.body, !body.isEmpty {
+        } else if let body = responseBody(for: bodyDisplayMode, snapshot: snapshot), !body.isEmpty {
             switch bodyDisplayMode {
             case .tree:
                 JSONTreeView(data: body)
                     .id(transaction.id)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             case .json:
-                responseCodeEditor(for: body, response: response)
+                responseCodeEditor(for: body)
             case .raw:
                 responseRawView()
             case .hex:
@@ -382,11 +383,22 @@ struct ResponseInspectorView: View {
         }
     }
 
+    private func responseBody(for mode: ResponseBodyDisplayMode, snapshot: InspectorResponseSnapshot) -> Data? {
+        switch mode {
+        case .hex:
+            snapshot.body
+        case .tree,
+             .json,
+             .raw:
+            snapshot.displayBody
+        }
+    }
+
     @ViewBuilder
     private func responseRawView() -> some View {
         let snapshot = InspectorTransactionSnapshot(transaction: transaction)
         AsyncInspectorTextEditor(
-            renderID: "\(snapshot.id.uuidString)-response-raw-\(snapshot.response?.body?.count ?? 0)",
+            renderID: "\(snapshot.id.uuidString)-response-raw-\(snapshot.response?.body?.count ?? 0)-\(snapshot.response?.displayBody?.count ?? 0)",
             highlightContext: highlightContext
         ) {
             if let text = InspectorPayloadFormatter.rawResponse(snapshot.response) {
@@ -401,7 +413,7 @@ struct ResponseInspectorView: View {
     }
 
     @ViewBuilder
-    private func responseCodeEditor(for body: Data, response _: HTTPResponseData) -> some View {
+    private func responseCodeEditor(for body: Data) -> some View {
         let sortedKeys = sortJSONKeys
         AsyncInspectorTextEditor(
             renderID: "\(transaction.id.uuidString)-response-json-\(sortedKeys)-\(body.count)",
@@ -518,7 +530,10 @@ struct ResponseInspectorView: View {
         }
     }
 
-    private func bodyDisplayText(for body: Data, response _: HTTPResponseData) -> String? {
+    private func bodyDisplayText(for response: HTTPResponseData) -> String? {
+        guard let body = InspectorResponseSnapshot(response: response).displayBody else {
+            return nil
+        }
         if let pretty = prettyJSONString(from: body, sortedKeys: sortJSONKeys)
         {
             return pretty
@@ -550,7 +565,7 @@ struct ResponseInspectorView: View {
             let url = directory
                 .appendingPathComponent(transaction.id.uuidString)
                 .appendingPathExtension(responseBodyFileExtension())
-            let data = bodyDisplayText(for: body, response: response)
+            let data = bodyDisplayText(for: response)
                 .map { Data($0.utf8) } ?? body
             try data.write(to: url, options: .atomic)
             return url
@@ -595,7 +610,7 @@ struct ResponseInspectorView: View {
         {
             return
         }
-        let text = bodyDisplayText(for: body, response: response) ?? SizeFormatter.format(bytes: body.count)
+        let text = bodyDisplayText(for: response) ?? SizeFormatter.format(bytes: body.count)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
     }

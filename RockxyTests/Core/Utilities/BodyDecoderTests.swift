@@ -32,6 +32,17 @@ struct BodyDecoderTests {
         #expect(result == original)
     }
 
+    @Test("Encoding names are normalized before decompression")
+    func encodingNameNormalization() throws {
+        let original = "Encoding names should ignore case and whitespace."
+        let originalData = try #require(original.data(using: .utf8))
+        let compressed = try #require(deflateCompress(originalData))
+
+        let decompressed = BodyDecoder.decode(compressed, encoding: " Deflate ")
+
+        #expect(String(data: decompressed, encoding: .utf8) == original)
+    }
+
     @Test("Deflate decompression restores compressed data")
     func deflateDecompression() throws {
         let original = "This is a test string for deflate compression. Repeated words help compression work better. Test test test."

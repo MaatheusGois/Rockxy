@@ -7,9 +7,10 @@ struct BodyInspectorView: View {
     var highlightContext: InspectorHighlightContext = .empty
 
     var body: some View {
-        if let body = transaction.response?.body {
+        let snapshot = InspectorTransactionSnapshot(transaction: transaction)
+        if let body = snapshot.response?.displayBody {
             AsyncInspectorTextEditor(
-                renderID: "\(transaction.id.uuidString)-legacy-body-\(body.count)",
+                renderID: "\(transaction.id.uuidString)-legacy-body-\(snapshot.response?.body?.count ?? 0)-\(body.count)",
                 highlightContext: highlightContext
             ) {
                 InspectorPayloadFormatter.requestBodyText(body)

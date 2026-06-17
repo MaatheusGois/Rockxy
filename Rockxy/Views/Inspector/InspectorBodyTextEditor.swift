@@ -775,6 +775,7 @@ struct InspectorResponseSnapshot: Sendable {
     let statusMessage: String
     let headers: [InspectorHeaderSnapshot]
     let body: Data?
+    let displayBody: Data?
     let contentType: ContentType?
 
     init(response: HTTPResponseData) {
@@ -782,7 +783,18 @@ struct InspectorResponseSnapshot: Sendable {
         statusMessage = response.statusMessage
         headers = response.headers.map(InspectorHeaderSnapshot.init(header:))
         body = response.body
+        displayBody = Self.decodedDisplayBody(
+            response.body,
+            contentEncoding: response.headers.first { $0.name.lowercased() == "content-encoding" }?.value
+        )
         contentType = response.contentType
+    }
+
+    private static func decodedDisplayBody(_ body: Data?, contentEncoding: String?) -> Data? {
+        guard let body else {
+            return nil
+        }
+        return BodyDecoder.decode(body, encoding: contentEncoding)
     }
 }
 
@@ -823,7 +835,7 @@ enum InspectorPayloadFormatter {
             raw += "\(header.name): \(header.value)\r\n"
         }
         raw += "\r\n"
-        if let body = response.body, let bodyString = String(data: body, encoding: .utf8) {
+        if let body = response.displayBody, let bodyString = String(data: body, encoding: .utf8) {
             raw += bodyString
         }
         return raw
