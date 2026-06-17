@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 @testable import Rockxy
@@ -46,6 +47,20 @@ struct ToolWindowReadabilityTests {
             #expect(metrics.menuWidth(90) >= 90)
             #expect(metrics.fieldWidth(200) >= 200)
         }
+    }
+
+    @Test("Tool window code editor settings follow Appearance font size")
+    func codeEditorSettingsFollowAppearanceFontSize() {
+        var appUI = AppUISettings()
+        appUI.fontSize = 20
+        appUI.tabWidth = 4
+        let metrics = ToolWindowDisplayMetrics(appMetrics: AppUIDisplayMetrics(settings: appUI))
+
+        #expect(metrics.codeEditorSettings.fontSize == 20)
+        #expect(metrics.codeEditorSettings.tabWidth == 4)
+        #expect(metrics.codeEditorSettings.useMonospacedFont == true)
+        #expect(metrics.codeEditorSettings.wordWrap == false)
+        #expect(metrics.codeEditorSettings.appKitFont.pointSize == 20)
     }
 
     @Test("Settings display metrics derive from Appearance font size")

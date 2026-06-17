@@ -26,7 +26,7 @@ struct PreviewTabContentView: View {
 
     @ViewBuilder
     private func jsonTreePreview(snapshot: InspectorTransactionSnapshot) -> some View {
-        if let data = tab.panel == .request ? snapshot.request.body : snapshot.response?.body {
+        if let data = tab.panel == .request ? snapshot.request.body : snapshot.response?.displayBody {
             JSONTreeView(data: data)
                 .id("\(snapshot.id.uuidString)-\(tab.id.uuidString)")
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -41,10 +41,12 @@ struct PreviewTabContentView: View {
     }
 
     private func renderID(snapshot: InspectorTransactionSnapshot) -> String {
-        let bodyCount = tab.panel == .request
-            ? snapshot.request.body?.count ?? 0
-            : snapshot.response?.body?.count ?? 0
-        return "\(snapshot.id.uuidString)-\(tab.id.uuidString)-\(tab.renderMode.rawValue)-\(beautify)-\(bodyCount)"
+        let bodyCounts = if tab.panel == .request {
+            "\(snapshot.request.body?.count ?? 0)"
+        } else {
+            "\(snapshot.response?.body?.count ?? 0)-\(snapshot.response?.displayBody?.count ?? 0)"
+        }
+        return "\(snapshot.id.uuidString)-\(tab.id.uuidString)-\(tab.renderMode.rawValue)-\(beautify)-\(bodyCounts)"
     }
 
     nonisolated private static func renderPreview(
@@ -66,7 +68,7 @@ struct PreviewTabContentView: View {
             }
         }
 
-        let bodyData = tab.panel == .request ? snapshot.request.body : snapshot.response?.body
+        let bodyData = Self.previewBodyData(tab: tab, snapshot: snapshot)
         switch PreviewRenderer.render(body: bodyData, mode: tab.renderMode, beautify: beautify) {
         case let .text(text):
             return .text(text)
@@ -78,6 +80,18 @@ struct PreviewTabContentView: View {
             return .imageData(data)
         case let .empty(reason):
             return .empty(reason: reason)
+        }
+    }
+
+    nonisolated private static func previewBodyData(
+        tab: PreviewTab,
+        snapshot: InspectorTransactionSnapshot
+    ) -> Data? {
+        switch tab.panel {
+        case .request:
+            snapshot.request.body
+        case .response:
+            tab.renderMode == .hex ? snapshot.response?.body : snapshot.response?.displayBody
         }
     }
 }

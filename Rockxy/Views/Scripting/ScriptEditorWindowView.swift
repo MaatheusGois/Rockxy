@@ -198,7 +198,7 @@ struct ScriptEditorWindowView: View {
                     .zIndex(1)
                 Divider()
                     .zIndex(1)
-                ScriptCodeEditor(text: $viewModel.code)
+                ScriptCodeEditor(text: $viewModel.code, editorSettings: toolMetrics.codeEditorSettings)
                     .clipped()
                     .zIndex(0)
             }

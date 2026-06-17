@@ -11,7 +11,7 @@ struct RawInspectorView: View {
     var body: some View {
         let snapshot = InspectorTransactionSnapshot(transaction: transaction)
         AsyncInspectorTextEditor(
-            renderID: "\(snapshot.id.uuidString)-full-raw-\(snapshot.response?.body?.count ?? 0)",
+            renderID: "\(snapshot.id.uuidString)-full-raw-\(snapshot.response?.body?.count ?? 0)-\(snapshot.response?.displayBody?.count ?? 0)",
             highlightContext: highlightContext
         ) {
             var text = InspectorPayloadFormatter.rawRequest(snapshot.request)

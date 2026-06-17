@@ -10,9 +10,28 @@ enum BodyDecoder {
     // MARK: Internal
 
     static func decode(_ data: Data, encoding: String?) -> Data {
-        guard let encoding = encoding?.lowercased() else {
+        guard let encoding else {
             return data
         }
+        let encodings = encoding
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+        guard !encodings.isEmpty else {
+            return data
+        }
+        return encodings.reversed().reduce(data) { body, encoding in
+            decodeSingle(body, encoding: encoding)
+        }
+    }
+
+    // MARK: Private
+
+    private static let logger = Logger(subsystem: RockxyIdentity.current.logSubsystem, category: "BodyDecoder")
+
+    private static let maxDecompressedSize = 50 * 1_024 * 1_024 // 50MB
+
+    private static func decodeSingle(_ data: Data, encoding: String) -> Data {
         switch encoding {
         case "gzip":
             return decompressGzip(data) ?? data
@@ -24,12 +43,6 @@ enum BodyDecoder {
             return data
         }
     }
-
-    // MARK: Private
-
-    private static let logger = Logger(subsystem: RockxyIdentity.current.logSubsystem, category: "BodyDecoder")
-
-    private static let maxDecompressedSize = 50 * 1_024 * 1_024 // 50MB
 
     private static func decompressGzip(_ data: Data) -> Data? {
         guard data.count >= 18 else {

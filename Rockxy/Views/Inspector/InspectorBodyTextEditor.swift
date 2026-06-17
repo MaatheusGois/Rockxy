@@ -369,6 +369,13 @@ struct InspectorBodyTextEditor: NSViewRepresentable {
         textView.layoutManager?.showsInvisibleCharacters = editorSettings.showInvisibles
         textView.layoutManager?.showsControlCharacters = editorSettings.showInvisibles
 
+        if let ruler = scrollView.verticalRulerView as? ScriptCodeEditorRulerView {
+            ruler.applyEditorSettings(editorSettings)
+        } else {
+            scrollView.verticalRulerView?.needsDisplay = true
+        }
+        scrollView.tile()
+
         if editorSettings.wordWrap {
             textView.frame.size.width = max(scrollView.contentView.bounds.width, 1)
             textView.textContainer?.containerSize = NSSize(
@@ -385,7 +392,6 @@ struct InspectorBodyTextEditor: NSViewRepresentable {
             textView.textContainer?.widthTracksTextView = false
         }
         scrollView.tile()
-        scrollView.verticalRulerView?.needsDisplay = true
         applyTextStorageSettings(editorSettings, to: textView)
         textView.layoutManager?.invalidateLayout(forCharacterRange: NSRange(location: 0, length: textView.string.utf16.count), actualCharacterRange: nil)
         textView.needsDisplay = true
@@ -769,6 +775,7 @@ struct InspectorResponseSnapshot: Sendable {
     let statusMessage: String
     let headers: [InspectorHeaderSnapshot]
     let body: Data?
+    let displayBody: Data?
     let contentType: ContentType?
 
     init(response: HTTPResponseData) {
@@ -776,7 +783,18 @@ struct InspectorResponseSnapshot: Sendable {
         statusMessage = response.statusMessage
         headers = response.headers.map(InspectorHeaderSnapshot.init(header:))
         body = response.body
+        displayBody = Self.decodedDisplayBody(
+            response.body,
+            contentEncoding: response.headers.first { $0.name.lowercased() == "content-encoding" }?.value
+        )
         contentType = response.contentType
+    }
+
+    private static func decodedDisplayBody(_ body: Data?, contentEncoding: String?) -> Data? {
+        guard let body else {
+            return nil
+        }
+        return BodyDecoder.decode(body, encoding: contentEncoding)
     }
 }
 
@@ -817,7 +835,7 @@ enum InspectorPayloadFormatter {
             raw += "\(header.name): \(header.value)\r\n"
         }
         raw += "\r\n"
-        if let body = response.body, let bodyString = String(data: body, encoding: .utf8) {
+        if let body = response.displayBody, let bodyString = String(data: body, encoding: .utf8) {
             raw += bodyString
         }
         return raw

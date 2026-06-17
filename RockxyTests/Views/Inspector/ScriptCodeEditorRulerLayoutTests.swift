@@ -51,4 +51,16 @@ struct ScriptCodeEditorRulerLayoutTests {
 
         #expect(x == 18)
     }
+
+    @Test("Ruler gutter scales with editor font size")
+    @MainActor
+    func rulerGutterScalesWithEditorFontSize() {
+        let textView = NSTextView()
+        let ruler = ScriptCodeEditorRulerView(textView: textView)
+        let defaultThickness = ruler.ruleThickness
+
+        ruler.applyEditorSettings(InspectorTextEditorSettings(fontSize: 28, useMonospacedFont: true))
+
+        #expect(ruler.ruleThickness > defaultThickness)
+    }
 }

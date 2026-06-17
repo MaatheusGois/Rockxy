@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 @testable import Rockxy
 import Testing
@@ -96,6 +97,16 @@ struct ScriptingViewModelTests {
         #expect(spans.contains { $0.role == .string })
         #expect(spans.contains { $0.role == .comment })
         #expect(spans.contains { $0.role == .punctuation })
+    }
+
+    @Test("Script code highlighting uses supplied editor font size")
+    func scriptCodeHighlightingUsesEditorFontSize() throws {
+        let settings = InspectorTextEditorSettings(fontSize: 20, tabWidth: 4, useMonospacedFont: true)
+        let highlighted = ScriptCodeHighlighting.highlightedString("const value = 1", spans: [], editorSettings: settings)
+        let font = try #require(highlighted.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)
+
+        #expect(font.pointSize == 20)
+        #expect(font.fontDescriptor.symbolicTraits.contains(.monoSpace))
     }
 
     @Test("Method enum round-trips via persistedValue")

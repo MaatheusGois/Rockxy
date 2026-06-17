@@ -3,19 +3,20 @@ import SwiftUI
 
 // MARK: - ScriptCodeEditor
 
-/// NSTextView-backed code editor with a line-number ruler. Monospaced 13pt,
-/// find-bar enabled, automatic substitutions disabled so JS syntax characters
-/// aren't mangled. Used by `ScriptEditorWindowView`.
+/// NSTextView-backed code editor with a line-number ruler, find-bar support,
+/// and disabled substitutions so JS syntax characters are not mangled.
 struct ScriptCodeEditor: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         // MARK: Lifecycle
 
-        init(text: Binding<String>) {
+        init(text: Binding<String>, editorSettings: InspectorTextEditorSettings) {
             self.text = text
+            self.editorSettings = editorSettings
         }
 
         // MARK: Internal
 
+        var editorSettings: InspectorTextEditorSettings
         var highlightTask: Task<Void, Never>?
 
         deinit {
@@ -28,13 +29,18 @@ struct ScriptCodeEditor: NSViewRepresentable {
             }
             text.wrappedValue = textView.string
             if let scrollView = textView.enclosingScrollView {
-                scheduleHighlight(text: textView.string, in: scrollView)
+                scheduleHighlight(text: textView.string, editorSettings: editorSettings, in: scrollView)
             }
         }
 
         @MainActor
-        func scheduleHighlight(text: String, in scrollView: NSScrollView) {
+        func scheduleHighlight(
+            text: String,
+            editorSettings: InspectorTextEditorSettings,
+            in scrollView: NSScrollView
+        ) {
             highlightTask?.cancel()
+            self.editorSettings = editorSettings
 
             highlightTask = Task { [weak scrollView] in
                 let spans = await Task.detached(priority: .utility) {
@@ -50,11 +56,15 @@ struct ScriptCodeEditor: NSViewRepresentable {
                 }
 
                 let selectedRange = textView.selectedRange()
-                let highlighted = ScriptCodeHighlighting.highlightedString(text, spans: spans)
+                let highlighted = ScriptCodeHighlighting.highlightedString(
+                    text,
+                    spans: spans,
+                    editorSettings: editorSettings
+                )
                 textView.undoManager?.disableUndoRegistration()
                 textView.textStorage?.setAttributedString(highlighted)
                 textView.undoManager?.enableUndoRegistration()
-                textView.typingAttributes = ScriptCodeHighlighting.baseAttributes
+                textView.typingAttributes = ScriptCodeHighlighting.baseAttributes(editorSettings: editorSettings)
                 textView.setSelectedRange(ScriptCodeEditorRulerLayout.clamped(
                     range: selectedRange,
                     length: highlighted.length
@@ -69,6 +79,7 @@ struct ScriptCodeEditor: NSViewRepresentable {
     }
 
     @Binding var text: String
+    var editorSettings = InspectorTextEditorSettings(useMonospacedFont: true, wordWrap: false)
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
@@ -92,7 +103,7 @@ struct ScriptCodeEditor: NSViewRepresentable {
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
-        textView.font = ScriptCodeHighlighting.font
+        textView.font = editorSettings.appKitFont
         textView.textColor = .textColor
         textView.backgroundColor = .textBackgroundColor
         textView.textContainerInset = NSSize(width: 8, height: 6)
@@ -111,7 +122,7 @@ struct ScriptCodeEditor: NSViewRepresentable {
             height: CGFloat.greatestFiniteMagnitude
         )
         textView.textContainer?.widthTracksTextView = false
-        textView.typingAttributes = ScriptCodeHighlighting.baseAttributes
+        textView.typingAttributes = ScriptCodeHighlighting.baseAttributes(editorSettings: editorSettings)
         textView.delegate = context.coordinator
         scrollView.drawsBackground = true
         scrollView.backgroundColor = .textBackgroundColor
@@ -121,12 +132,14 @@ struct ScriptCodeEditor: NSViewRepresentable {
         scrollView.documentView = textView
 
         let ruler = ScriptCodeEditorRulerView(textView: textView)
+        ruler.applyEditorSettings(editorSettings)
         scrollView.verticalRulerView = ruler
         scrollView.hasVerticalRuler = true
         scrollView.rulersVisible = true
 
         textView.string = text
-        context.coordinator.scheduleHighlight(text: text, in: scrollView)
+        applyEditorSettings(to: scrollView)
+        context.coordinator.scheduleHighlight(text: text, editorSettings: editorSettings, in: scrollView)
         return scrollView
     }
 
@@ -134,15 +147,38 @@ struct ScriptCodeEditor: NSViewRepresentable {
         guard let textView = nsView.documentView as? NSTextView else {
             return
         }
+        let settingsChanged = context.coordinator.editorSettings != editorSettings
         if textView.string != text {
             textView.string = text
-            context.coordinator.scheduleHighlight(text: text, in: nsView)
+            applyEditorSettings(to: nsView)
+            context.coordinator.scheduleHighlight(text: text, editorSettings: editorSettings, in: nsView)
             (nsView.verticalRulerView as? ScriptCodeEditorRulerView)?.invalidateLineNumbers()
+        } else if settingsChanged {
+            let selectedRange = textView.selectedRange()
+            let visibleOrigin = nsView.contentView.bounds.origin
+            applyEditorSettings(to: nsView)
+            context.coordinator.scheduleHighlight(text: text, editorSettings: editorSettings, in: nsView)
+            textView.setSelectedRange(ScriptCodeEditorRulerLayout.clamped(
+                range: selectedRange,
+                length: (text as NSString).length
+            ))
+            nsView.contentView.scroll(to: visibleOrigin)
+            nsView.reflectScrolledClipView(nsView.contentView)
         }
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text)
+        Coordinator(text: $text, editorSettings: editorSettings)
+    }
+
+    private func applyEditorSettings(to scrollView: NSScrollView) {
+        guard let textView = scrollView.documentView as? NSTextView else {
+            return
+        }
+        textView.font = editorSettings.appKitFont
+        textView.typingAttributes = ScriptCodeHighlighting.baseAttributes(editorSettings: editorSettings)
+        textView.textContainerInset = NSSize(width: 8, height: 6)
+        (scrollView.verticalRulerView as? ScriptCodeEditorRulerView)?.applyEditorSettings(editorSettings)
     }
 }
 
@@ -296,24 +332,35 @@ enum ScriptCodeHighlighting {
     }
 
     @MainActor
-    static let font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-
-    @MainActor
-    static var baseAttributes: [NSAttributedString.Key: Any] {
+    static func baseAttributes(editorSettings: InspectorTextEditorSettings) -> [NSAttributedString.Key: Any] {
         [
-            .font: font,
+            .font: editorSettings.appKitFont,
             .foregroundColor: NSColor.textColor,
             .backgroundColor: NSColor.textBackgroundColor,
+            .paragraphStyle: paragraphStyle(for: editorSettings),
         ]
     }
 
     @MainActor
-    static func highlightedString(_ text: String, spans: [Span]) -> NSMutableAttributedString {
-        let attributed = NSMutableAttributedString(string: text, attributes: baseAttributes)
+    static func highlightedString(
+        _ text: String,
+        spans: [Span],
+        editorSettings: InspectorTextEditorSettings
+    )
+        -> NSMutableAttributedString
+    {
+        let attributed = NSMutableAttributedString(string: text, attributes: baseAttributes(editorSettings: editorSettings))
         for span in spans where NSMaxRange(span.range) <= attributed.length {
             attributed.addAttribute(.foregroundColor, value: span.role.color, range: span.range)
         }
         return attributed
+    }
+
+    @MainActor
+    private static func paragraphStyle(for editorSettings: InspectorTextEditorSettings) -> NSParagraphStyle {
+        let style = NSMutableParagraphStyle()
+        style.defaultTabInterval = editorSettings.tabInterval
+        return style
     }
 
     nonisolated static func spans(for text: String) -> [Span] {
@@ -404,6 +451,13 @@ final class ScriptCodeEditorRulerView: NSRulerView {
 
     // MARK: Internal
 
+    func applyEditorSettings(_ editorSettings: InspectorTextEditorSettings) {
+        lineNumberFont = Self.lineNumberFont(for: editorSettings)
+        ruleThickness = Self.ruleThickness(for: lineNumberFont)
+        needsDisplay = true
+        setNeedsDisplay(bounds)
+    }
+
     override func drawHashMarksAndLabels(in rect: NSRect) {
         let dirtyRect = bounds.intersection(rect)
         NSColor.textBackgroundColor.setFill()
@@ -432,7 +486,7 @@ final class ScriptCodeEditorRulerView: NSRulerView {
         let visibleGlyphRange = layoutManager.glyphRange(forBoundingRect: visibleRect, in: textContainer)
 
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
+            .font: lineNumberFont,
             .foregroundColor: NSColor.secondaryLabelColor,
         ]
 
@@ -488,6 +542,17 @@ final class ScriptCodeEditorRulerView: NSRulerView {
     // MARK: Private
 
     private weak var textView: NSTextView?
+    private var lineNumberFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+
+    private static func lineNumberFont(for editorSettings: InspectorTextEditorSettings) -> NSFont {
+        .monospacedDigitSystemFont(ofSize: max(10, editorSettings.cgFontSize - 2), weight: .regular)
+    }
+
+    private static func ruleThickness(for font: NSFont) -> CGFloat {
+        let sample = "99999" as NSString
+        let width = sample.size(withAttributes: [.font: font]).width
+        return max(40, ceil(width + 12))
+    }
 }
 
 // MARK: - ScriptCodeEditorRulerLayout
