@@ -1,3 +1,4 @@
+import Compression
 import Foundation
 @testable import Rockxy
 import Testing
@@ -35,6 +36,120 @@ struct InspectorRoutingTests {
         let transaction = TestFixtures.makeWebSocketTransaction()
         #expect(transaction.response != nil)
         #expect(transaction.response?.statusCode == 101)
+    }
+
+    @Test("Inspector response snapshot decodes Brotli display body without mutating original bytes")
+    func inspectorResponseSnapshotDecodesBrotliDisplayBody() throws {
+        let html = "<html><body>Example Domain</body></html>"
+        let compressed = try #require(compress(Data(html.utf8), algorithm: COMPRESSION_BROTLI))
+        let response = HTTPResponseData(
+            statusCode: 200,
+            statusMessage: "OK",
+            headers: [
+                HTTPHeader(name: "Content-Type", value: "text/html"),
+                HTTPHeader(name: "Content-Encoding", value: "br"),
+            ],
+            body: compressed,
+            contentType: .html
+        )
+
+        let snapshot = InspectorResponseSnapshot(response: response)
+
+        #expect(snapshot.body == compressed)
+        #expect(String(data: try #require(snapshot.displayBody), encoding: .utf8) == html)
+        #expect(InspectorPayloadFormatter.responseDisplayText(body: try #require(snapshot.displayBody), sortedKeys: false) == html)
+    }
+
+    @Test("Raw response text uses decoded gzip body while preserving headers")
+    func rawResponseTextUsesDecodedGzipBody() throws {
+        let text = "compressed response text"
+        let originalData = Data(text.utf8)
+        let compressed = try #require(compress(originalData, algorithm: COMPRESSION_ZLIB))
+        let gzipData = wrapInGzip(compressed, originalData: originalData)
+        let response = HTTPResponseData(
+            statusCode: 200,
+            statusMessage: "OK",
+            headers: [
+                HTTPHeader(name: "Content-Type", value: "text/plain"),
+                HTTPHeader(name: "Content-Encoding", value: "gzip"),
+            ],
+            body: gzipData,
+            contentType: .text
+        )
+
+        let raw = try #require(InspectorPayloadFormatter.rawResponse(InspectorResponseSnapshot(response: response)))
+
+        #expect(raw.contains("Content-Encoding: gzip"))
+        #expect(raw.contains(text))
+        #expect(InspectorResponseSnapshot(response: response).body == gzipData)
+    }
+
+    @Test("Decoded JSON display body feeds JSON preview rendering")
+    func decodedJSONDisplayBodyFeedsPreviewRendering() throws {
+        let json = #"{"name":"Rockxy","ok":true}"#
+        let compressed = try #require(compress(Data(json.utf8), algorithm: COMPRESSION_BROTLI))
+        let response = HTTPResponseData(
+            statusCode: 200,
+            statusMessage: "OK",
+            headers: [
+                HTTPHeader(name: "Content-Type", value: "application/json"),
+                HTTPHeader(name: "Content-Encoding", value: "br"),
+            ],
+            body: compressed,
+            contentType: .json
+        )
+        let body = try #require(InspectorResponseSnapshot(response: response).displayBody)
+
+        if case let .text(text) = PreviewRenderer.render(body: body, mode: .json) {
+            #expect(text.contains(#""name" : "Rockxy""#))
+        } else {
+            Issue.record("Expected decoded JSON text preview")
+        }
+
+        if case let .json(object) = PreviewRenderer.render(body: body, mode: .jsonTree),
+           let dict = object as? [String: Any] {
+            #expect(dict["name"] as? String == "Rockxy")
+        } else {
+            Issue.record("Expected decoded JSON tree preview")
+        }
+    }
+
+    @Test("Invalid and unsupported response encodings fall back to original body")
+    func unsupportedResponseEncodingsFallBackToOriginalBody() throws {
+        let invalidCompressedBody = Data([0x00, 0x01, 0x02, 0x03])
+        let invalidResponse = HTTPResponseData(
+            statusCode: 200,
+            statusMessage: "OK",
+            headers: [HTTPHeader(name: "Content-Encoding", value: "br")],
+            body: invalidCompressedBody
+        )
+        let unsupportedBody = Data("zstd bytes stay opaque".utf8)
+        let unsupportedResponse = HTTPResponseData(
+            statusCode: 200,
+            statusMessage: "OK",
+            headers: [HTTPHeader(name: "Content-Encoding", value: "zstd")],
+            body: unsupportedBody
+        )
+
+        #expect(InspectorResponseSnapshot(response: invalidResponse).displayBody == invalidCompressedBody)
+        #expect(InspectorResponseSnapshot(response: unsupportedResponse).displayBody == unsupportedBody)
+    }
+
+    @Test("Inspector snapshot preserves original bytes for wire-fidelity renderers")
+    func inspectorSnapshotPreservesOriginalBytesForWireFidelityRenderers() throws {
+        let text = "wire bytes should stay compressed"
+        let compressed = try #require(compress(Data(text.utf8), algorithm: COMPRESSION_BROTLI))
+        let response = HTTPResponseData(
+            statusCode: 200,
+            statusMessage: "OK",
+            headers: [HTTPHeader(name: "Content-Encoding", value: "br")],
+            body: compressed
+        )
+        let snapshot = InspectorResponseSnapshot(response: response)
+
+        #expect(snapshot.body == compressed)
+        #expect(snapshot.displayBody != compressed)
+        #expect(PreviewRenderer.formatHexDump(try #require(snapshot.body)) == PreviewRenderer.formatHexDump(compressed))
     }
 
     @Test("WebSocket transaction preserves HTTP request for upgrade headers")
@@ -211,6 +326,64 @@ struct InspectorRoutingTests {
 
         #expect(prompt?.primaryAction == .installCertificate)
         #expect(prompt?.secondaryAction == nil)
+    }
+
+    // MARK: - Compression Helpers
+
+    private func compress(_ input: Data, algorithm: compression_algorithm) -> Data? {
+        let capacity = max(input.count * 4, 1_024)
+        let destBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: capacity)
+        defer { destBuffer.deallocate() }
+        let compressedSize = input.withUnsafeBytes { srcPtr -> Int in
+            guard let base = srcPtr.baseAddress else {
+                return 0
+            }
+            return compression_encode_buffer(
+                destBuffer,
+                capacity,
+                base.assumingMemoryBound(to: UInt8.self),
+                input.count,
+                nil,
+                algorithm
+            )
+        }
+        guard compressedSize > 0 else {
+            return nil
+        }
+        return Data(bytes: destBuffer, count: compressedSize)
+    }
+
+    private func wrapInGzip(_ deflatedData: Data, originalData: Data) -> Data {
+        var gzip = Data()
+        gzip.append(contentsOf: [0x1F, 0x8B, 0x08, 0x00])
+        gzip.append(contentsOf: [0x00, 0x00, 0x00, 0x00])
+        gzip.append(contentsOf: [0x00, 0x03])
+        gzip.append(deflatedData)
+
+        var crc: UInt32 = 0
+        originalData.withUnsafeBytes { ptr in
+            crc = Self.crc32(ptr)
+        }
+        withUnsafeBytes(of: crc.littleEndian) { gzip.append(contentsOf: $0) }
+
+        let size = UInt32(originalData.count & 0xFFFF_FFFF)
+        withUnsafeBytes(of: size.littleEndian) { gzip.append(contentsOf: $0) }
+        return gzip
+    }
+
+    private static func crc32(_ buffer: UnsafeRawBufferPointer) -> UInt32 {
+        var crc: UInt32 = 0xFFFF_FFFF
+        for byte in buffer {
+            crc ^= UInt32(byte)
+            for _ in 0 ..< 8 {
+                if crc & 1 != 0 {
+                    crc = (crc >> 1) ^ 0xEDB8_8320
+                } else {
+                    crc >>= 1
+                }
+            }
+        }
+        return crc ^ 0xFFFF_FFFF
     }
 
     @Test("CONNECT tunnel with existing SSL rule shows disable guidance")

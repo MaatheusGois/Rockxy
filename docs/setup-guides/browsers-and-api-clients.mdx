@@ -27,9 +27,13 @@ Firefox is the most common example of a browser that needs extra care.
 
 Check:
 
-- proxy settings inside Firefox,
-- browser-specific certificate behavior,
+- whether you are using Rockxy's prepared Firefox profile or manually editing your normal profile,
+- proxy settings inside Firefox when using manual setup,
+- browser-specific certificate trust behavior,
+- SSL Proxying scope for the domain you want to inspect,
 - and whether you restarted Firefox after trust changes.
+
+If you manually edit your normal Firefox profile, switch it back to **No proxy** when you finish debugging. Rockxy can restore macOS system proxy settings that Rockxy changes, but it cannot automatically revert Firefox profile preferences that you changed manually.
 
 ## Postman and Insomnia
 

@@ -1109,7 +1109,7 @@ struct MapLocalEditorWindowView: View {
                     .foregroundStyle(.secondary)
             }
 
-            MapLocalHTTPMessageEditor(text: $viewModel.httpMessageText)
+            MapLocalHTTPMessageEditor(text: $viewModel.httpMessageText, editorSettings: toolMetrics.codeEditorSettings)
                 .frame(minHeight: 238)
                 .clipped()
                 .overlay(Rectangle().stroke(Color(nsColor: .separatorColor).opacity(0.35)))

@@ -10,14 +10,127 @@ Firefox is a common case where browser traffic needs app-specific setup instead 
 ## Support in Rockxy
 
 - Manual setup available
-- No automation entry point today
+- Prepared Firefox profile available from Developer Setup
 - Validation-backed setup
 
 ## What Rockxy currently provides
 
 - Firefox proxy settings guidance
+- a prepared Firefox profile with Rockxy proxy preferences scoped to that profile
 - browser authority-store certificate guidance
 - a cURL preflight path before you touch the browser setup
+
+## Recommended workflow
+
+For normal debugging, start with the prepared Firefox profile from Rockxy:
+
+1. Start Rockxy capture.
+2. Open **Tools → Debug My App…**.
+3. Select **Firefox**.
+4. Open **Automatic Setup**.
+5. In **Web Browsers**, choose **Firefox…**.
+6. Click **Open Browser…**.
+7. Open one simple HTTPS page, such as `https://example.com/`.
+
+The prepared profile is launched with Rockxy proxy preferences scoped to that profile. Your normal Firefox profile does not need to be changed back and forth.
+
+Firefox may still require the Rockxy root certificate in its own certificate store. If HTTPS pages fail or Rockxy only shows CONNECT tunnels, complete the certificate steps below.
+
+## Manual Firefox setup
+
+Use this when you want to configure your normal Firefox profile directly.
+
+1. Start Rockxy capture and note the active proxy address in the Rockxy toolbar, for example `127.0.0.1:9090`.
+2. In Firefox, open **Settings → Network Settings**.
+3. Select **Manual proxy configuration**.
+4. Set:
+   - **HTTP Proxy**: `127.0.0.1`
+   - **Port**: the active Rockxy proxy port
+   - enable **Also use this proxy for HTTPS**
+5. Leave **No proxy for** with local addresses such as `localhost`, `127.0.0.1`, and `::1`.
+6. Click **OK**.
+
+After this, Firefox traffic should reach Rockxy. If you only see `CONNECT` rows, the proxy path is working but HTTPS is not yet decrypted.
+
+## Import the Rockxy root CA into Firefox
+
+Firefox can use its own certificate store, so macOS Keychain trust is not always enough.
+
+1. Export or locate the Rockxy root certificate from Rockxy.
+2. In Firefox, open **Settings → Privacy & Security → Certificates**.
+3. Click **View Certificates**.
+4. Open the **Authorities** tab.
+5. Click **Import…** and select the Rockxy root certificate.
+6. Enable **Trust this CA to identify websites**.
+7. Confirm the dialog and restart Firefox.
+
+If the Rockxy certificate already appears under **Authorities**, select it and use **Edit Trust…** to confirm **Trust this CA to identify websites** is enabled.
+
+## Enable HTTPS inspection for a domain
+
+Seeing a successful `CONNECT` request is normal for HTTPS proxying. It means Firefox created a tunnel to the target host.
+
+To inspect the real HTTPS requests inside that tunnel:
+
+1. In Rockxy, open **Tools → SSL Proxying List…**.
+2. Make sure **Enable SSL Proxying Tool** is on.
+3. Add the domain you want to inspect to the **Include List**, for example `example.com`.
+4. Reload the page in Firefox.
+5. Select the decrypted `GET`, `POST`, or other HTTP row in Rockxy, not only the `CONNECT` row.
+
+For broad temporary testing, you can add `*` to the Include List, but for day-to-day debugging it is better to allow only the domain you are working on. That keeps the request list cleaner and avoids decrypting unrelated background traffic.
+
+## Expected results
+
+For a test page such as `https://example.com/`, a working setup usually shows:
+
+- an initial `CONNECT example.com:443` row,
+- then one or more decrypted HTTPS rows such as `GET https://example.com/`,
+- readable request headers,
+- readable response headers and body when the response is text, HTML, JSON, XML, or another supported text format.
+
+Some response bodies are compressed by the server with `Content-Encoding` such as `gzip`, `deflate`, or `br`. Rockxy keeps the original captured bytes for wire-level views and export, while readable inspector views decode supported encodings for display.
+
+This means:
+
+- **Body**, **Raw**, **JSON**, **Tree**, and HTML/text preview views should show readable content when decoding succeeds.
+- **Hex** and exported response-body files preserve the original captured bytes.
+- Unsupported encodings may still appear as binary until Rockxy supports that encoding.
+
+## Manual proxy cleanup
+
+If you manually set `HTTP Proxy: 127.0.0.1` in your normal Firefox profile, Firefox stores that setting inside the browser profile. Rockxy can restore macOS system proxy settings that Rockxy changes, but it cannot automatically revert a manual Firefox preference after you quit Rockxy.
+
+When you finish a manual Firefox debugging session, change Firefox back to **No proxy** if you want that profile to browse normally without Rockxy running.
+
+For a scoped workflow, use Rockxy's Developer Setup Firefox profile instead. That profile is launched with Rockxy proxy preferences already written for the debugging session, so your normal Firefox profile does not need to be changed back and forth.
+
+## Troubleshooting checklist
+
+### Firefox cannot load pages after Rockxy quits
+
+If you configured your normal Firefox profile manually, switch Firefox back to **No proxy** in **Settings → Network Settings**.
+
+### Rockxy shows CONNECT only
+
+Check these items:
+
+- Firefox is using manual proxy configuration with **Also use this proxy for HTTPS** enabled.
+- The port matches the active Rockxy proxy port.
+- The Rockxy root CA is imported into Firefox **Authorities**.
+- **Trust this CA to identify websites** is enabled.
+- The target domain is enabled in Rockxy's **SSL Proxying List**.
+- Firefox has been restarted after changing certificate trust.
+
+### The request appears, but the body is still binary
+
+Check the selected row first. A `CONNECT` row is only the tunnel handshake and does not contain the decrypted response body. Select the decrypted `GET` or `POST` row instead.
+
+If the selected row is already decrypted, the response may be binary or compressed with an encoding Rockxy does not decode yet. Use **Headers** to check `Content-Type` and `Content-Encoding`, and use **Hex** when you need the original captured bytes.
+
+### Firefox shows certificate warnings
+
+Re-check the Firefox authority store. Firefox may not use the same trust path as macOS Keychain, so the Rockxy root certificate must be trusted inside Firefox itself.
 
 ## Related pages
 

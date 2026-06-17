@@ -358,6 +358,15 @@ struct ToolWindowDisplayMetrics: Equatable {
         max(24, bodyFontSize + 12)
     }
 
+    var codeEditorSettings: InspectorTextEditorSettings {
+        InspectorTextEditorSettings(
+            fontSize: Int(appMetrics.primaryFontSize),
+            tabWidth: appMetrics.settings.tabWidth,
+            useMonospacedFont: true,
+            wordWrap: false
+        )
+    }
+
     var footerButtonWidth: CGFloat {
         max(100, bodyFontSize + 88)
     }

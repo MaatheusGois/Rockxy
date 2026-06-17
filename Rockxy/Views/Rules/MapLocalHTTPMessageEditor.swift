@@ -7,8 +7,9 @@ struct MapLocalHTTPMessageEditor: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         // MARK: Lifecycle
 
-        init(text: Binding<String>) {
+        init(text: Binding<String>, editorSettings: InspectorTextEditorSettings) {
             self.text = text
+            self.editorSettings = editorSettings
         }
 
         deinit {
@@ -18,6 +19,7 @@ struct MapLocalHTTPMessageEditor: NSViewRepresentable {
         // MARK: Internal
 
         var isProgrammaticChange = false
+        var editorSettings: InspectorTextEditorSettings
         var highlightTask: Task<Void, Never>?
 
         func textDidChange(_ notification: Notification) {
@@ -29,12 +31,17 @@ struct MapLocalHTTPMessageEditor: NSViewRepresentable {
             }
             text.wrappedValue = textView.string
             (scrollView.verticalRulerView as? ScriptCodeEditorRulerView)?.invalidateLineNumbers()
-            scheduleHighlight(text: textView.string, in: scrollView)
+            scheduleHighlight(text: textView.string, editorSettings: editorSettings, in: scrollView)
         }
 
         @MainActor
-        func scheduleHighlight(text: String, in scrollView: NSScrollView) {
+        func scheduleHighlight(
+            text: String,
+            editorSettings: InspectorTextEditorSettings,
+            in scrollView: NSScrollView
+        ) {
             highlightTask?.cancel()
+            self.editorSettings = editorSettings
             highlightTask = Task { [weak self, weak scrollView] in
                 let spans = await Task.detached(priority: .utility) {
                     Self.highlightSpans(for: text)
@@ -50,14 +57,14 @@ struct MapLocalHTTPMessageEditor: NSViewRepresentable {
                 }
 
                 let selectedRange = textView.selectedRange()
-                let attributed = Self.baseAttributedString(text)
+                let attributed = Self.baseAttributedString(text, editorSettings: editorSettings)
                 for span in spans where NSMaxRange(span.range) <= attributed.length {
                     attributed.addAttribute(.foregroundColor, value: span.role.color, range: span.range)
                 }
                 isProgrammaticChange = true
                 textView.textStorage?.setAttributedString(attributed)
                 textView.setSelectedRange(Self.clamped(range: selectedRange, length: attributed.length))
-                textView.typingAttributes = Self.typingAttributes
+                textView.typingAttributes = Self.typingAttributes(editorSettings: editorSettings)
                 isProgrammaticChange = false
                 (scrollView.verticalRulerView as? ScriptCodeEditorRulerView)?.invalidateLineNumbers()
             }
@@ -76,18 +83,28 @@ struct MapLocalHTTPMessageEditor: NSViewRepresentable {
 
         private var text: Binding<String>
 
-        private static let editorFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-
-        private static var typingAttributes: [NSAttributedString.Key: Any] {
+        static func typingAttributes(editorSettings: InspectorTextEditorSettings) -> [NSAttributedString.Key: Any] {
             [
-                .font: editorFont,
+                .font: editorSettings.appKitFont,
                 .foregroundColor: NSColor.textColor,
                 .backgroundColor: NSColor.textBackgroundColor,
+                .paragraphStyle: paragraphStyle(for: editorSettings),
             ]
         }
 
-        private static func baseAttributedString(_ text: String) -> NSMutableAttributedString {
-            NSMutableAttributedString(string: text, attributes: typingAttributes)
+        private static func baseAttributedString(
+            _ text: String,
+            editorSettings: InspectorTextEditorSettings
+        )
+            -> NSMutableAttributedString
+        {
+            NSMutableAttributedString(string: text, attributes: typingAttributes(editorSettings: editorSettings))
+        }
+
+        private static func paragraphStyle(for editorSettings: InspectorTextEditorSettings) -> NSParagraphStyle {
+            let style = NSMutableParagraphStyle()
+            style.defaultTabInterval = editorSettings.tabInterval
+            return style
         }
 
         nonisolated private static func highlightSpans(for text: String) -> [HighlightSpan] {
@@ -178,9 +195,10 @@ struct MapLocalHTTPMessageEditor: NSViewRepresentable {
     }
 
     @Binding var text: String
+    var editorSettings = InspectorTextEditorSettings(useMonospacedFont: true, wordWrap: false)
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text)
+        Coordinator(text: $text, editorSettings: editorSettings)
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -194,10 +212,22 @@ struct MapLocalHTTPMessageEditor: NSViewRepresentable {
         guard let textView = nsView.documentView as? NSTextView else {
             return
         }
+        let settingsChanged = context.coordinator.editorSettings != editorSettings
         if textView.string != text {
             let selectedRange = textView.selectedRange()
+            let visibleOrigin = nsView.contentView.bounds.origin
             apply(text, to: nsView, coordinator: context.coordinator)
             textView.setSelectedRange(Coordinator.clamped(range: selectedRange, length: (text as NSString).length))
+            nsView.contentView.scroll(to: visibleOrigin)
+            nsView.reflectScrolledClipView(nsView.contentView)
+        } else if settingsChanged {
+            let selectedRange = textView.selectedRange()
+            let visibleOrigin = nsView.contentView.bounds.origin
+            applyEditorSettings(to: nsView)
+            context.coordinator.scheduleHighlight(text: text, editorSettings: editorSettings, in: nsView)
+            textView.setSelectedRange(Coordinator.clamped(range: selectedRange, length: (text as NSString).length))
+            nsView.contentView.scroll(to: visibleOrigin)
+            nsView.reflectScrolledClipView(nsView.contentView)
         }
     }
 
@@ -226,7 +256,7 @@ struct MapLocalHTTPMessageEditor: NSViewRepresentable {
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
-        textView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        textView.font = editorSettings.appKitFont
         textView.textColor = .textColor
         textView.backgroundColor = .textBackgroundColor
         textView.textContainerInset = NSSize(width: 8, height: 7)
@@ -243,7 +273,7 @@ struct MapLocalHTTPMessageEditor: NSViewRepresentable {
         textView.delegate = coordinator
 
         let ruler = ScriptCodeEditorRulerView(textView: textView)
-        ruler.ruleThickness = 46
+        ruler.applyEditorSettings(editorSettings)
         scrollView.verticalRulerView = ruler
         scrollView.hasVerticalRuler = true
         scrollView.rulersVisible = true
@@ -255,11 +285,22 @@ struct MapLocalHTTPMessageEditor: NSViewRepresentable {
         }
         coordinator.isProgrammaticChange = true
         textView.string = text
-        textView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        textView.font = editorSettings.appKitFont
         textView.textColor = .textColor
         textView.backgroundColor = .textBackgroundColor
         coordinator.isProgrammaticChange = false
-        coordinator.scheduleHighlight(text: text, in: scrollView)
+        applyEditorSettings(to: scrollView)
+        coordinator.scheduleHighlight(text: text, editorSettings: editorSettings, in: scrollView)
         (scrollView.verticalRulerView as? ScriptCodeEditorRulerView)?.invalidateLineNumbers()
+    }
+
+    private func applyEditorSettings(to scrollView: NSScrollView) {
+        guard let textView = scrollView.documentView as? NSTextView else {
+            return
+        }
+        textView.font = editorSettings.appKitFont
+        textView.typingAttributes = Coordinator.typingAttributes(editorSettings: editorSettings)
+        textView.textContainerInset = NSSize(width: 8, height: 7)
+        (scrollView.verticalRulerView as? ScriptCodeEditorRulerView)?.applyEditorSettings(editorSettings)
     }
 }

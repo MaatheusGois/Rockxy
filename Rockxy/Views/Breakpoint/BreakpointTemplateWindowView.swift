@@ -209,7 +209,7 @@ struct BreakpointTemplateWindowView: View {
             MapLocalHTTPMessageEditor(text: Binding(
                 get: { template.rawMessage },
                 set: { store.updateSelected(rawMessage: $0) }
-            ))
+            ), editorSettings: toolMetrics.codeEditorSettings)
             .frame(minHeight: 382)
             .overlay(Rectangle().stroke(Color(nsColor: .separatorColor).opacity(0.45)))
         }
