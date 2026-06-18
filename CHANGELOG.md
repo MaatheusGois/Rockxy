@@ -20,6 +20,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+## [0.27.2] - 2026-06-18
+
+### Changed
+
+- Enhance metadata privacy controls
+- Refine metadata disclosure layout
+
 ## [0.27.1] - 2026-06-17
 
 ### Fixed

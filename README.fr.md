@@ -41,12 +41,12 @@
 <!-- BEGIN GENERATED: latest-release -->
 ## Latest Tagged Release
 
-**v0.27.1** — 2026-06-17
+**v0.27.2** — 2026-06-18
 
-### Fixed
+### Changed
 
-- Fixed code editors across scripting, breakpoints, map local, and inspectors so Appearance font-size settings scale more consistently.
-- Fixed compressed response bodies in the inspector so supported encoded payloads decode into readable previews without changing captured bytes.
+- Enhance metadata privacy controls
+- Refine metadata disclosure layout
 
 See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 <!-- END GENERATED: latest-release -->
