@@ -51,7 +51,7 @@ struct ResponseInspectorView: View {
     @Environment(\.appUIDisplayMetrics) private var metrics
 
     private var hasProtocolTab: Bool {
-        transaction.webSocketConnection != nil || transaction.graphQLInfo != nil
+        transaction.webSocketConnection != nil || transaction.graphQLInfo != nil || GRPCDetector.isGRPC(transaction: transaction)
     }
 
     private var httpsPromptModel: HTTPSInspectionPromptModel? {
@@ -113,6 +113,17 @@ struct ResponseInspectorView: View {
                     ) {
                         selectionIntent = .protocolSpecific
                         protocolTab = .graphql
+                        selectedPreviewTab = nil
+                    }
+                }
+
+                if GRPCDetector.isGRPC(transaction: transaction) {
+                    InspectorTabButton(
+                        title: "gRPC",
+                        isActive: protocolTab == .grpc
+                    ) {
+                        selectionIntent = .protocolSpecific
+                        protocolTab = .grpc
                         selectedPreviewTab = nil
                     }
                 }
@@ -291,6 +302,8 @@ struct ResponseInspectorView: View {
                     WebSocketInspectorView(transaction: transaction)
                 case .graphql:
                     GraphQLInspectorView(transaction: transaction)
+                case .grpc:
+                    GRPCInspectorView(transaction: transaction)
                 }
             } else if let previewTab = selectedPreviewTab,
                       previewTabStore.responseTabs.contains(where: { $0.id == previewTab.id })
@@ -757,6 +770,7 @@ struct HTTPSInspectionPromptModel: Equatable {
 enum ProtocolTabKind {
     case websocket
     case graphql
+    case grpc
 
     // MARK: Internal
 
@@ -768,6 +782,9 @@ enum ProtocolTabKind {
         if transaction.graphQLInfo != nil {
             return .graphql
         }
+        if GRPCDetector.isGRPC(transaction: transaction) {
+            return .grpc
+        }
         return nil
     }
 
@@ -777,6 +794,8 @@ enum ProtocolTabKind {
             transaction.webSocketConnection != nil
         case .graphql:
             transaction.graphQLInfo != nil
+        case .grpc:
+            GRPCDetector.isGRPC(transaction: transaction)
         }
     }
 }
