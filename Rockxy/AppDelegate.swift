@@ -13,6 +13,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSUserInterfaceValidat
         let theme = AppSettingsStorage.load().appTheme.rawValue
         AppThemeApplier.apply(theme)
 
+        // Apply user-selected language override (if any)
+        if let lang = defaults.string(forKey: Self.identity.defaultsKey("appLanguage")),
+           !lang.isEmpty,
+           lang != Locale.current.language.languageCode?.identifier ?? "en"
+        {
+            defaults.set([lang], forKey: "AppleLanguages")
+        }
+
         defaults.register(defaults: [
             Self.identity.defaultsKey("showAlertOnQuit"): true
         ])

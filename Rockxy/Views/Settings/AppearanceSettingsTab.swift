@@ -13,6 +13,11 @@ struct AppearanceSettingsTab: View {
 
                     appUISection
 
+                    Text(String(localized: "Language"))
+                        .font(settingsMetrics.font(weight: .medium))
+
+                    languageSection
+
                     Text(String(localized: "App Theme"))
                         .font(settingsMetrics.font(weight: .medium))
 
@@ -110,6 +115,49 @@ struct AppearanceSettingsTab: View {
                     )
                     .toggleStyle(.checkbox)
                 }
+            }
+        }
+        .font(settingsMetrics.font())
+        .padding(.horizontal, settingsMetrics.fieldWidth(112))
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            Color(nsColor: .controlBackgroundColor).opacity(0.82),
+            in: RoundedRectangle(cornerRadius: 8)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color(nsColor: .separatorColor).opacity(0.22), lineWidth: 0.5)
+        }
+    }
+
+    private let supportedLanguages: [(code: String, display: String)] = [
+        ("en", "English"),
+        ("pt-BR", "Português (Brasil)"),
+    ]
+
+    @AppStorage(RockxyIdentity.current.defaultsKey("appLanguage"))
+    private var appLanguage: String = ""
+
+    private var languageSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            appearanceControlGroup {
+                optionRow(label: String(localized: "Language:")) {
+                    Picker("", selection: $appLanguage) {
+                        Text(String(localized: "System Default")).tag("")
+                        ForEach(supportedLanguages, id: \.code) { lang in
+                            Text(lang.display).tag(lang.code)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: settingsMetrics.menuWidth(200))
+                }
+
+                Text(String(localized: "Restart the app for the language change to take effect."))
+                    .font(settingsMetrics.secondaryFont())
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, settingsMetrics.fieldWidth(192))
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .font(settingsMetrics.font())
